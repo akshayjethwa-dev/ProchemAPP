@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Prochem Pvt Ltd",
+  "description": "A premier B2B chemical marketplace for India, connecting buyers, sellers, and transporters.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

@@ -1,121 +1,123 @@
 import React, { useState } from 'react';
-import { authService } from '../services/authService';
+import { loginUser } from '../services/authService';
 
 interface Props {
-  onOTPSent: (phone: string) => void;
+  onOTPSent?: (phone: string) => void;
+  onLoginSuccess?: (user: any) => void;
+  onNavigateToRegister?: () => void;
 }
 
-const LoginScreen: React.FC<Props> = ({ onOTPSent }) => {
-  const [mobile, setMobile] = useState('');
+const LoginScreen: React.FC<Props> = ({ onLoginSuccess, onNavigateToRegister }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
-  const handleSendOTP = async () => {
-    setError('');
-    setSuccess('');
-
-    // Validation
-    if (!mobile || mobile.length < 10) {
-      setError('Enter a valid 10-digit phone number');
-      return;
-    }
-
-    setLoading(true);
-
-    // ✅ STEP 1: Call authService.sendOTP()
-    const result = await authService.sendOTP(mobile);
-
-    setLoading(false);
-
-    if (result.success) {
-      setSuccess(result.message);
-      console.log('✅ OTP sent successfully');
+  const handleLogin = async () => {
+    try {
+      setError('');
       
-      // Move to OTP verification screen after 1.5 seconds
-      setTimeout(() => onOTPSent(mobile), 1500);
-    } else {
-      setError(result.message);
-      console.log('❌ OTP send failed:', result.message);
+      // Validation
+      if (!email || !password) {
+        setError('Email and password required');
+        return;
+      }
+
+      setLoading(true);
+      const user = await loginUser(email, password);
+      
+      if (user) {
+        onLoginSuccess?.(user);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+      console.error('Login error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex-1 bg-white flex flex-col h-full overflow-y-auto hide-scrollbar pt-20 px-6 pb-12">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
       {/* Header */}
-      <div className="mb-16">
-        <h1 className="text-4xl font-black text-gray-900 mb-3">Prochem</h1>
-        <p className="text-gray-600 font-semibold text-base">
-          Chemical Marketplace for Professionals
-        </p>
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-blue-900 mb-2">Prochem</h1>
+        <p className="text-gray-600">Chemical Marketplace for Professionals</p>
       </div>
 
-      {/* Form Section */}
-      <div className="space-y-8 flex-1">
-        {/* Mobile Input */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Mobile Number
+      {/* Form */}
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
+        {/* Email Input */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Email Address
           </label>
           <input
-            type="tel"
-            inputMode="numeric"
-            value={mobile}
-            onChange={(e) =>
-              setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))
-            }
-            placeholder="Enter 10-digit number"
-            maxLength={10}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="your@email.com"
             disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-xl font-bold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
+            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-lg font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:opacity-50"
           />
-          <p className="text-xs text-gray-500 mt-2 font-medium">
-            We'll send an OTP to verify your number
-          </p>
+        </div>
+
+        {/* Password Input */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Password
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            disabled={loading}
+            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-lg font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:opacity-50"
+          />
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
-            <p className="text-xs text-red-700 font-bold">⚠️ {error}</p>
+          <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm rounded">
+            ⚠️ {error}
           </div>
         )}
 
-        {/* Success Message */}
-        {success && (
-          <div className="p-4 bg-green-50 border-l-4 border-green-500 rounded-lg">
-            <p className="text-xs text-green-700 font-bold">✅ {success}</p>
-          </div>
-        )}
-
-        {/* Send OTP Button */}
+        {/* Login Button */}
         <button
-          onClick={handleSendOTP}
-          disabled={loading || mobile.length < 10}
-          className="w-full py-4 bg-[#004AAD] text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest"
+          onClick={handleLogin}
+          disabled={loading}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-colors disabled:opacity-50 mb-4"
         >
-          {loading ? (
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Sending OTP...</span>
-            </div>
-          ) : (
-            'Send OTP'
-          )}
+          {loading ? 'Logging in...' : 'Login'}
         </button>
+
+        {/* Register Link */}
+        <div className="text-center">
+          <p className="text-gray-600">
+            Don't have an account?{' '}
+            <button
+              onClick={onNavigateToRegister}
+              className="text-blue-600 hover:text-blue-700 font-semibold"
+            >
+              Register here
+            </button>
+          </p>
+        </div>
       </div>
 
       {/* Footer */}
-      <div className="text-center space-y-4 mt-12">
-        <p className="text-xs text-gray-500 leading-relaxed">
-          By continuing, you agree to our{' '}
-          <span className="text-[#004AAD] font-bold cursor-pointer hover:underline">
+      <div className="mt-8 text-center text-sm text-gray-500">
+        <p>
+          By logging in, you agree to our{' '}
+          <a href="#" className="text-blue-600 hover:underline">
             Terms of Service
-          </span>{' '}
+          </a>{' '}
           and{' '}
-          <span className="text-[#004AAD] font-bold cursor-pointer hover:underline">
+          <a href="#" className="text-blue-600 hover:underline">
             Privacy Policy
-          </span>
+          </a>
         </p>
       </div>
     </div>

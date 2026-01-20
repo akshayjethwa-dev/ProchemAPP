@@ -5,12 +5,12 @@ import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCdEtRWgcA_xyzO7x7t1-pMTDR76X78x_E",
-  authDomain: "prochem--app.firebaseapp.com",
-  projectId: "prochem--app",
-  storageBucket: "prochem--app.firebasestorage.app",
-  messagingSenderId: "782460455688",
-  appId: "1:782460455688:web:7c9ee491eb86b42433babd"
+  apiKey: "AIzaSyC0cRo4vmdwsbNkdiIKwStxGsxJhuhRpYo",
+  authDomain: "prochemapp-dev.firebaseapp.com",
+  projectId: "prochemapp-dev",
+  storageBucket: "prochemapp-dev.firebasestorage.app",
+  messagingSenderId: "193158013078",
+  appId: "1:193158013078:web:af1b9968ab61a561a662b7"
 };
 
 // Initialize Firebase

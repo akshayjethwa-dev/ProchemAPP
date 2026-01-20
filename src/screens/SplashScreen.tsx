@@ -1,28 +1,100 @@
-
 import React from 'react';
 
-const SplashScreen: React.FC = () => {
+interface Props {
+  onContinue: () => void;  // ✅ NEW: Navigation callback to proceed to login
+}
+
+const SplashScreen: React.FC<Props> = ({ onContinue }) => {
   return (
-    <div className="h-full w-full bg-[#004AAD] flex flex-col items-center justify-center p-8 select-none">
-      <div className="relative">
-        <div className="w-36 h-36 bg-white rounded-[2.5rem] flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.3)] transform rotate-12 transition-transform duration-1000">
-           <svg className="w-24 h-24 text-[#004AAD] -rotate-12" fill="currentColor" viewBox="0 0 24 24">
-             <path d="M19,3H5C3.89,3 3,3.89 3,5V19C3,20.11 3.89,21 5,21H19C20.11,21 21,20.11 21,19V5C21,3.89 20.11,3 19,3M19,19H5V5H19V19M16.09,10.79L15.38,11.5C14.81,12.07 14.31,12.57 13.91,13.09L13,12.18L13,9.5H11V11.5L10,10.5C9.6,10.1 9,10.1 8.6,10.5C8.2,10.9 8.2,11.5 8.6,11.9L10,13.31L11,14.31L11.5,14.81L12.09,15.4C12.48,15.79 13.11,15.79 13.5,15.4L17.5,11.41C17.9,11.02 17.9,10.39 17.5,10C17.11,9.61 16.48,9.61 16.09,10L16.09,10.79Z" />
-           </svg>
+    <div className="flex-1 bg-white flex flex-col items-center justify-center p-8 relative overflow-hidden">
+      {/* Background Gradient Effect */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-400 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-300 rounded-full blur-3xl" />
+      </div>
+
+      {/* Content Container */}
+      <div className="relative z-10 flex flex-col items-center justify-center space-y-8">
+        {/* Logo/Icon Container */}
+        <div className="relative">
+          {/* Outer Ring Animation */}
+          <div className="absolute inset-0 w-32 h-32 bg-gradient-to-r from-blue-400/20 to-blue-200/20 rounded-full animate-pulse" />
+          
+          {/* Main Logo Box */}
+          <div className="relative w-32 h-32 bg-gradient-to-br from-blue-50 to-blue-100 rounded-3xl shadow-2xl flex items-center justify-center border-2 border-blue-200">
+            {/* Checkmark Icon */}
+            <svg
+              className="w-16 h-16 text-gray-900"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={0.5}
+            >
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Main Title */}
+        <div className="text-center space-y-2">
+          <h1 className="text-4xl font-black text-gray-900 tracking-tight">
+            PROCHEM
+          </h1>
+          <p className="text-lg font-bold text-blue-600">
+            Chemicals Redefined
+          </p>
+        </div>
+
+        {/* Taglines */}
+        <div className="text-center space-y-3">
+          <p className="text-sm text-gray-600 font-medium leading-relaxed max-w-xs">
+            Empowering Industry Since 1995
+          </p>
+          <p className="text-xs text-gray-400 font-semibold tracking-wider uppercase">
+            B2B Chemical Marketplace Platform
+          </p>
+        </div>
+
+        {/* Get Started Button - ✅ FIXED: Added onClick callback */}
+        <button
+          onClick={onContinue}
+          className="mt-12 px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 active:scale-95 flex items-center space-x-2 transform"
+        >
+          <span className="text-lg">Get Started</span>
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M13 7l5 5m0 0l-5 5m5-5H6"
+            />
+          </svg>
+        </button>
+
+        {/* Features Badges */}
+        <div className="mt-12 flex flex-wrap justify-center gap-4">
+          <div className="flex items-center space-x-2 px-4 py-2 bg-blue-50 rounded-full border border-blue-100">
+            <span className="text-sm font-semibold text-blue-900">✓ Secure Transactions</span>
+          </div>
+          <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 rounded-full border border-green-100">
+            <span className="text-sm font-semibold text-green-900">✓ Real-time Tracking</span>
+          </div>
+          <div className="flex items-center space-x-2 px-4 py-2 bg-purple-50 rounded-full border border-purple-100">
+            <span className="text-sm font-semibold text-purple-900">✓ Expert Support</span>
+          </div>
         </div>
       </div>
-      <div className="mt-10 text-center">
-        <h1 className="text-4xl font-black text-white tracking-tighter">PROCHEM</h1>
-        <p className="text-blue-100 text-[10px] mt-2 uppercase tracking-[0.3em] font-bold opacity-80">Chemicals Redefined</p>
-      </div>
-      
-      <div className="absolute bottom-16 flex flex-col items-center space-y-4">
-        <div className="flex space-x-1.5">
-           <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></div>
-           <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:0.2s]"></div>
-           <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:0.4s]"></div>
-        </div>
-        <p className="text-blue-200 text-[9px] font-black uppercase tracking-widest">Empowering Industry Since 1995</p>
+
+      {/* Footer - Version Info */}
+      <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center space-y-2">
+        <p className="text-xs text-gray-400 font-medium">Made in India 🇮🇳</p>
+        <p className="text-[10px] text-gray-300 font-semibold tracking-wider uppercase">
+          Prochem v1.0.0
+        </p>
       </div>
     </div>
   );

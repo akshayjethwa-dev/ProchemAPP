@@ -10,15 +10,15 @@ interface Props {
 const RoleSelectionScreen: React.FC<Props> = ({ onBack, onSelect }) => {
   const roles = [
     { 
-      type: UserRole.BUSINESS, 
+      type: 'buyer' as UserRole,
       title: 'Business Account', 
       desc: 'Buy and Sell industrial chemicals in a single unified platform.', 
       icon: '🏢',
       color: 'bg-blue-50 border-blue-200 text-blue-800'
     },
     { 
-      type: UserRole.TRANSPORTER, 
-      title: 'Transporter Account', 
+      type: 'seller' as UserRole,
+      title: 'Seller Account',
       desc: 'Logistics company or driver providing professional chemical transport services.', 
       icon: '🚛',
       color: 'bg-green-50 border-green-200 text-green-800'

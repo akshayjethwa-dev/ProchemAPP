@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { UserProfile, Product, ChemicalCategory, CartItem, Order } from '../types';
+import { UserProfile, Product, CartItem, Order } from '../types';
 import HomeTab from '../components/HomeTab';
 import CategoriesTab from '../components/CategoriesTab';
 import CartTab from '../components/CartTab';
@@ -13,7 +13,7 @@ interface Props {
   onTabChange: (tab: 'HOME' | 'CATEGORIES' | 'CART' | 'ORDERS' | 'ACCOUNT') => void;
   allProducts: Product[];
   onProductSelect: (p: Product) => void;
-  onCategorySelect: (c: ChemicalCategory) => void;
+  onCategorySelect: (c: string) => void;
   cartItems: CartItem[];
   orders: Order[];
   onRemoveFromCart: (id: string) => void;

@@ -1,12 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { productService } from '../services/productService';
+import productService from '../services/productService';
 import { useAppStore } from '../store/appStore';
-import { Product } from '../types';
+
+interface Product {
+  id?: string;
+  name: string;
+  price: number;
+  category: string;
+  description: string;
+  quantity: number;
+  sellerId: string;
+  imageUrl?: string;
+  verified: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
 
 interface Props {
-  products: Product[];
+  products?: Product[];
   onBack: () => void;
-  onEdit: (product: Product) => void;
+  onEdit?: (product: Product) => void;
 }
 
 interface EditingProduct {
@@ -35,14 +48,14 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
     try {
       setLoading(true);
       setError('');
-      
-      // Fetch seller's products
-      const result = await productService.getSellerProducts(user.uid);
-      
-      if (result.success && result.data) {
-        setProducts(result.data);
+
+      // ✅ FIXED: Use correct service method
+      const sellerProducts = await productService.getSellerProducts(user.uid);
+
+      if (sellerProducts && sellerProducts.length > 0) {
+        setProducts(sellerProducts);
       } else {
-        setError(result.message || 'Failed to load products');
+        setProducts([]);
       }
     } catch (err: any) {
       console.error('Error loading products:', err);
@@ -60,15 +73,13 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
 
     try {
       setDeletingId(productId);
-      const result = await productService.deleteProduct(productId, user.uid);
+      
+      // ✅ FIXED: Use correct service method signature
+      await productService.deleteProduct(productId);
 
-      if (result.success) {
-        setSuccess('Product deleted successfully! ✅');
-        setProducts(products.filter(p => p.id !== productId));
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(result.message || 'Failed to delete product');
-      }
+      setSuccess('Product deleted successfully! ✅');
+      setProducts(products.filter((p) => p.id !== productId));
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'An error occurred while deleting product');
     } finally {
@@ -84,28 +95,28 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
     }
 
     try {
-      const updatedProduct = products.find(p => p.id === productId);
+      const updatedProduct = products.find((p) => p.id === productId);
       if (!updatedProduct) return;
 
-      const result = await productService.updateProduct(productId, {
+      // ✅ FIXED: Use correct service method signature
+      await productService.updateProduct(productId, {
         ...updatedProduct,
-        moq: parseFloat(newStock), // Assuming moq is used for stock
-      }, user.uid);
+        quantity: parseFloat(newStock),
+      });
 
-      if (result.success) {
-        setSuccess('Stock updated successfully! ✅');
-        setEditingStock(null);
-        setNewStock('');
-        // Update local state
-        setProducts(products.map(p => 
-          p.id === productId 
-            ? { ...p, moq: parseFloat(newStock) }
+      setSuccess('Stock updated successfully! ✅');
+      setEditingStock(null);
+      setNewStock('');
+      
+      // Update local state
+      setProducts(
+        products.map((p) =>
+          p.id === productId
+            ? { ...p, quantity: parseFloat(newStock) }
             : p
-        ));
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(result.message || 'Failed to update stock');
-      }
+        )
+      );
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'An error occurred while updating stock');
     }
@@ -114,26 +125,23 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
   // Handle toggle stock status
   const handleToggleStock = async (product: Product) => {
     try {
-      const result = await productService.updateProduct(
-        product.id,
-        {
-          ...product,
-          inStock: !product.inStock,
-        },
-        user.uid
-      );
+      // ✅ FIXED: Update with correct field names
+      const updatedProduct = {
+        ...product,
+        verified: !product.verified, // Toggle verified status
+      };
 
-      if (result.success) {
-        setSuccess(product.inStock ? 'Product marked out of stock' : 'Product marked in stock');
-        setProducts(products.map(p => 
-          p.id === product.id 
-            ? { ...p, inStock: !p.inStock }
+      await productService.updateProduct(product.id!, updatedProduct);
+
+      setSuccess(product.verified ? 'Product marked inactive' : 'Product marked active');
+      setProducts(
+        products.map((p) =>
+          p.id === product.id
+            ? { ...p, verified: !p.verified }
             : p
-        ));
-        setTimeout(() => setSuccess(''), 2500);
-      } else {
-        setError(result.message || 'Failed to update stock status');
-      }
+        )
+      );
+      setTimeout(() => setSuccess(''), 2500);
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     }
@@ -208,7 +216,7 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
             </p>
             <button
               onClick={onBack}
-              className="px-6 py-2 bg-[#004AAD] text-white rounded-lg font-semibold text-sm"
+              className="px-6 py-2 bg-[#004AAD] text-white rounded-lg font-semibold text-sm hover:bg-[#003399] transition-all"
             >
               Add Your First Product
             </button>
@@ -227,7 +235,7 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
               {/* Product Info */}
               <div className="flex items-start space-x-4">
                 <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
-                  {product.image || '🧪'}
+                  {product.imageUrl || '🧪'}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold text-sm text-gray-900 line-clamp-1">
@@ -237,41 +245,42 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
                     {product.category}
                   </p>
                   <p className="text-[10px] text-gray-400 font-medium mt-1">
-                    <span className="font-bold text-gray-600">{product.grade}</span> • 
-                    <span className="ml-1">{product.purity}% Purity</span>
+                    Stock: {product.quantity}
                   </p>
                   <p className="text-sm font-bold text-[#004AAD] mt-2">
-                    ₹{product.pricePerUnit}/{product.unit}
+                    ₹{product.price?.toLocaleString()}
                   </p>
                 </div>
 
-                {/* Stock Status Badge */}
+                {/* Status Badge */}
                 <button
                   onClick={() => handleToggleStock(product)}
                   className={`px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap transition-all ${
-                    product.inStock
+                    product.verified
                       ? 'bg-green-100 text-green-700 hover:bg-green-200'
                       : 'bg-red-100 text-red-700 hover:bg-red-200'
                   }`}
                 >
-                  {product.inStock ? '🟢 ACTIVE' : '🔴 INACTIVE'}
+                  {product.verified ? '🟢 ACTIVE' : '🔴 INACTIVE'}
                 </button>
               </div>
 
-              {/* Product Details */}
+              {/* Product Details Grid */}
               <div className="grid grid-cols-3 gap-2 px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
                 <div className="text-center">
-                  <p className="text-[9px] text-gray-500 font-bold uppercase mb-1">MOQ</p>
-                  <p className="text-sm font-bold text-gray-900">{product.moq}</p>
+                  <p className="text-[9px] text-gray-500 font-bold uppercase mb-1">Stock</p>
+                  <p className="text-sm font-bold text-gray-900">{product.quantity}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[9px] text-gray-500 font-bold uppercase mb-1">GST</p>
-                  <p className="text-sm font-bold text-gray-900">{product.gstPercent}%</p>
+                  <p className="text-[9px] text-gray-500 font-bold uppercase mb-1">Status</p>
+                  <p className="text-[11px] font-bold text-gray-900">
+                    {product.verified ? 'Active' : 'Inactive'}
+                  </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[9px] text-gray-500 font-bold uppercase mb-1">CAS</p>
-                  <p className="text-[11px] font-bold text-gray-900 line-clamp-1">
-                    {product.casNumber || 'N/A'}
+                  <p className="text-[9px] text-gray-500 font-bold uppercase mb-1">Price</p>
+                  <p className="text-[11px] font-bold text-gray-900">
+                    ₹{(product.price || 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -291,7 +300,7 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
                       className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-[#004AAD] outline-none"
                     />
                     <button
-                      onClick={() => handleUpdateStock(product.id)}
+                      onClick={() => handleUpdateStock(product.id!)}
                       disabled={deletingId === product.id}
                       className="px-3 py-2 rounded-lg bg-green-500 text-white text-[10px] font-bold hover:bg-green-600 transition-all disabled:opacity-50"
                     >
@@ -314,8 +323,8 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
               <div className="flex border-t border-gray-100 pt-3 space-x-3">
                 <button
                   onClick={() => {
-                    setEditingStock({ id: product.id, stock: product.moq });
-                    setNewStock(product.moq.toString());
+                    setEditingStock({ id: product.id!, stock: product.quantity });
+                    setNewStock(product.quantity.toString());
                   }}
                   className="flex-1 py-2 rounded-lg bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100 hover:bg-blue-100 transition-all"
                 >
@@ -330,7 +339,7 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
                 </button>
 
                 <button
-                  onClick={() => handleDeleteProduct(product.id)}
+                  onClick={() => handleDeleteProduct(product.id!)}
                   disabled={deletingId === product.id}
                   className="flex-1 py-2 rounded-lg bg-red-50 text-red-700 text-[10px] font-bold border border-red-100 hover:bg-red-100 transition-all disabled:opacity-50"
                 >
@@ -347,7 +356,7 @@ const SellerManageChemicals: React.FC<Props> = ({ onBack, onEdit }) => {
         <div className="p-4 pb-6">
           <button
             onClick={loadSellerProducts}
-            className="w-full py-3 bg-[#004AAD] text-white rounded-lg font-semibold text-sm hover:bg-[#003580] transition-all"
+            className="w-full py-3 bg-[#004AAD] hover:bg-[#003399] text-white rounded-lg font-semibold text-sm transition-all"
           >
             🔄 Refresh Products
           </button>

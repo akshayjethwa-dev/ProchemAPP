@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { UserProfile } from '../types';
 import { useAppStore } from '../store/appStore';
-import { orderService } from '../services/orderService';
-import { productService } from '../services/productService';
+import { getSellerOrders } from '../services/orderService';  // ✅ FIXED: Only this export
+import { getSellerProducts as getProductsFromService } from '../services/productService'; // ✅ FIXED: Renamed to avoid conflict
 
 interface Props {
   profile: UserProfile;
@@ -13,6 +13,18 @@ interface Props {
   onHelp: () => void;
 }
 
+// ✅ FIXED: Define local types to avoid import conflicts
+interface LocalOrder {
+  id: string;
+  status: string;
+  totalAmount: number;
+}
+
+interface LocalProduct {
+  id: string;
+  name: string;
+}
+
 interface DashboardStats {
   totalSales: number;
   ordersReceived: number;
@@ -20,57 +32,69 @@ interface DashboardStats {
   rating: number;
 }
 
-const SellerDashboard: React.FC<Props> = ({ 
-  profile, 
-  onLogout, 
-  onAddChemical, 
-  onManageChemicals, 
-  onOrders, 
-  onHelp 
+const SellerDashboard: React.FC<Props> = ({
+  profile,
+  onLogout,
+  onAddChemical,
+  onManageChemicals,
+  onOrders,
+  onHelp
 }) => {
   const user = useAppStore((state: any) => state.user);
+
   const [stats, setStats] = useState<DashboardStats>({
     totalSales: 0,
     ordersReceived: 0,
     activeListings: 0,
-    rating: 0
+    rating: 4.8
   });
-  const [loading, setLoading] = useState(true);
 
-  // Load seller data on component mount
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // ✅ FIXED: Load seller data from Firebase
   useEffect(() => {
-    if (user?.uid) {
+    if (user?.uid || profile?.uid) {
       loadSellerData();
     }
-  }, [user?.uid]);
+  }, [user?.uid, profile?.uid]);
 
   const loadSellerData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch seller's orders
-      const sellerOrders = await orderService.fetchUserOrders(user.uid, 'seller');
-      
-      // Fetch seller's products
-      const sellerProducts = await productService.getSellerProducts(user.uid);
-      
+      setError('');
+
+      const sellerId = user?.uid || profile?.uid || 'test-seller';
+
+      console.log('🔄 Loading seller data for:', sellerId);
+
+      // ✅ FIXED: Import from correct services
+      const sellerOrders = await getSellerOrders(sellerId);
+      const sellerProducts = await getProductsFromService(sellerId);
+
       // Calculate total sales from delivered orders
       const totalSales = sellerOrders
         .filter((o: any) => o.status === 'delivered')
         .reduce((sum: number, o: any) => sum + (o.totalAmount || 0), 0);
-      
-      // Update stats with real data
+
+      // Update stats with REAL Firebase data
       setStats({
         totalSales,
         ordersReceived: sellerOrders.length,
-        activeListings: (sellerProducts as any).data?.length || 0,
-
+        activeListings: sellerProducts.length,
         rating: (profile as any)?.rating || 4.8
- // Use profile rating if available, fallback to 4.8
       });
-    } catch (error) {
+
+      console.log('✅ Seller stats loaded:', {
+        orders: sellerOrders.length,
+        products: sellerProducts.length,
+        sales: totalSales
+      });
+
+    } catch (error: any) {
       console.error('Error loading seller data:', error);
-      // Fallback to default stats on error
+      setError('Failed to load dashboard data');
+      
       setStats({
         totalSales: 0,
         ordersReceived: 0,
@@ -92,146 +116,177 @@ const SellerDashboard: React.FC<Props> = ({
     return `₹${amount}`;
   };
 
-  // Dashboard stats array with real data
+  // Dashboard stats with real data
   const dashboardStats = [
-    { 
-      label: 'Total Sales', 
-      value: formatCurrency(stats.totalSales), 
-      icon: '📈' 
+    {
+      label: 'Total Sales',
+      value: formatCurrency(stats.totalSales),
+      icon: '📈'
     },
-    { 
-      label: 'Orders Received', 
-      value: stats.ordersReceived.toString(), 
-      icon: '📦' 
+    {
+      label: 'Orders Received',
+      value: stats.ordersReceived.toString(),
+      icon: '📦'
     },
-    { 
-      label: 'Active Listings', 
-      value: stats.activeListings.toString(), 
-      icon: '🧪' 
+    {
+      label: 'Active Listings',
+      value: stats.activeListings.toString(),
+      icon: '🧪'
     },
-    { 
-      label: 'Store Rating', 
-      value: stats.rating.toFixed(1), 
-      icon: '⭐' 
+    {
+      label: 'Store Rating',
+      value: stats.rating.toFixed(1),
+      icon: '⭐'
     }
   ];
 
   return (
     <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-y-auto hide-scrollbar">
       {/* Header Section */}
-      <div className="bg-[#004AAD] pt-12 pb-24 px-6 relative shadow-lg">
+      <div className="bg-gradient-to-r from-[#004AAD] to-[#0066CC] pt-12 pb-20 px-6 relative shadow-2xl">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-white text-2xl font-bold">Seller Console</h1>
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-white/30 backdrop-blur-sm rounded-2xl flex items-center justify-center font-bold text-white shadow-lg">S</div>
+            <div>
+              <h1 className="text-white text-xl font-black">Seller Console</h1>
+              <p className="text-blue-100 text-xs font-bold uppercase tracking-widest">Active Vendor</p>
+            </div>
+          </div>
           <button 
-            onClick={onLogout} 
-            className="text-white/80 text-xs bg-white/10 px-3 py-1.5 rounded-lg border border-white/20 transition-all active:scale-95"
+            onClick={onLogout}
+            className="text-white/80 text-xs bg-white/20 px-4 py-2 rounded-xl backdrop-blur-sm border border-white/30 font-bold uppercase tracking-widest hover:bg-white/30 transition-all"
           >
             Logout
           </button>
         </div>
-        <p className="text-blue-100 text-sm font-medium">
-          Welcome, {profile?.companyName || user?.email}
-        </p>
+
+        <div className="text-center">
+          <h2 className="text-white font-black text-2xl mb-1">
+            Welcome, {profile?.companyName || user?.email || 'Seller'}
+          </h2>
+          <p className="text-blue-100 text-sm opacity-90">
+            GST: {profile?.gstNumber || 'Applied for verification'}
+          </p>
+        </div>
       </div>
 
       {/* Main Content */}
-      <div className="px-6 -mt-16 space-y-6 pb-24">
-        {/* Stats Cards - Shows Loading State */}
-        <div className="grid grid-cols-2 gap-4">
-          {dashboardStats.map(s => (
-            <div 
-              key={s.label} 
-              className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 transition-all hover:shadow-md"
-            >
-              <span className="text-xl">{s.icon}</span>
-              <p className="text-xl font-bold text-gray-900 mt-2">
-                {loading ? '...' : s.value}
-              </p>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                {s.label}
-              </p>
+      <div className="px-6 -mt-12 space-y-6 pb-24">
+        {/* Loading/Error State */}
+        {loading && (
+          <div className="flex items-center justify-center py-16 bg-white/50 backdrop-blur-sm rounded-3xl shadow-xl">
+            <div className="text-center">
+              <div className="w-12 h-12 border-2 border-[#004AAD]/30 border-t-[#004AAD] rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-600 font-semibold">Loading seller dashboard...</p>
+              <p className="text-sm text-gray-500 mt-1">Fetching orders & listings</p>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className="p-6 bg-red-50/80 border border-red-200 rounded-3xl shadow-lg backdrop-blur-sm">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-xs">!</div>
+              <p className="font-bold text-red-800 text-lg">Dashboard Error</p>
+            </div>
+            <p className="text-red-700 mb-4">{error}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-red-500 text-white px-6 py-2 rounded-2xl font-bold text-sm uppercase tracking-wider hover:bg-red-600 transition-all shadow-lg"
+            >
+              🔄 Reload Dashboard
+            </button>
+          </div>
+        )}
+
+        {/* Stats Cards - Real Firebase Data */}
+        {!loading && !error && (
+          <div className="grid grid-cols-2 gap-4">
+            {dashboardStats.map((stat, index) => (
+              <div 
+                key={index}
+                className="bg-white p-6 rounded-3xl shadow-lg border border-gray-100 hover:shadow-2xl hover:-translate-y-1 transition-all group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-2xl group-hover:scale-110 transition-transform">{stat.icon}</span>
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                </div>
+                <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">{stat.label}</p>
+                <p className="text-2xl font-black text-gray-900 group-hover:text-[#004AAD] transition-colors">{stat.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Operations Section */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
-          <h2 className="font-bold text-gray-800 mb-5 flex items-center justify-between">
+        <div className="bg-white/70 backdrop-blur-sm rounded-3xl p-6 shadow-xl border border-white/50">
+          <h3 className="font-black text-xl text-gray-800 mb-6 flex items-center justify-between">
             Operations
-            <span className="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg uppercase tracking-widest">
-              Active Vendor
+            <span className="text-xs font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full uppercase tracking-widest">
+              Go Live
             </span>
-          </h2>
+          </h3>
+
           <div className="grid grid-cols-2 gap-4">
             <button 
-              onClick={onAddChemical} 
-              className="flex flex-col items-center justify-center p-5 bg-green-50 border border-green-100 rounded-2xl transition-all active:scale-95 group"
+              onClick={onAddChemical}
+              className="group bg-gradient-to-r from-emerald-500 to-emerald-600 text-white p-5 rounded-2xl shadow-xl hover:shadow-2xl active:scale-95 transition-all font-bold text-lg"
             >
-              <span className="text-3xl mb-3 group-active:animate-bounce">➕</span>
-              <span className="text-[10px] font-bold text-green-800 uppercase tracking-widest">
-                Add Product
-              </span>
+              <span className="text-3xl block mb-2 group-hover:scale-110 transition-transform">➕</span>
+              <span>Add Product</span>
             </button>
+
             <button 
-              onClick={onManageChemicals} 
-              className="flex flex-col items-center justify-center p-5 bg-blue-50 border border-blue-100 rounded-2xl transition-all active:scale-95 group"
+              onClick={onManageChemicals}
+              className="group bg-gradient-to-r from-blue-500 to-blue-600 text-white p-5 rounded-2xl shadow-xl hover:shadow-2xl active:scale-95 transition-all font-bold text-lg"
             >
-              <span className="text-3xl mb-3 group-active:animate-bounce">📝</span>
-              <span className="text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                Manage All
-              </span>
+              <span className="text-3xl block mb-2 group-hover:scale-110 transition-transform">📋</span>
+              <span>Manage All</span>
             </button>
           </div>
         </div>
 
         {/* Business Menu */}
-        <div className="space-y-3">
-          <h2 className="font-bold text-gray-800 ml-1">Business Menu</h2>
-          <div className="bg-white rounded-3xl border border-gray-100 divide-y divide-gray-50 overflow-hidden shadow-sm">
+        <div className="bg-gradient-to-b from-slate-50 to-white rounded-3xl p-6 shadow-lg border border-slate-100">
+          <h3 className="font-black text-lg text-gray-800 mb-5">Business Menu</h3>
+          
+          <div className="space-y-3">
             <button 
               onClick={onOrders}
-              className="w-full flex items-center justify-between p-5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-between p-5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100 shadow-sm hover:shadow-md"
             >
-              <span className="flex items-center">
-                <span className="mr-4 text-lg">📦</span> 
-                Orders Received
+              <span className="flex items-center space-x-4">
+                <span className="text-2xl">📦</span>
+                <span className="font-bold text-gray-800">Orders Received</span>
               </span>
-              <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
-              </svg>
+              <span className="text-gray-400">›</span>
             </button>
-            
-            <button className="w-full flex items-center justify-between p-5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">
-              <span className="flex items-center">
-                <span className="mr-4 text-lg">📊</span> 
-                Sales Analytics
+
+            <button className="w-full flex items-center justify-between p-5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100 shadow-sm hover:shadow-md">
+              <span className="flex items-center space-x-4">
+                <span className="text-2xl">📊</span>
+                <span className="font-bold text-gray-800">Sales Analytics</span>
               </span>
-              <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
-              </svg>
+              <span className="text-gray-400">›</span>
             </button>
-            
-            <button className="w-full flex items-center justify-between p-5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">
-              <span className="flex items-center">
-                <span className="mr-4 text-lg">💳</span> 
-                Payout Wallet
+
+            <button className="w-full flex items-center justify-between p-5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100 shadow-sm hover:shadow-md">
+              <span className="flex items-center space-x-4">
+                <span className="text-2xl">💰</span>
+                <span className="font-bold text-gray-800">Payout Wallet</span>
               </span>
-              <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
-              </svg>
+              <span className="text-gray-400">›</span>
             </button>
-            
+
             <button 
               onClick={onHelp}
-              className="w-full flex items-center justify-between p-5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-between p-5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100 shadow-sm hover:shadow-md"
             >
-              <span className="flex items-center">
-                <span className="mr-4 text-lg">🎧</span> 
-                Support Desk
+              <span className="flex items-center space-x-4">
+                <span className="text-2xl">🎧</span>
+                <span className="font-bold text-gray-800">Support Desk</span>
               </span>
-              <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
-              </svg>
+              <span className="text-gray-400">›</span>
             </button>
           </div>
         </div>

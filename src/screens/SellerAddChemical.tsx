@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import { Alert } from 'react-native';
-import { productService } from '../services/productService';
+import productService from '../services/productService';
 import { useAppStore } from '../store/appStore';
-import { Product } from '../types';
 
 interface Props {
   onBack: () => void;
@@ -11,7 +9,7 @@ interface Props {
 
 const SellerAddChemical: React.FC<Props> = ({ onBack, onSuccess }) => {
   const user = useAppStore((state: any) => state.user);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -25,6 +23,8 @@ const SellerAddChemical: React.FC<Props> = ({ onBack, onSuccess }) => {
     gstPercent: 18,
     certifications: ['ISO 9001'],
     inStock: true,
+    description: '',
+    quantity: 100,
   });
 
   const [loading, setLoading] = useState(false);
@@ -79,33 +79,23 @@ const SellerAddChemical: React.FC<Props> = ({ onBack, onSuccess }) => {
     setLoading(true);
 
     try {
-      // Create product object with all required fields
-      const newProduct: Omit<Product, 'id'> = {
+      // Create product object matching productService.Product interface
+      const newProduct = {
         name: formData.name,
         category: formData.category,
-        casNumber: formData.casNumber,
-        grade: formData.grade,
-        purity: formData.purity,
-        pricePerUnit: parseFloat(formData.pricePerUnit),
-        moq: parseInt(formData.moq),
-        unit: formData.unit,
-        packagingType: formData.packagingType,
-        gstPercent: formData.gstPercent,
-        certifications: formData.certifications,
-        inStock: formData.inStock,
+        price: parseFloat(formData.pricePerUnit),
+        description: formData.description || `${formData.name} - Grade: ${formData.grade}, Purity: ${formData.purity}%`,
+        quantity: parseInt(formData.moq),
         sellerId: user.uid,
-        sellerName: user.companyName || user.email,
-        sellerRating: 4.5,
-        image: '🧪', // Default emoji, can be replaced with actual image URL
-        createdAt: new Date(),
+        verified: false,
       };
 
-      // ✅ CALL PRODUCT SERVICE
-      const result = await productService.addProduct(newProduct, user.uid);
+      // ✅ CALL PRODUCT SERVICE - addProduct from the service
+      const productId = await productService.addProduct(newProduct);
 
-      if (result.success) {
+      if (productId) {
         setSuccess('Product added successfully! 🎉');
-        console.log('✅ Product created:', result.data);
+        console.log('✅ Product created with ID:', productId);
 
         // Reset form
         setFormData({
@@ -121,13 +111,12 @@ const SellerAddChemical: React.FC<Props> = ({ onBack, onSuccess }) => {
           gstPercent: 18,
           certifications: ['ISO 9001'],
           inStock: true,
+          description: '',
+          quantity: 100,
         });
 
         // Navigate after 1.5 seconds
         setTimeout(() => onSuccess(), 1500);
-      } else {
-        setError(result.message || 'Failed to add product');
-        console.error('❌ Error:', result.message);
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred while adding the product');
@@ -342,6 +331,21 @@ const SellerAddChemical: React.FC<Props> = ({ onBack, onSuccess }) => {
           />
         </div>
 
+        {/* Description */}
+        <div>
+          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
+            Description
+          </label>
+          <textarea
+            value={formData.description}
+            onChange={(e) => handleInputChange('description', e.target.value)}
+            placeholder="Add product details, specifications, etc."
+            disabled={loading}
+            rows={4}
+            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50 resize-none"
+          />
+        </div>
+
         {/* Stock Status */}
         <div>
           <label className="flex items-center space-x-3 cursor-pointer">
@@ -374,7 +378,7 @@ const SellerAddChemical: React.FC<Props> = ({ onBack, onSuccess }) => {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-4 bg-[#004AAD] text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest mt-8"
+          className="w-full py-4 bg-[#004AAD] hover:bg-[#003399] text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest mt-8"
         >
           {loading ? (
             <div className="flex items-center justify-center space-x-2">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { orderService } from '../services/orderService';
+import  orderService  from '../services/orderService';
 import { useAuthStore } from '../store/authStore';
 
 interface Props {
@@ -17,17 +17,19 @@ const OrderHistoryScreen: React.FC<Props> = ({ onBack }) => {
     }
   }, [user]);
 
-  const fetchOrders = async () => {
-    try {
-      setLoading(true);
-      const userOrders = await orderService.fetchUserOrders(user!.gstNumber || user!.email || 'buyer_default', 'buyer');
-      setOrders(userOrders);
-    } catch (error) {
-      console.error('Failed to fetch orders:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+const fetchOrders = async () => {
+  try {
+    setLoading(true);
+    const buyerId = (user as any)?.email || (user as any)?.uid || 'buyer_default';
+    const userOrders = await orderService.getBuyerOrders(buyerId);
+    setOrders(userOrders);
+  } catch (error) {
+    console.error('Failed to fetch orders:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   if (loading) {
     return (

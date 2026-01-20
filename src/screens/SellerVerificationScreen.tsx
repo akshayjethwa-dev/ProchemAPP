@@ -1,6 +1,8 @@
 
 import React, { useState } from 'react';
-import { UserProfile, VerificationStatus } from '../types';
+import { UserProfile } from '../types';
+
+type VerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 interface Props {
   profile: UserProfile;
@@ -10,6 +12,8 @@ interface Props {
 
 const SellerVerificationScreen: React.FC<Props> = ({ profile, onBack, onStatusUpdate }) => {
   const [isUploading, setIsUploading] = useState(false);
+
+  const verificationStatus = profile.verificationStatus || 'PENDING';
 
   const docs = [
     { name: 'GST Certificate', status: profile.verificationStatus === 'APPROVED' ? 'Uploaded' : 'Required', type: 'PDF/JPG' },

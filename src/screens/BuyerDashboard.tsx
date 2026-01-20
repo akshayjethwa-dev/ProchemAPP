@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types';
+import { getProducts } from '../services/productService';
+import { getBuyerOrders } from '../services/orderService';
 
 interface Props {
   profile: UserProfile;
@@ -11,6 +13,26 @@ interface Props {
   onLogout: () => void;
 }
 
+// ✅ TEMPORARY Product type (until types/index.ts is fixed)
+interface Product {
+  id?: string;
+  name: string;
+  price: number;
+  category: string;
+  quantity: number;
+  sellerId: string;
+  verified: boolean;
+}
+
+// ✅ TEMPORARY Order type
+interface Order {
+  id?: string;
+  status: string;
+  buyerId: string;
+  sellerId: string;
+  totalAmount: number;
+}
+
 const BuyerDashboard: React.FC<Props> = ({ 
   profile, 
   onBrowse, 
@@ -20,6 +42,50 @@ const BuyerDashboard: React.FC<Props> = ({
   onNotifications, 
   onLogout 
 }) => {
+  // ✅ FIXED: Proper typing
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // ✅ FIXED: Load data from Firebase
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        
+        // Get all products from Firebase
+        const prods = await getProducts();
+        setProducts(prods);
+        console.log('✅ Loaded', prods.length, 'products from Firebase');
+
+        // Get buyer's orders
+        const buyerId = profile.email || profile.phone; // Use email or phone
+        try {
+          const buyerOrders = await getBuyerOrders(buyerId);
+          setOrders(buyerOrders);
+          console.log('✅ Loaded', buyerOrders.length, 'orders from Firebase');
+        } catch (orderError) {
+          console.warn('No orders found:', orderError);
+          setOrders([]); // Empty array if no orders
+        }
+
+      } catch (err: any) {
+        setError(err.message || 'Failed to load data');
+        console.error('Dashboard load error:', err);
+        setProducts([]); // Empty on error
+        setOrders([]);   // Empty on error
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (profile) {
+      loadData();
+    }
+  }, [profile]);
+
   return (
     <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-y-auto hide-scrollbar">
       {/* Header */}
@@ -61,26 +127,56 @@ const BuyerDashboard: React.FC<Props> = ({
 
       {/* Main Content */}
       <div className="px-6 -mt-10 space-y-6 pb-24">
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-4">
-          <button 
-            onClick={onBrowse}
-            className="bg-white p-6 rounded-2xl shadow-md border border-gray-100 flex flex-col items-center text-center transition-all active:scale-95 group"
-          >
-            <span className="text-3xl mb-3 group-active:animate-pulse">🧪</span>
-            <h3 className="font-bold text-gray-900">Browse Chemicals</h3>
-            <p className="text-[10px] text-gray-500 mt-1 font-bold uppercase tracking-widest">Marketplace</p>
-          </button>
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12 bg-white rounded-2xl shadow-sm">
+            <div className="text-lg text-gray-500 animate-pulse">
+              Loading your dashboard...
+            </div>
+          </div>
+        )}
+        
+        {/* Error State */}
+        {error && !loading && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-2xl shadow-sm">
+            <p className="text-red-700 text-sm font-bold mb-2">⚠️ {error}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="text-xs text-red-600 underline hover:text-red-700"
+            >
+              🔄 Retry Loading Data
+            </button>
+          </div>
+        )}
 
-          <button 
-            onClick={onTrack}
-            className="bg-white p-6 rounded-2xl shadow-md border border-gray-100 flex flex-col items-center text-center transition-all active:scale-95 group"
-          >
-            <span className="text-3xl mb-3 group-active:animate-pulse">📦</span>
-            <h3 className="font-bold text-gray-900">Active Orders</h3>
-            <p className="text-[10px] text-gray-500 mt-1 font-bold uppercase tracking-widest">Tracking</p>
-          </button>
-        </div>
+        {/* Quick Actions - Real Firebase Data */}
+        {!loading && !error && (
+          <div className="grid grid-cols-2 gap-4">
+            <button 
+              onClick={onBrowse}
+              className="bg-white p-6 rounded-2xl shadow-md border border-gray-100 flex flex-col items-center text-center transition-all active:scale-95 group hover:shadow-lg"
+            >
+              <span className="text-3xl mb-3 group-active:animate-pulse">🧪</span>
+              <h3 className="font-bold text-gray-900 text-lg">Browse Chemicals</h3>
+              <p className="text-sm text-green-600 font-bold bg-green-100 px-3 py-1 rounded-full mt-2">
+                {products.length} Available
+              </p>
+              <p className="text-[10px] text-gray-500 mt-1 font-bold uppercase tracking-widest">Marketplace</p>
+            </button>
+
+            <button 
+              onClick={onTrack}
+              className="bg-white p-6 rounded-2xl shadow-md border border-gray-100 flex flex-col items-center text-center transition-all active:scale-95 group hover:shadow-lg"
+            >
+              <span className="text-3xl mb-3 group-active:animate-pulse">📦</span>
+              <h3 className="font-bold text-gray-900 text-lg">Active Orders</h3>
+              <p className="text-sm text-blue-600 font-bold bg-blue-100 px-3 py-1 rounded-full mt-2">
+                {orders.filter((o: any) => o.status !== 'delivered' && o.status !== 'cancelled').length} Active
+              </p>
+              <p className="text-[10px] text-gray-500 mt-1 font-bold uppercase tracking-widest">Tracking</p>
+            </button>
+          </div>
+        )}
 
         {/* Management Tools */}
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
@@ -99,6 +195,9 @@ const BuyerDashboard: React.FC<Props> = ({
               <span className="flex items-center space-x-4">
                 <span className="text-xl">📋</span>
                 <span className="text-sm font-bold text-gray-700">Order History</span>
+                <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">
+                  {orders.length} total
+                </span>
               </span>
               <span className="text-gray-300">›</span>
             </button>

@@ -40,9 +40,13 @@ export const useCartStore = create<CartState>((set, get) => ({
     set({ items: get().items.filter(item => item.id !== id) });
   },
   
-  clearCart: () => set({ items: [] }),
+clearCart: () => set({ items: [] }),
+
   
   getTotal: () => {
-    return get().items.reduce((sum, item) => sum + item.total, 0);
-  }
+    return get().items.reduce(
+      (sum, item) => sum + (item.pricePerUnit || 0) * item.quantity,
+      0
+    );
+  },
 }));

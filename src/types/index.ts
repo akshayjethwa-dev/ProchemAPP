@@ -1,122 +1,135 @@
+// ✅ User Types
+export type UserRole = 'buyer' | 'seller';
 export type VerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-
-export enum UserRole {
-  BUSINESS = 'business',
-  BUYER = 'buyer',
-  SELLER = 'seller',
-  TRANSPORTER = 'transporter',
-  ADMIN = 'admin',
-}
 
 export interface User {
   uid: string;
-  phone: string;
-  email?: string;
-  role: UserRole;
-  companyName: string;
-  gstNumber?: string;
-  cin?: string;
-  address?: string;
+  email: string;
+  phone?: string;
+  userType: UserRole;
   verified: boolean;
-  createdAt: Date;
-}
-export interface UserProfile extends User {
-  uid: string;
-  phone: string;
-  email?: string;
-  role: UserRole;
-  companyName: string;
-  gstNumber?: string;
-  cin?: string;
-  address?: string;
-  verified: boolean;
-  createdAt: Date;
-  verificationStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  profile?: UserProfile;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
+export interface UserProfile {
+  uid: string;
+  email: string;
+  phone: string;
+ cin?: string;
+  userType: UserRole;
+  companyName?: string;
+  companyDescription?: string;
+  location?: string;
+  address?: string; 
+  verified: boolean;
+  verificationStatus?: VerificationStatus;
+  gstNumber?: string; 
+  panNumber?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+// ✅ Product Types
 export interface Product {
-  id: string;
+  id?: string;
   name: string;
   category: string;
+  description: string;
+  price: number;
+  pricePerUnit?: number;
+  quantity: number;
+  unit?: string; // 'kg' | 'litre' | 'tonne'
+  grade?: string;
+  purity?: number;
   casNumber?: string;
-  purity: number;
-  unit: 'litre' | 'kg' | 'tonne';
-  pricePerUnit: number;
-  moq: number;
-  sellerId: string;
-  sellerName: string;
-  sellerRating: number;
-  inStock: boolean;
-  certifications: string[];
+  packagingType?: string;
+  gstPercent?: number;
+  moq?: number;
+  certifications?: string[];
+  imageUrl?: string;
   image?: string;
-  createdAt: Date;
-  grade: string;
-  packagingType: string;
-  gstPercent: number;
-  isFavorite?: boolean;
-  isSellerVerified?: boolean;
-  isActive?: 'ACTIVE' | 'INACTIVE'
+  sellerId: string;
+  verified: boolean;
+  inStock?: boolean;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
+// ✅ Cart Types
 export interface CartItem {
   id: string;
-  productId: string;
-  productName: string;
+  productId?: string;
   name: string;
   quantity: number;
   pricePerUnit: number;
-  total: number;
+  unit: string;
+  image?: string;
+  imageUrl?: string;
+  gstPercent?: number;
   sellerId: string;
-  image?: string;                
-  unit: string;                  
-  gstPercent: number;
-  grade?: string;              
-  purity?: number;             
-  moq: number; 
+  total?: number;
+}
+
+// ✅ Order Types
+export interface OrderItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  pricePerUnit: number;
+  total: number;
 }
 
 export interface Order {
-  id: string;
+  id?: string;
   buyerId: string;
   sellerId: string;
-  items: CartItem[];
+  items: OrderItem[];
   totalAmount: number;
   status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
   shippingAddress: string;
-  createdAt: Date;
-  deliveryDate?: Date;
+  paymentStatus?: 'pending' | 'completed' | 'failed';
+  createdAt?: any;
+  updatedAt?: any;
 }
 
-export interface Seller extends User {
-  rating: number;
-  totalOrders: number;
-  totalSales: number;
+// ✅ Notification Types
+export interface Notification {
+  id?: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'order' | 'product' | 'promotion' | 'system';
+  read: boolean;
+  createdAt?: any;
 }
 
-export type ChemicalCategory = string;
-export const CATEGORIES: ChemicalCategory[] = [
-  'Pharma Grade Acids',
-  'Industrial Solvents', 
-  'Agro Chemicals',
-  'Food Grade',
-  'Lab Reagents'
-];
+// ✅ Auth Response Types
+export interface AuthResponse {
+  success: boolean;
+  user?: User;
+  message: string;
+}
+
+// ✅ API Response Types
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message: string;
+  error?: string;
+}
+
 export interface TransportOrder {
-  id: string;
+  id?: string;
   material: string;
-  weight: string;  // e.g., "500 kg" or "2.5 MT"
+  weight: string;
   payout: number;
+  status: 'PENDING' | 'ACCEPTED' | 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED'; 
+  buyerName: string;
   pickupLocation: string;
   dropLocation: string;
-  status: 'PENDING' | 'ACCEPTED' | 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED';
-  transporterId?: string;
-  createdAt: Date;
-  deliveryDate?: Date;
-  buyerName: string;
-}
-export interface AuthResponse<T = any> {
-  success: boolean;
-  message: string;
-  data?: T;
-  user?: T;
+  distance?: number;
+  createdAt?: any;
+  sellerId: string;
 }

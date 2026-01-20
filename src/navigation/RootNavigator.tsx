@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useAuthStore } from '../store/authStore';
-import { useCartStore } from '../store/cartStore';
-import { UserProfile, Product, UserRole } from '../types';
+import { View } from 'react-native';
+import { useAppStore } from '../store/appStore';
+import { User, UserProfile, Product, UserRole } from '../types';
 
 // Auth Screens
 import SplashScreen from '../screens/SplashScreen';
@@ -25,13 +25,29 @@ import SellerManageChemicals from '../screens/SellerManageChemicals';
 
 // Common Screens
 import CompanyProfileScreen from '../screens/CompanyProfileScreen';
-import HelpScreen from '../screens/HelpScreen';
+
 import NotificationScreen from '../screens/NotificationScreen';
 
-type Screen = 
-  | 'splash' | 'login' | 'otp' | 'register' | 'roleSelect'
-  | 'buyerDashboard' | 'marketplace' | 'browse' | 'productDetail' | 'cart' | 'orderHistory' | 'orderTracking' | 'buyerProfile' | 'buyerHelp'
-  | 'sellerDashboard' | 'addChemical' | 'manageChemicals' | 'sellerProfile' | 'sellerHelp'
+type Screen =
+  | 'splash'
+  | 'login'
+  | 'otp'
+  | 'register'
+  | 'roleSelect'
+  | 'buyerDashboard'
+  | 'marketplace'
+  | 'browse'
+  | 'productDetail'
+  | 'cart'
+  | 'orderHistory'
+  | 'orderTracking'
+  | 'buyerProfile'
+  | 'buyerHelp'
+  | 'sellerDashboard'
+  | 'addChemical'
+  | 'manageChemicals'
+  | 'sellerProfile'
+  | 'sellerHelp'
   | 'notifications';
 
 interface NavigationState {
@@ -45,11 +61,11 @@ interface NavigationState {
 }
 
 export const RootNavigator = () => {
-  const { user } = useAuthStore();
-  const { items } = useCartStore();
+  // ✅ Get state from unified store
+  const user = useAppStore((state) => state.user);
+  const products = useAppStore((state) => state.products);
+
   const [nav, setNav] = useState<NavigationState>({ currentScreen: 'splash' });
-  const [profile, setProfile] = useState<UserProfile | null>(user || null);
-  const [products, setProducts] = useState<Product[]>([]);
   const [isFavorite, setIsFavorite] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
@@ -60,138 +76,162 @@ export const RootNavigator = () => {
 
   const goBack = () => {
     const backMap: Record<Screen, Screen> = {
-      'splash': 'splash',
-      'login': 'splash',
-      'otp': 'login',
-      'register': 'roleSelect',
-      'roleSelect': 'otp',
-      'buyerDashboard': 'buyerDashboard',
-      'marketplace': 'buyerDashboard',
-      'productDetail': 'marketplace', 
-      'browse':'browse',
-      'cart': 'buyerDashboard',
-      'orderHistory': 'buyerDashboard',
-      'orderTracking': 'orderHistory',
-      'buyerProfile': 'buyerDashboard',
-      'buyerHelp': 'buyerDashboard',
-      'sellerDashboard': 'sellerDashboard',
-      'addChemical': 'sellerDashboard',
-      'manageChemicals': 'sellerDashboard',
-      'sellerProfile': 'sellerDashboard',
-      'sellerHelp': 'sellerDashboard',
-      'notifications': 'buyerDashboard',
+      splash: 'splash',
+      login: 'splash',
+      otp: 'login',
+      register: 'roleSelect',
+      roleSelect: 'otp',
+      buyerDashboard: 'buyerDashboard',
+      marketplace: 'buyerDashboard',
+      productDetail: 'marketplace',
+      browse: 'browse',
+      cart: 'buyerDashboard',
+      orderHistory: 'buyerDashboard',
+      orderTracking: 'orderHistory',
+      buyerProfile: 'buyerDashboard',
+      buyerHelp: 'buyerDashboard',
+      sellerDashboard: 'sellerDashboard',
+      addChemical: 'sellerDashboard',
+      manageChemicals: 'sellerDashboard',
+      sellerProfile: 'sellerDashboard',
+      sellerHelp: 'sellerDashboard',
+      notifications: 'buyerDashboard',
     };
     goTo(backMap[nav.currentScreen] || 'splash');
   };
 
-  // Handle Auth Flow
+  // ✅ Handle Auth Flow - Not Logged In
   if (!user) {
     switch (nav.currentScreen) {
       case 'splash':
-        return <SplashScreen />;
-      
+        return <SplashScreen onContinue={() => goTo('login')} />;
+
       case 'login':
         return (
           <LoginScreen
             onOTPSent={(mobile: string) => goTo('otp', { mobile })}
-
           />
         );
-      
+
       case 'otp':
         return (
-        <OTPVerificationScreen
-        mobile={nav.screenParams?.mobile || ''}
-        onBack={() => goBack()}
-        onVerify={() => {}}
-        onVerified={() => goTo('roleSelect')}
-        />
+          <OTPVerificationScreen
+            mobile={nav.screenParams?.mobile || ''}
+            onBack={() => goBack()}
+            onVerify={() => {}}
+            onVerified={() => goTo('roleSelect')}
+          />
         );
 
       case 'roleSelect':
         return (
           <RoleSelectionScreen
             onBack={() => goBack()}
-            onSelect={(role: any) => goTo('register', { role: role, mobile: nav.screenParams?.mobile })}
+            onSelect={(role: UserRole) =>
+              goTo('register', {
+                role: role,
+                mobile: nav.screenParams?.mobile,
+              })
+            }
           />
         );
-      
+
       case 'register':
         return (
           <RegistrationScreen
             mobile={nav.screenParams?.mobile || ''}
-            role={nav.screenParams?.role || UserRole.BUSINESS}
+            role={nav.screenParams?.role || 'buyer'}
             onBack={() => goBack()}
             onRegister={(userData: UserProfile) => {
-              setProfile(userData);
-              useAuthStore.setState({ user: userData });
-              goTo(userData.role === UserRole.BUSINESS ? 'buyerDashboard' : 'sellerDashboard');
+              // Convert UserProfile to User for store
+              const user: User = {
+                uid: userData.uid,
+                email: userData.email,
+                phone: userData.phone,
+                userType: userData.userType,
+                verified: userData.verified,
+                profile: userData,
+              };
+              useAppStore.setState({ user });
+              goTo(
+                userData.userType === 'buyer'
+                  ? 'buyerDashboard'
+                  : 'sellerDashboard'
+              );
             }}
           />
         );
-      
-      
-      
+
       default:
-        return <SplashScreen />;
+         return <SplashScreen onContinue={() => goTo('login')} />;
     }
   }
 
-  // Handle Buyer Flow
-  if (user.role === UserRole.BUSINESS) {
+  // ✅ Handle Buyer Flow
+  if (user.userType === 'buyer') {
+    // Create UserProfile from User for screen props
+    const userProfile: UserProfile = {
+      uid: user.uid,
+      email: user.email,
+      phone: user.phone || '',
+      userType: user.userType,
+      verified: user.verified,
+      ...user.profile,
+    };
+
     switch (nav.currentScreen) {
       case 'buyerDashboard':
         return (
           <BuyerDashboard
-            profile={user}
+            profile={userProfile}
             onBrowse={() => goTo('marketplace')}
             onOrders={() => goTo('orderHistory')}
             onTrack={() => goTo('orderTracking')}
             onHelp={() => goTo('buyerHelp')}
             onNotifications={() => goTo('notifications')}
             onLogout={() => {
-              useAuthStore.setState({ user: null });
+              useAppStore.setState({ user: null });
               goTo('login');
             }}
           />
         );
 
       case 'browse':
-      return (
-    <ProductListingScreen
-      category="Industrial Acids"
-      products={[]}  // Will be empty initially, can populate from store
-      onBack={() => goBack()}
-      onProductSelect={(product: Product) => {
-        setSelectedProduct(product);
-        goTo('productDetail', { product });
-      }}
-      onToggleFavorite={(id: string) => setIsFavorite(!isFavorite)}
-      onAddToCompare={() => {}}
-    />
-  );
+        return (
+          <ProductListingScreen
+            category="Industrial Acids"
+            products={products}
+            onBack={() => goBack()}
+            onProductSelect={(product: Product) => {
+              setSelectedProduct(product);
+              goTo('productDetail', { product });
+            }}
+            onToggleFavorite={(id: string) => setIsFavorite(!isFavorite)}
+            onAddToCompare={() => {}}
+          />
+        );
 
-      
       case 'marketplace':
-      
-  return (
-    <ProductListingScreen
-      category="Industrial Acids"
-      products={products}
-      onBack={() => goBack()}
-      onProductSelect={(product: Product) => {
-        setSelectedProduct(product);
-        goTo('productDetail', { product });
-      }}
-      onToggleFavorite={(id: string) => setIsFavorite(!isFavorite)}
-      onAddToCompare={(product: Product) => {}}
-    />
-  );
-      
+        return (
+          <ProductListingScreen
+            category="Industrial Acids"
+            products={products}
+            onBack={() => goBack()}
+            onProductSelect={(product: Product) => {
+              setSelectedProduct(product);
+              goTo('productDetail', { product });
+            }}
+            onToggleFavorite={(id: string) => setIsFavorite(!isFavorite)}
+            onAddToCompare={() => {}}
+          />
+        );
+
       case 'productDetail':
         return (
           <ProductDetail
-            product={nav.screenParams?.product || selectedProduct || ({} as Product)}
+            product={
+              nav.screenParams?.product || selectedProduct || ({} as Product)
+            }
             isFavorite={isFavorite}
             onBack={() => goBack()}
             onAddToCart={(qty: number) => goTo('cart')}
@@ -201,7 +241,7 @@ export const RootNavigator = () => {
             onEnquire={(msg: string) => {}}
           />
         );
-      
+
       case 'cart':
         return (
           <CartScreen
@@ -209,15 +249,10 @@ export const RootNavigator = () => {
             onCheckoutSuccess={() => goTo('orderHistory')}
           />
         );
-      
+
       case 'orderHistory':
-        return (
-          <OrderHistoryScreen
-            onBack={() => goBack()}
-            
-          />
-        );
-      
+        return <OrderHistoryScreen onBack={() => goBack()} />;
+
       case 'orderTracking':
         return (
           <OrderTracking
@@ -225,44 +260,50 @@ export const RootNavigator = () => {
             order={nav.screenParams?.order}
           />
         );
-      
+
       case 'buyerProfile':
         return (
-          <CompanyProfileScreen
-            profile={profile || user}
-            onBack={() => goBack()}
-          />
-        );
-      
-      case 'buyerHelp':
-        return (
-          <HelpScreen
-            onBack={() => goBack()}
-          />
-        );
-      
-      case 'notifications':
-        return (
-          <NotificationScreen
-            onBack={() => goBack()}
-          />
+          <CompanyProfileScreen profile={userProfile} onBack={() => goBack()} />
         );
 
-      
+
+      case 'notifications':
+        return <NotificationScreen onBack={() => goBack()} />;
+
       default:
-        return <BuyerDashboard profile={profile || user} onBrowse={() => {}} onOrders={() => {}} onTrack={() => {}} onHelp={() => {}} onNotifications={() => {}} onLogout={() => {}} />;
+        return (
+          <BuyerDashboard
+            profile={userProfile}
+            onBrowse={() => {}}
+            onOrders={() => {}}
+            onTrack={() => {}}
+            onHelp={() => {}}
+            onNotifications={() => {}}
+            onLogout={() => {}}
+          />
+        );
     }
   }
 
-  // Handle Seller Flow
-  if (user.role === 'seller') {
+  // ✅ Handle Seller Flow
+  if (user.userType === 'seller') {
+    // Create UserProfile from User for screen props
+    const userProfile: UserProfile = {
+      uid: user.uid,
+      email: user.email,
+      phone: user.phone || '',
+      userType: user.userType,
+      verified: user.verified,
+      ...user.profile,
+    };
+
     switch (nav.currentScreen) {
       case 'sellerDashboard':
         return (
           <SellerDashboard
-            profile={profile || user}
+            profile={userProfile}
             onLogout={() => {
-              useAuthStore.setState({ user: null });
+              useAppStore.setState({ user: null });
               goTo('login');
             }}
             onAddChemical={() => goTo('addChemical')}
@@ -271,22 +312,20 @@ export const RootNavigator = () => {
             onHelp={() => goTo('sellerHelp')}
           />
         );
-      
+
       case 'addChemical':
         return (
           <SellerAddChemical
             onBack={() => goBack()}
             onSuccess={() => {
-              setProducts([...products]); // trigger refresh
               goTo('sellerDashboard');
             }}
           />
         );
-      
+
       case 'manageChemicals':
         return (
           <SellerManageChemicals
-            products={products}
             onBack={() => goBack()}
             onEdit={(product: Product) => {
               // TODO: Edit functionality
@@ -294,41 +333,32 @@ export const RootNavigator = () => {
             }}
           />
         );
-      
+
       case 'orderHistory':
-        return (
-          <OrderHistoryScreen
-            onBack={() => goBack()}
-          
-          />
-        );
-      
+        return <OrderHistoryScreen onBack={() => goBack()} />;
+
       case 'sellerProfile':
         return (
-          <CompanyProfileScreen
-            profile={profile || user}
-            onBack={() => goBack()}
-          />
+          <CompanyProfileScreen profile={userProfile} onBack={() => goBack()} />
         );
-      
-      case 'sellerHelp':
-        return (
-          <HelpScreen
-            onBack={() => goBack()}
-          />
-        );
-      
+
+
       case 'notifications':
+        return <NotificationScreen onBack={() => goBack()} />;
+
+      default:
         return (
-          <NotificationScreen
-            onBack={() => goBack()}
+          <SellerDashboard
+            profile={userProfile}
+            onLogout={() => {}}
+            onAddChemical={() => {}}
+            onManageChemicals={() => {}}
+            onOrders={() => {}}
+            onHelp={() => {}}
           />
         );
-      
-      default:
-        return <SellerDashboard profile={profile || user} onLogout={() => {}} onAddChemical={() => {}} onManageChemicals={() => {}} onOrders={() => {}} onHelp={() => {}} />;
     }
   }
 
-  return <SplashScreen />;
+  return <SplashScreen onContinue={() => goTo('login')} />;
 };

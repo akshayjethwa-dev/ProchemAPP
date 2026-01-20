@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Prochem Pvt Ltd - B2B Chemical Marketplace">
+  <meta name="theme-color" content="#004AAD">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Prochem">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2965/2965300.png">
+  <title>Prochem Pvt Ltd</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    :root {
+      --prochem-blue: #004AAD;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden; /* Prevent body scroll, handle in app container */
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f9fafb; /* Gray-50 matches app bg */
+      margin: 0;
+      padding: 0;
+      overscroll-behavior-y: none;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    
+    #root {
+      height: 100%;
+    }
+
+    input, textarea {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Native-like Safe Area Utilities */
+    .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom, 20px);
+    }
+    .pb-safe-4 {
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom, 20px));
+    }
+    .pt-safe {
+      padding-top: env(safe-area-inset-top, 20px);
+    }
+    .pt-safe-4 {
+      padding-top: calc(1rem + env(safe-area-inset-top, 20px));
+    }
+
+    @keyframes slide-up {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+
+    .animate-slide-up {
+      animation: slide-up 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    @keyframes fade-scale-in {
+      from { opacity: 0; transform: scale(0.98); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .screen-transition {
+      animation: fade-scale-in 0.25s ease-out forwards;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    button:active {
+      opacity: 0.7;
+      transform: scale(0.98);
+      transition: transform 0.1s;
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.37.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
