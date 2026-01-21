@@ -1,403 +1,162 @@
 import React, { useState } from 'react';
-import productService from '../services/productService';
+import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, TextInput, Button, IconButton, Switch, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
+import { addProduct } from '../services/productService';
 
-interface Props {
-  onBack: () => void;
-  onSuccess: () => void;
-}
-
-const SellerAddChemical: React.FC<Props> = ({ onBack, onSuccess }) => {
-  const user = useAppStore((state: any) => state.user);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    category: '',
-    casNumber: '',
-    grade: 'Industrial',
-    purity: 95,
-    unit: 'litre' as 'kg' | 'litre' | 'tonne',
-    pricePerUnit: '',
-    moq: '10',
-    packagingType: 'Drum',
-    gstPercent: 18,
-    certifications: ['ISO 9001'],
-    inStock: true,
-    description: '',
-    quantity: 100,
-  });
+export default function SellerAddChemical() {
+  const navigation = useNavigation();
+  const theme = useTheme();
+  const user = useAppStore(state => state.user);
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [formData, setFormData] = useState({
+    name: '',
+    category: 'Industrial Acids',
+    casNumber: '',
+    grade: 'Industrial',
+    purity: '95',
+    unit: 'kg',
+    pricePerUnit: '',
+    origin: '', // ✅ Added Origin
+    moq: '10',
+    description: '',
+    inStock: true
+  });
 
-  const handleInputChange = (field: string, value: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-    setError('');
+  const handleChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // ✅ VALIDATE AND SUBMIT
-  const handleAddProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    // Validation
-    if (!formData.name.trim()) {
-      setError('Product name is required');
-      return;
-    }
-    if (!formData.category) {
-      setError('Category is required');
-      return;
-    }
-    if (!formData.casNumber.trim()) {
-      setError('CAS Number is required');
-      return;
-    }
-    if (!formData.pricePerUnit || parseFloat(formData.pricePerUnit) < 1000) {
-      setError('Price must be at least ₹1,000');
-      return;
-    }
-    if (!formData.moq || parseFloat(formData.moq) < 10) {
-      setError('MOQ (Minimum Order Quantity) must be at least 10');
-      return;
-    }
-    if (formData.purity < 0 || formData.purity > 100) {
-      setError('Purity must be between 0 and 100');
-      return;
-    }
-
-    if (!user?.uid) {
-      setError('User not authenticated');
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.pricePerUnit || !formData.origin) {
+      Alert.alert('Error', 'Please fill Name, Price and Origin');
       return;
     }
 
     setLoading(true);
-
     try {
-      // Create product object matching productService.Product interface
-      const newProduct = {
+      await addProduct({
         name: formData.name,
         category: formData.category,
         price: parseFloat(formData.pricePerUnit),
-        description: formData.description || `${formData.name} - Grade: ${formData.grade}, Purity: ${formData.purity}%`,
-        quantity: parseInt(formData.moq),
-        sellerId: user.uid,
+        pricePerUnit: parseFloat(formData.pricePerUnit),
+        description: formData.description,
+        moq: parseInt(formData.moq),
+        unit: formData.unit,
+        sellerId: user?.uid || 'unknown',
+        sellerName: user?.companyName || 'Prochem Seller',
+        origin: formData.origin, // ✅ Saving Origin
         verified: false,
-      };
+        grade: formData.grade,
+        purity: parseFloat(formData.purity),
+        inStock: formData.inStock,
+        image: '',
+        imageUrl: ''
+      } as any);
 
-      // ✅ CALL PRODUCT SERVICE - addProduct from the service
-      const productId = await productService.addProduct(newProduct);
-
-      if (productId) {
-        setSuccess('Product added successfully! 🎉');
-        console.log('✅ Product created with ID:', productId);
-
-        // Reset form
-        setFormData({
-          name: '',
-          category: '',
-          casNumber: '',
-          grade: 'Industrial',
-          purity: 95,
-          unit: 'litre',
-          pricePerUnit: '',
-          moq: '10',
-          packagingType: 'Drum',
-          gstPercent: 18,
-          certifications: ['ISO 9001'],
-          inStock: true,
-          description: '',
-          quantity: 100,
-        });
-
-        // Navigate after 1.5 seconds
-        setTimeout(() => onSuccess(), 1500);
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred while adding the product');
-      console.error('❌ Exception:', err);
+      Alert.alert('Success', 'Product added successfully!');
+      navigation.goBack();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add product');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex-1 bg-white flex flex-col h-full overflow-y-auto hide-scrollbar pt-20 px-6 pb-12">
-      {/* Back Button */}
-      <button
-        onClick={onBack}
-        disabled={loading}
-        className="mb-10 w-12 h-12 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
-      >
-        <svg
-          className="w-6 h-6 text-gray-800"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2.5"
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
-      </button>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        <Text variant="headlineSmall" style={{fontWeight:'bold'}}>Add Chemical</Text>
+      </View>
 
-      {/* Header */}
-      <div className="mb-12">
-        <h1 className="text-4xl font-black text-gray-900 mb-2">Add Chemical</h1>
-        <p className="text-gray-600 font-semibold text-base">
-          Add a new product to the marketplace
-        </p>
-      </div>
-
-      {/* Form */}
-      <form onSubmit={handleAddProduct} className="space-y-6 flex-1">
-        {/* Product Name */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Product Name *
-          </label>
-          <input
-            type="text"
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <TextInput
+            label="Product Name *"
+            mode="outlined"
             value={formData.name}
-            onChange={(e) => handleInputChange('name', e.target.value)}
-            placeholder="e.g., Sulfuric Acid 98%"
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
+            onChangeText={(t) => handleChange('name', t)}
+            style={styles.input}
           />
-        </div>
 
-        {/* Category */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Category *
-          </label>
-          <select
-            value={formData.category}
-            onChange={(e) => handleInputChange('category', e.target.value)}
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
-          >
-            <option value="">Select Category</option>
-            <option value="Industrial Acids">Industrial Acids</option>
-            <option value="Alkalis">Alkalis</option>
-            <option value="Oxidizers">Oxidizers</option>
-            <option value="Salts">Salts</option>
-            <option value="Solvents">Solvents</option>
-          </select>
-        </div>
-
-        {/* CAS Number */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            CAS Number *
-          </label>
-          <input
-            type="text"
-            value={formData.casNumber}
-            onChange={(e) => handleInputChange('casNumber', e.target.value)}
-            placeholder="e.g., 7664-93-9"
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
+          <TextInput
+            label="Origin (City, State) *"
+            mode="outlined"
+            placeholder="e.g. Vapi, Gujarat"
+            value={formData.origin}
+            onChangeText={(t) => handleChange('origin', t)}
+            style={styles.input}
           />
-        </div>
 
-        {/* Grade */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Grade
-          </label>
-          <select
-            value={formData.grade}
-            onChange={(e) => handleInputChange('grade', e.target.value)}
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
-          >
-            <option value="Industrial">Industrial</option>
-            <option value="Pharmaceutical">Pharmaceutical</option>
-            <option value="Laboratory">Laboratory</option>
-            <option value="Food Grade">Food Grade</option>
-          </select>
-        </div>
-
-        {/* Purity */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Purity (%) *
-          </label>
-          <input
-            type="number"
-            value={formData.purity}
-            onChange={(e) => handleInputChange('purity', parseFloat(e.target.value))}
-            placeholder="e.g., 99.5"
-            disabled={loading}
-            min="0"
-            max="100"
-            step="0.1"
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
-          />
-        </div>
-
-        {/* Price */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Price per Unit (₹) *
-          </label>
-          <input
-            type="number"
-            value={formData.pricePerUnit}
-            onChange={(e) => handleInputChange('pricePerUnit', e.target.value)}
-            placeholder="Minimum ₹1,000"
-            disabled={loading}
-            min="1000"
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
-          />
-        </div>
-
-        {/* Quantity (MOQ) & Unit */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-              MOQ (Min Order Qty) *
-            </label>
-            <input
-              type="number"
-              value={formData.moq}
-              onChange={(e) => handleInputChange('moq', e.target.value)}
-              placeholder="Minimum 10"
-              disabled={loading}
-              min="10"
-              className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
+          <View style={styles.row}>
+            <TextInput
+              label="Price (₹)"
+              mode="outlined"
+              value={formData.pricePerUnit}
+              keyboardType="numeric"
+              onChangeText={(t) => handleChange('pricePerUnit', t)}
+              style={[styles.input, {flex:1, marginRight:8}]}
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-              Unit *
-            </label>
-            <select
+             <TextInput
+              label="Unit"
+              mode="outlined"
               value={formData.unit}
-              onChange={(e) => handleInputChange('unit', e.target.value)}
-              disabled={loading}
-              className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
-            >
-              <option value="kg">Kilogram (kg)</option>
-              <option value="litre">Litre (L)</option>
-              <option value="tonne">Metric Tons (MT)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Packaging Type */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Packaging Type
-          </label>
-          <select
-            value={formData.packagingType}
-            onChange={(e) => handleInputChange('packagingType', e.target.value)}
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
-          >
-            <option value="Drum">Drum</option>
-            <option value="Bottle">Bottle</option>
-            <option value="Carboy">Carboy</option>
-            <option value="Bulk Tanker">Bulk Tanker</option>
-            <option value="Bag">Bag</option>
-          </select>
-        </div>
-
-        {/* GST Percent */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            GST Percent (%)
-          </label>
-          <input
-            type="number"
-            value={formData.gstPercent}
-            onChange={(e) => handleInputChange('gstPercent', parseFloat(e.target.value))}
-            placeholder="e.g., 18"
-            disabled={loading}
-            min="0"
-            max="100"
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
-          />
-        </div>
-
-        {/* Description */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Description
-          </label>
-          <textarea
-            value={formData.description}
-            onChange={(e) => handleInputChange('description', e.target.value)}
-            placeholder="Add product details, specifications, etc."
-            disabled={loading}
-            rows={4}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50 resize-none"
-          />
-        </div>
-
-        {/* Stock Status */}
-        <div>
-          <label className="flex items-center space-x-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={formData.inStock}
-              onChange={(e) => handleInputChange('inStock', e.target.checked)}
-              disabled={loading}
-              className="w-5 h-5 text-[#004AAD] rounded focus:ring-2 focus:ring-[#004AAD]"
+              onChangeText={(t) => handleChange('unit', t)}
+              style={[styles.input, {width: 100, marginLeft: 8}]}
             />
-            <span className="text-sm font-semibold text-gray-700">In Stock</span>
-          </label>
-        </div>
+          </View>
 
-        {/* Error Message */}
-        {error && (
-          <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
-            <p className="text-xs text-red-700 font-bold">⚠️ {error}</p>
-          </div>
-        )}
+          <TextInput
+            label="MOQ (Min Order Qty)"
+            mode="outlined"
+            value={formData.moq}
+            keyboardType="numeric"
+            onChangeText={(t) => handleChange('moq', t)}
+            style={styles.input}
+          />
 
-        {/* Success Message */}
-        {success && (
-          <div className="p-4 bg-green-50 border-l-4 border-green-500 rounded-lg animate-pulse">
-            <p className="text-xs text-green-700 font-bold">✅ {success}</p>
-          </div>
-        )}
+          <TextInput
+            label="CAS Number"
+            mode="outlined"
+            value={formData.casNumber}
+            onChangeText={(t) => handleChange('casNumber', t)}
+            style={styles.input}
+          />
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-4 bg-[#004AAD] hover:bg-[#003399] text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest mt-8"
-        >
-          {loading ? (
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Adding Product...</span>
-            </div>
-          ) : (
-            'Add Product to Marketplace'
-          )}
-        </button>
+          <TextInput
+            label="Description"
+            mode="outlined"
+            value={formData.description}
+            onChangeText={(t) => handleChange('description', t)}
+            multiline
+            numberOfLines={3}
+            style={styles.input}
+          />
 
-        {/* Info Text */}
-        <p className="text-xs text-gray-500 text-center leading-relaxed">
-          Products will appear in the marketplace immediately after adding.
-          You can manage them from your seller dashboard.
-        </p>
-      </form>
-    </div>
+          <Button 
+            mode="contained" 
+            onPress={handleSubmit} 
+            loading={loading}
+            style={styles.submitBtn}
+            contentStyle={{height: 50}}
+          >
+            List Product
+          </Button>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
-};
+}
 
-export default SellerAddChemical;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'white' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 8 },
+  content: { padding: 20 },
+  input: { marginBottom: 16, backgroundColor: 'white' },
+  row: { flexDirection: 'row', marginBottom: 0 },
+  submitBtn: { marginTop: 10, borderRadius: 12 }
+});

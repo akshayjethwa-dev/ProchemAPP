@@ -1,137 +1,62 @@
 import { create } from 'zustand';
-import { User, Product, CartItem, Order, Notification } from '../types';
+import { User, Product, CartItem } from '../types';
 
 interface AppStore {
-  // State
   user: User | null;
-  cart: CartItem[];
-  orders: Order[];
   products: Product[];
-  notifications: Notification[];
+  cart: CartItem[];
+  compareList: Product[]; // ✅ ADDED: Comparison List
 
-  // User Actions
   setUser: (user: User | null) => void;
-  clearUser: () => void;
-
+  setProducts: (products: Product[]) => void;
+  
   // Cart Actions
   addToCart: (item: CartItem) => void;
   removeFromCart: (productId: string) => void;
-  updateCart: (item: CartItem) => void;
   clearCart: () => void;
-  getCartTotal: () => number;
 
-  // Product Actions
-  setProducts: (products: Product[]) => void;
-  addProduct: (product: Product) => void;
-  updateProduct: (productId: string, product: Product) => void;
-  removeProduct: (productId: string) => void;
-
-  // Order Actions
-  addOrder: (order: Order) => void;
-  setOrders: (orders: Order[]) => void;
-  updateOrder: (orderId: string, order: Order) => void;
-
-  // Notification Actions
-  addNotification: (notification: Notification) => void;
-  setNotifications: (notifications: Notification[]) => void;
-  clearNotifications: () => void;
-  markNotificationAsRead: (notificationId: string) => void;
+  // Compare Actions
+  addToCompare: (product: Product) => void;
+  removeFromCompare: (productId: string) => void;
+  clearCompare: () => void;
 }
 
-export const useAppStore = create<AppStore>((set, get) => ({
-  // Initial State
+export const useAppStore = create<AppStore>((set) => ({
   user: null,
-  cart: [],
-  orders: [],
   products: [],
-  notifications: [],
+  cart: [],
+  compareList: [],
 
-  // ✅ User Actions
-  setUser: (user: User | null) => set({ user }),
+  setUser: (user) => set({ user }),
+  setProducts: (products) => set({ products }),
 
-  clearUser: () => set({ user: null }),
-
-  // ✅ Cart Actions
-  addToCart: (item: CartItem) =>
-    set((state: AppStore) => ({
-      cart: [
-        ...state.cart.filter((c) => c.id !== item.id),
-        item,
-      ],
+  addToCart: (item) =>
+    set((state) => ({
+      cart: [...state.cart.filter((c) => c.id !== item.id), item],
     })),
 
-  removeFromCart: (productId: string) =>
-    set((state: AppStore) => ({
-      cart: state.cart.filter(
-        (c) => c.id !== productId && c.productId !== productId
-      ),
-    })),
-
-  updateCart: (item: CartItem) =>
-    set((state: AppStore) => ({
-      cart: state.cart.map((c) => (c.id === item.id ? item : c)),
+  removeFromCart: (productId) =>
+    set((state) => ({
+      cart: state.cart.filter((c) => c.id !== productId),
     })),
 
   clearCart: () => set({ cart: [] }),
 
-  getCartTotal: () => {
-    const state = get();
-    return state.cart.reduce(
-      (total, item) => total + item.pricePerUnit * item.quantity,
-      0
-    );
-  },
+  // ✅ Compare Logic
+  addToCompare: (product) =>
+    set((state) => {
+      if (state.compareList.find((p) => p.id === product.id)) return state;
+      if (state.compareList.length >= 3) {
+        // Limit to 3 items for comparison
+        return { compareList: [...state.compareList.slice(1), product] };
+      }
+      return { compareList: [...state.compareList, product] };
+    }),
 
-  // ✅ Product Actions
-  setProducts: (products: Product[]) => set({ products }),
-
-  addProduct: (product: Product) =>
-    set((state: AppStore) => ({
-      products: [...state.products, product],
+  removeFromCompare: (productId) =>
+    set((state) => ({
+      compareList: state.compareList.filter((p) => p.id !== productId),
     })),
 
-  updateProduct: (productId: string, product: Product) =>
-    set((state: AppStore) => ({
-      products: state.products.map((p) =>
-        p.id === productId ? product : p
-      ),
-    })),
-
-  removeProduct: (productId: string) =>
-    set((state: AppStore) => ({
-      products: state.products.filter((p) => p.id !== productId),
-    })),
-
-  // ✅ Order Actions
-  addOrder: (order: Order) =>
-    set((state: AppStore) => ({
-      orders: [...state.orders, order],
-    })),
-
-  setOrders: (orders: Order[]) => set({ orders }),
-
-  updateOrder: (orderId: string, order: Order) =>
-    set((state: AppStore) => ({
-      orders: state.orders.map((o) =>
-        o.id === orderId ? order : o
-      ),
-    })),
-
-  // ✅ Notification Actions
-  addNotification: (notification: Notification) =>
-    set((state: AppStore) => ({
-      notifications: [...state.notifications, notification],
-    })),
-
-  setNotifications: (notifications: Notification[]) =>
-    set({ notifications }),
-
-  clearNotifications: () => set({ notifications: [] }),
-
-  markNotificationAsRead: (notificationId: string) =>
-    set((state: AppStore) => ({
-      notifications: state.notifications.map((n) =>
-        n.id === notificationId ? { ...n, read: true } : n
-      ),
-    })),
+  clearCompare: () => set({ compareList: [] }),
 }));

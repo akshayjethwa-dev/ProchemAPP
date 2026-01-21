@@ -1,206 +1,111 @@
 import React, { useState, useEffect } from 'react';
-import authService from '../services/authService';
+import { View, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { Text, TextInput, Button, IconButton, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
 
-interface Props {
-  mobile: string;
-  onVerified: (phone: string) => void;
-  onBack: () => void;
-  onVerify?: () => void;
-}
+export default function OTPVerificationScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<any>();
+  const mobile = route.params?.mobile || '';
+  const theme = useTheme();
 
-const OTPVerificationScreen: React.FC<Props> = ({ mobile, onVerified, onBack }) => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [resendTimer, setResendTimer] = useState(0);
-  const [resendLoading, setResendLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(30);
 
-  // Resend timer countdown
   useEffect(() => {
-    if (resendTimer <= 0) return;
-
     const timer = setInterval(() => {
-      setResendTimer((prev) => prev - 1);
+      setResendTimer((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
-
     return () => clearInterval(timer);
-  }, [resendTimer]);
+  }, []);
 
-  const handleVerifyOTP = async () => {
-    setError('');
-    setSuccess('');
-
-    // Validation
+  const handleVerify = async () => {
     if (otp.length !== 6) {
-      setError('Please enter 6-digit OTP');
+      Alert.alert('Error', 'Please enter a 6-digit OTP');
       return;
     }
 
     setLoading(true);
-
-    try {
-      // NOTE:
-      // Proper Firebase phone auth uses confirmationResult.confirm(otp).
-      // For now, use a test OTP for development.
-      if (otp === '123456') {
-        setSuccess('OTP verified successfully');
-        console.log('✅ OTP verified successfully');
-
-        // Move to registration screen after 1.5 seconds
-        setTimeout(() => onVerified(mobile), 1500);
-      } else {
-        setError('Invalid OTP. Please try again.');
-        console.log('❌ OTP verification failed: Invalid code');
-      }
-    } catch (err: any) {
-      setError(err.message || 'OTP verification failed');
-      console.error('❌ OTP verification error:', err);
-    } finally {
+    // Simulate API Call
+    setTimeout(() => {
       setLoading(false);
-    }
+      if (otp === '123456') {
+        // Navigate to Role Selection after success
+        navigation.replace('RoleSelection');
+      } else {
+        Alert.alert('Error', 'Invalid OTP. Try 123456');
+      }
+    }, 1500);
   };
 
-  const handleResendOTP = async () => {
-    setError('');
-    setSuccess('');
-    setResendLoading(true);
-
-    try {
-      // Placeholder for resend logic (signInWithPhoneNumber in real flow)
-      setSuccess('New OTP sent! Check your messages');
-      setOtp('');
-      setResendTimer(30); // 30 seconds cooldown
-      console.log('✅ OTP resent successfully');
-    } catch (err: any) {
-      setError(err.message || 'Failed to resend OTP');
-      console.error('❌ Resend OTP error:', err);
-    } finally {
-      setResendLoading(false);
-    }
+  const handleResend = () => {
+    setResendTimer(30);
+    Alert.alert('Sent', 'OTP resent successfully!');
   };
 
   return (
-    <div className="flex-1 bg-white flex flex-col h-full overflow-y-auto hide-scrollbar pt-20 px-6 pb-12">
-      {/* Back Button */}
-      <button
-        onClick={onBack}
-        disabled={loading}
-        className="mb-10 w-12 h-12 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
-      >
-        <svg
-          className="w-6 h-6 text-gray-800"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2.5"
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
-      </button>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+      </View>
 
-      {/* Header */}
-      <div className="mb-16">
-        <h1 className="text-4xl font-black text-gray-900 mb-2">Enter OTP</h1>
-        <p className="text-gray-600 font-semibold text-base">
-          Sent to {mobile}
-        </p>
-      </div>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.content}>
+        <Text variant="displaySmall" style={styles.title}>Enter OTP</Text>
+        <Text variant="bodyLarge" style={styles.subtitle}>Sent to {mobile}</Text>
 
-      {/* Form Section */}
-      <div className="space-y-8 flex-1">
-        {/* OTP Input */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-            6-Digit OTP Code
-          </label>
-          <input
-            type="text"
-            inputMode="numeric"
+        <View style={styles.inputContainer}>
+          <TextInput
+            mode="outlined"
+            label="6-Digit Code"
             value={otp}
-            onChange={(e) =>
-              setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))
-            }
-            placeholder="000000"
+            onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, '').slice(0, 6))}
+            keyboardType="number-pad"
             maxLength={6}
-            disabled={loading}
-            className="w-full p-6 bg-gray-50 border-2 border-gray-100 rounded-2xl text-5xl font-black text-center text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50 tracking-[0.3em]"
+            style={styles.input}
+            contentStyle={styles.inputText}
           />
-          <p className="text-xs text-gray-500 mt-3 font-medium text-center">
-            Enter the 6-digit code we sent to your phone
-          </p>
-          <p className="text-xs text-gray-400 mt-2 font-medium text-center">
-            (For testing, use: 123456)
-          </p>
-        </div>
+          <Text style={styles.hint}>For testing use: 123456</Text>
+        </View>
 
-        {/* Error Message */}
-        {error && (
-          <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
-            <p className="text-xs text-red-700 font-bold">⚠️ {error}</p>
-          </div>
-        )}
-
-        {/* Success Message */}
-        {success && (
-          <div className="p-4 bg-green-50 border-l-4 border-green-500 rounded-lg animate-pulse">
-            <p className="text-xs text-green-700 font-bold">✅ {success}</p>
-          </div>
-        )}
-
-        {/* Verify OTP Button */}
-        <button
-          onClick={handleVerifyOTP}
+        <Button 
+          mode="contained" 
+          onPress={handleVerify} 
+          loading={loading}
           disabled={loading || otp.length !== 6}
-          className="w-full py-4 bg-[#004AAD] hover:bg-[#003399] text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest"
+          style={styles.verifyBtn}
+          contentStyle={{ height: 50 }}
         >
-          {loading ? (
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Verifying...</span>
-            </div>
-          ) : (
-            'Verify OTP'
-          )}
-        </button>
+          Verify OTP
+        </Button>
 
-        {/* Resend OTP Button */}
-        <button
-          onClick={handleResendOTP}
-          disabled={resendTimer > 0 || resendLoading}
-          className="w-full py-3 bg-gray-50 text-[#004AAD] rounded-2xl font-bold text-xs border-2 border-gray-100 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest hover:bg-gray-100"
+        <TouchableOpacity 
+          onPress={handleResend} 
+          disabled={resendTimer > 0}
+          style={styles.resendContainer}
         >
-          {resendLoading ? (
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-3 h-3 border-2 border-[#004AAD] border-t-transparent rounded-full animate-spin" />
-              <span>Sending...</span>
-            </div>
-          ) : resendTimer > 0 ? (
-            `Resend OTP in ${resendTimer}s`
-          ) : (
-            "Didn't receive OTP? Resend"
-          )}
-        </button>
-      </div>
-
-      {/* Footer */}
-      <div className="text-center mt-12">
-        <p className="text-xs text-gray-500">
-          Having trouble? Contact{' '}
-          <a
-            href="mailto:support@prochem.in"
-            className="text-[#004AAD] font-bold cursor-pointer hover:underline"
-          >
-            support@prochem.in
-          </a>
-        </p>
-      </div>
-    </div>
+          <Text style={{ color: resendTimer > 0 ? '#999' : theme.colors.primary, fontWeight: 'bold' }}>
+            {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : "Didn't receive code? Resend"}
+          </Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
-};
+}
 
-export default OTPVerificationScreen;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'white' },
+  header: { paddingHorizontal: 10 },
+  content: { flex: 1, padding: 24, justifyContent: 'center' },
+  title: { fontWeight: 'bold', color: '#111827', marginBottom: 8 },
+  subtitle: { color: '#6B7280', marginBottom: 40 },
+  inputContainer: { marginBottom: 30 },
+  input: { backgroundColor: '#F9FAFB', fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
+  inputText: { textAlign: 'center', letterSpacing: 4, fontSize: 24 },
+  hint: { textAlign: 'center', color: '#9CA3AF', marginTop: 10 },
+  verifyBtn: { borderRadius: 12, marginBottom: 20 },
+  resendContainer: { alignItems: 'center', padding: 10 },
+});

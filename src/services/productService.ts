@@ -1,144 +1,81 @@
 import { 
   collection, 
+  addDoc, 
   getDocs, 
   query, 
   where, 
-  addDoc, 
-  updateDoc, 
   doc, 
-  serverTimestamp,
-  orderBy
+  deleteDoc, 
+  updateDoc, 
+  getDoc 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { Product } from '../types';
 
-// Define Product interface to fix TypeScript errors
-export interface Product {
-  id?: string;
-  name: string;
-  price: number;  // ← This fixes the error
-  category: string;
-  description: string;
-  quantity: number;
-  sellerId: string;
-  imageUrl?: string;
-  verified: boolean;
-  createdAt?: any;
-  updatedAt?: any;
-}
+// Collection reference
+const productsRef = collection(db, 'products');
 
-// Get all products (for buyers)
-export const getProducts = async (category?: string): Promise<Product[]> => {
+export const getProducts = async (): Promise<Product[]> => {
   try {
-    const productsRef = collection(db, 'products');
-    let q;
-
-    if (category) {
-      q = query(productsRef, where('category', '==', category), where('verified', '==', true));
-    } else {
-      q = query(productsRef, where('verified', '==', true), orderBy('createdAt', 'desc'));
-    }
-
+    const q = query(productsRef);
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data() as Product
-    })) as Product[];
-  } catch (error: any) {
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+  } catch (error) {
     console.error('Error fetching products:', error);
-    throw new Error(error.message || 'Failed to fetch products');
+    return [];
   }
 };
 
-// Get products by seller (for sellers)
 export const getSellerProducts = async (sellerId: string): Promise<Product[]> => {
   try {
-    const productsRef = collection(db, 'products');
     const q = query(productsRef, where('sellerId', '==', sellerId));
-    
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data() as Product
-    })) as Product[];
-  } catch (error: any) {
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+  } catch (error) {
     console.error('Error fetching seller products:', error);
-    throw new Error(error.message || 'Failed to fetch seller products');
+    return [];
   }
 };
 
-// Add new product
-export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> => {
+export const addProduct = async (productData: Omit<Product, 'id'>) => {
   try {
-    const productsRef = collection(db, 'products');
     const docRef = await addDoc(productsRef, {
-      ...product,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      verified: false
-    });
-    return docRef.id;
-  } catch (error: any) {
-    console.error('Error adding product:', error);
-    throw new Error(error.message || 'Failed to add product');
-  }
-};
-
-// Update product
-export const updateProduct = async (productId: string, productData: Partial<Product>): Promise<void> => {
-  try {
-    const productRef = doc(db, 'products', productId);
-    await updateDoc(productRef, {
       ...productData,
-      updatedAt: serverTimestamp()
+      createdAt: new Date(),
+      verified: false // Products pending verification by default
     });
-  } catch (error: any) {
-    console.error('Error updating product:', error);
-    throw new Error(error.message || 'Failed to update product');
+    return { id: docRef.id, ...productData };
+  } catch (error) {
+    console.error('Error adding product:', error);
+    throw error;
   }
 };
 
-// Delete product
-export const deleteProduct = async (productId: string): Promise<void> => {
+export const deleteProduct = async (productId: string) => {
   try {
-    const productRef = doc(db, 'products', productId);
-    await updateDoc(productRef, {
-      deleted: true,
-      updatedAt: serverTimestamp()
-    });
-  } catch (error: any) {
+    const docRef = doc(db, 'products', productId);
+    await deleteDoc(docRef);
+  } catch (error) {
     console.error('Error deleting product:', error);
-    throw new Error(error.message || 'Failed to delete product');
+    throw error;
   }
 };
 
-// Search products
-export const searchProducts = async (searchTerm: string): Promise<Product[]> => {
+export const updateProduct = async (productId: string, data: Partial<Product>) => {
   try {
-    const productsRef = collection(db, 'products');
-    // Note: Full-text search requires Algolia or similar service
-    // For now, we'll filter client-side (basic implementation)
-    const snapshot = await getDocs(query(productsRef, where('verified', '==', true)));
-    
-    const allProducts = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data() as Product
-    })) as Product[];
-
-    return allProducts.filter(product =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  } catch (error: any) {
-    console.error('Error searching products:', error);
-    throw new Error(error.message || 'Failed to search products');
+    const docRef = doc(db, 'products', productId);
+    await updateDoc(docRef, data);
+  } catch (error) {
+    console.error('Error updating product:', error);
+    throw error;
   }
 };
 
+// Export object for default imports if needed, but named exports are preferred
 export default {
   getProducts,
   getSellerProducts,
   addProduct,
-  updateProduct,
   deleteProduct,
-  searchProducts
+  updateProduct
 };

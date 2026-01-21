@@ -7,8 +7,18 @@ export interface User {
   email: string;
   phone?: string;
   userType: UserRole;
+  companyName?: string;
+  gstNumber?: string;
+  address?: string;
+  pincode?: number;
+  documents?: {
+    gstin?: boolean;
+    shopLicense?: boolean;
+    udyogAadhar?: boolean;
+  }  
   verified: boolean;
-  profile?: UserProfile;
+  verificationStatus?: 'pending' | 'verified' | 'rejected';
+  profile?: any;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -41,7 +51,9 @@ export interface Product {
   pricePerUnit?: number;
   quantity: number;
   unit?: string; // 'kg' | 'litre' | 'tonne'
+  sellerName?: string;
   grade?: string;
+  origin?: string;
   purity?: number;
   casNumber?: string;
   packagingType?: string;
@@ -132,4 +144,11 @@ export interface TransportOrder {
   distance?: number;
   createdAt?: any;
   sellerId: string;
+}
+export interface NegotiationMessage {
+  id: string;
+  text: string;
+  senderId: string;
+  timestamp: number;
+  isBuyer: boolean;
 }

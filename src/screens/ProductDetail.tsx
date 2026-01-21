@@ -1,293 +1,167 @@
 import React, { useState } from 'react';
-import { Product } from '../types';
+import { View, StyleSheet, ScrollView, Share, Alert, Platform } from 'react-native';
+import { Text, Button, IconButton, useTheme, Divider, Chip } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useAppStore } from '../store/appStore';
 
-interface Props {
-  product: Product;
-  isFavorite: boolean;
-  onBack: () => void;
-  onAddToCart: (qty: number) => void;
-  onBuyNow: (qty: number) => void;
-  onToggleFavorite: () => void;
-  onAddToCompare: () => void;
-  onEnquire: (msg: string) => void;
-}
+export default function ProductDetail() {
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const theme = useTheme();
+  const { productId, product: paramProduct } = route.params || {};
+  
+  const { products, addToCart, addToCompare } = useAppStore();
+  const product = products.find(p => p.id === productId) || paramProduct || {};
 
-const ProductDetail: React.FC<Props> = ({
-  product,
-  isFavorite,
-  onBack,
-  onAddToCart,
-  onBuyNow,
-  onToggleFavorite,
-  onAddToCompare,
-  onEnquire,
-}) => {
-  // ✅ FIXED: Set defaults for optional fields
-  const moq = product.moq || 10;
-  const pricePerUnit = product.pricePerUnit || product.price || 0;
-  const gstPercent = product.gstPercent || 18;
-  const unit = product.unit || 'kg';
+  const [qty, setQty] = useState(product.moq || 10);
+  const price = product.pricePerUnit || product.price || 0;
+  const totalPrice = price * qty;
 
-  const [qty, setQty] = useState<number>(moq);
-  const [showEnquiry, setShowEnquiry] = useState(false);
-  const [enquiryMsg, setEnquiryMsg] = useState('');
+  const handleNegotiate = () => {
+    navigation.navigate('Negotiation', { product });
+  };
 
-  // ✅ FIXED: Use defaults in calculations
-  const basePrice = pricePerUnit * qty;
-  const gstAmount = basePrice * (gstPercent / 100);
-  const total = basePrice + gstAmount;
+  const handleCompare = () => {
+    addToCompare(product);
+    Alert.alert('Added to Compare', 'You can view this in the Comparison Table.');
+  };
 
-  const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Buy ${product.name} on Prochem`,
-          text: `Check out ${product.name} (${product.purity || 95}% Purity) on Prochem Pvt Ltd.`,
-          url: typeof window !== 'undefined' ? window.location.href : '',
-        });
-      } catch (e) {
-        console.error('Share failed', e);
-      }
-    } else {
-      alert('Sharing not supported on this browser.');
-    }
+  const handleDownloadMSDS = () => {
+    Alert.alert('Download', 'Downloading Material Safety Data Sheet (MSDS)...');
+  };
+
+  const handleDownloadQuote = () => {
+    Alert.alert('Quote Generated', 'Pro-forma Invoice sent to your email.');
   };
 
   return (
-    <div className="screen-transition flex flex-col h-full bg-white">
-      <div className="relative h-72 bg-gray-100 flex-shrink-0">
-        <img
-          src={product.imageUrl || product.image || '🧪'}
-          className="w-full h-full object-cover"
-          alt={product.name}
-        />
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={{paddingBottom: 120}}>
+        {/* Image Header */}
+        <View style={styles.imageHeader}>
+          <SafeAreaView style={styles.safeHeader}>
+            <IconButton icon="arrow-left" iconColor="black" containerColor="white" onPress={() => navigation.goBack()} />
+            <View style={{flexDirection: 'row'}}>
+              <IconButton icon="compare-horizontal" iconColor="black" containerColor="white" onPress={handleCompare} />
+              <IconButton icon="share-variant" iconColor="black" containerColor="white" onPress={() => {}} />
+            </View>
+          </SafeAreaView>
+          <View style={styles.imagePlaceholder}>
+             <Text style={{fontSize: 80}}>🧪</Text>
+          </View>
+        </View>
 
-        {/* Native Floating Controls */}
-        <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start safe-top">
-          <button
-            onClick={onBack}
-            className="btn-haptic w-12 h-12 bg-white/90 backdrop-blur-md flex items-center justify-center rounded-full shadow-lg"
-          >
-            <svg
-              className="w-7 h-7 text-gray-800"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2.5"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
-          <div className="flex space-x-3">
-            <button
-              onClick={handleNativeShare}
-              className="btn-haptic w-12 h-12 bg-white/90 backdrop-blur-md flex items-center justify-center rounded-full shadow-lg"
-            >
-              <svg
-                className="w-6 h-6 text-gray-800"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={onToggleFavorite}
-              className="btn-haptic w-12 h-12 bg-white/90 backdrop-blur-md flex items-center justify-center rounded-full shadow-lg"
-            >
-              <svg
-                className={`w-6 h-6 ${
-                  isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'
-                }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
+        <View style={styles.content}>
+          {/* Main Info */}
+          <View style={styles.titleRow}>
+            <View style={{flex: 1}}>
+              <Text variant="headlineSmall" style={styles.title}>{product.name}</Text>
+              <View style={{flexDirection:'row', alignItems:'center', marginTop: 4}}>
+                <Text style={{color: '#666', fontWeight:'bold', marginRight: 8}}>{product.category}</Text>
+                <Chip icon="check-decagram" textStyle={{fontSize:10, marginVertical:0}} style={{height:24, backgroundColor:'#DCFCE7'}}>Verified</Chip>
+              </View>
+            </View>
+            <View style={{alignItems:'flex-end'}}>
+              <Text variant="headlineSmall" style={{color: theme.colors.primary, fontWeight:'bold'}}>
+                ₹{price}
+              </Text>
+              <Text variant="labelSmall">per {product.unit}</Text>
+            </View>
+          </View>
 
-      <div className="scroll-content p-6 pb-40">
-        <div className="flex justify-between items-start mb-6">
-          <div className="flex-1">
-            <h1 className="text-2xl font-black text-gray-900 leading-tight">
-              {product.name}
-            </h1>
-            <div className="flex gap-2 mt-2">
-              <span className="text-[10px] font-bold bg-blue-50 text-[#004AAD] px-2 py-1 rounded uppercase tracking-widest">
-                {product.category}
-              </span>
-              <span className="text-[10px] font-bold bg-green-50 text-green-700 px-2 py-1 rounded uppercase tracking-widest">
-                {product.purity || 95}% Pure
-              </span>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-bold text-gray-900">⭐ 4.8</p>
-            <p className="text-[9px] text-gray-400 font-bold uppercase">
-              Verified Seller
-            </p>
-          </div>
-        </div>
+          <Divider style={styles.divider} />
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-            <p className="text-[9px] text-gray-400 font-bold uppercase mb-1">
-              Grade
-            </p>
-            <p className="font-black text-gray-800">
-              {product.grade || 'Industrial'}
-            </p>
-          </div>
-          <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-            <p className="text-[9px] text-gray-400 font-bold uppercase mb-1">
-              Packaging
-            </p>
-            <p className="font-black text-gray-800">
-              {product.packagingType || 'Drum'}
-            </p>
-          </div>
-        </div>
+          {/* Seller Transparency */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>Seller Details</Text>
+          <View style={styles.sellerCard}>
+            <View style={styles.sellerRow}>
+              <View style={styles.sellerIcon}><Text>🏢</Text></View>
+              <View>
+                <Text variant="titleMedium" style={{fontWeight:'bold'}}>{product.sellerName || 'Verified Seller'}</Text>
+                <Text variant="bodySmall" style={{color:'#666'}}>Origin: {product.origin || 'Mumbai, MH'}</Text>
+              </View>
+              <View style={{flex:1}}/>
+              <View style={styles.ratingBadge}>
+                <Text style={styles.ratingText}>⭐ 4.8</Text>
+              </View>
+            </View>
+          </View>
 
-        {/* CAS Number & Certifications */}
-        {product.casNumber && (
-          <div className="mb-8">
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-              Product Details
-            </h3>
-            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-              <p className="text-xs font-bold text-gray-700">
-                CAS Number: <span className="text-[#004AAD]">{product.casNumber}</span>
-              </p>
-              {product.certifications && product.certifications.length > 0 && (
-                <p className="text-xs font-bold text-gray-700 mt-2">
-                  Certifications: {product.certifications.join(', ')}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+          {/* Specs */}
+          <View style={styles.grid}>
+            <View style={styles.gridItem}>
+              <Text style={styles.label}>Grade</Text>
+              <Text style={styles.value}>{product.grade || 'Technical'}</Text>
+            </View>
+            <View style={styles.gridItem}>
+              <Text style={styles.label}>Purity</Text>
+              <Text style={styles.value}>{product.purity || 95}%</Text>
+            </View>
+            <View style={styles.gridItem}>
+              <Text style={styles.label}>CAS No.</Text>
+              <Text style={styles.value}>{product.casNumber || '7664-93-9'}</Text>
+            </View>
+          </View>
 
-        <div className="mb-8">
-          <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-            Material Safety
-          </h3>
-          <div className="bg-red-50 p-4 rounded-2xl border border-red-100">
-            <p className="text-xs text-red-800 leading-relaxed font-medium">
-              Handle with extreme caution. Ensure proper ventilation and hazmat
-              suits if necessary.
-            </p>
-            <button className="text-[10px] font-bold text-red-800 underline mt-2 uppercase tracking-widest">
-              Download MSDS (PDF)
-            </button>
-          </div>
-        </div>
+          {/* Documents Actions */}
+          <View style={{flexDirection: 'row', justifyContent:'space-between', marginBottom: 20}}>
+            <Button mode="outlined" icon="file-document" onPress={handleDownloadMSDS} style={{flex:1, marginRight: 8}}>
+              MSDS
+            </Button>
+            <Button mode="outlined" icon="file-download" onPress={handleDownloadQuote} style={{flex:1, marginLeft: 8}}>
+              Get Quote
+            </Button>
+          </View>
 
-        {/* Quantity Selector */}
-        <div className="p-6 bg-gray-50 border border-dashed border-gray-300 rounded-3xl mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <p className="text-sm font-bold">
-              Quantity ({unit})
-            </p>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setQty(Math.max(moq, qty - 1))}
-                className="btn-haptic w-10 h-10 bg-white border border-gray-200 rounded-xl font-bold"
-              >
-                −
-              </button>
-              <span className="text-lg font-black w-8 text-center">{qty}</span>
-              <button
-                onClick={() => setQty(qty + 1)}
-                className="btn-haptic w-10 h-10 bg-[#004AAD] text-white rounded-xl font-bold"
-              >
-                +
-              </button>
-            </div>
-          </div>
-          <p className="text-[10px] text-gray-400 font-bold text-center uppercase tracking-widest">
-            MOQ: {moq} {unit}
-          </p>
-        </div>
+          <Text variant="titleMedium" style={styles.sectionTitle}>Description</Text>
+          <Text variant="bodyMedium" style={styles.desc}>{product.description || 'No description provided.'}</Text>
+        </View>
+      </ScrollView>
 
-        {/* Price Breakdown */}
-        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-8">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Base Price:</span>
-              <span className="font-bold">₹{basePrice.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">GST ({gstPercent}%):</span>
-              <span className="font-bold">₹{gstAmount.toLocaleString()}</span>
-            </div>
-            <div className="border-t border-gray-200 pt-2 flex justify-between text-lg">
-              <span className="font-bold">Total:</span>
-              <span className="font-black text-[#004AAD]">
-                ₹{total.toLocaleString()}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Description */}
-        {product.description && (
-          <div className="mb-8">
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-              Description
-            </h3>
-            <p className="text-sm text-gray-700 leading-relaxed">
-              {product.description}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Persistent Bottom Mobile Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-6 flex items-center justify-between safe-bottom shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-[60]">
-        <div>
-          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">
-            Grand Total
-          </p>
-          <p className="text-xl font-black text-[#004AAD]">
-            ₹{total.toLocaleString()}
-          </p>
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={() => onAddToCart(qty)}
-            className="btn-haptic px-6 py-4 bg-blue-50 text-[#004AAD] font-black text-xs uppercase rounded-2xl tracking-widest"
-          >
-            Cart
-          </button>
-          <button
-            onClick={() => onBuyNow(qty)}
-            className="btn-haptic px-8 py-4 bg-[#004AAD] text-white font-black text-xs uppercase rounded-2xl tracking-widest shadow-xl shadow-blue-200"
-          >
-            Buy Now
-          </button>
-        </div>
-      </div>
-    </div>
+      {/* Bottom Action Bar */}
+      <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
+        <Button 
+          mode="outlined" 
+          onPress={handleNegotiate} 
+          style={[styles.actionBtn, {borderColor: theme.colors.primary, borderWidth: 2}]}
+          textColor={theme.colors.primary}
+        >
+          Enquire
+        </Button>
+        <View style={{width: 12}} />
+        <Button 
+          mode="contained" 
+          onPress={() => addToCart({...product, quantity: qty})} 
+          style={[styles.actionBtn, {backgroundColor: theme.colors.primary}]}
+        >
+          Buy Now
+        </Button>
+      </View>
+    </View>
   );
-};
+}
 
-export default ProductDetail;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'white' },
+  imageHeader: { height: 280, backgroundColor: '#F3F4F6', position: 'relative' },
+  safeHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10, zIndex: 10 },
+  imagePlaceholder: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  content: { padding: 24, backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+  title: { fontWeight: 'bold', maxWidth: '70%' },
+  ratingBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  ratingText: { color: '#D97706', fontWeight: 'bold' },
+  grid: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  gridItem: { flex: 1, backgroundColor: '#F9FAFB', padding: 12, borderRadius: 12, alignItems:'center' },
+  label: { color: '#6B7280', fontSize: 10, textTransform: 'uppercase', marginBottom: 4 },
+  value: { fontWeight: 'bold', fontSize: 14, color: '#111827' },
+  divider: { marginVertical: 20 },
+  sectionTitle: { fontWeight: 'bold', marginBottom: 12 },
+  sellerCard: { backgroundColor: '#F0F9FF', padding: 16, borderRadius: 16, marginBottom: 20 },
+  sellerRow: { flexDirection: 'row', alignItems: 'center' },
+  sellerIcon: { width: 40, height: 40, backgroundColor: 'white', borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  desc: { color: '#4B5563', lineHeight: 24 },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', elevation: 20 },
+  actionBtn: { flex: 1, borderRadius: 12, paddingVertical: 4 }
+});

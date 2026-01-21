@@ -1,127 +1,106 @@
 import React, { useState } from 'react';
+import { View, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { Text, TextInput, Button, Surface, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { loginUser } from '../services/authService';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
 
-interface Props {
-  onOTPSent?: (phone: string) => void;
-  onLoginSuccess?: (user: any) => void;
-  onNavigateToRegister?: () => void;
-}
-
-const LoginScreen: React.FC<Props> = ({ onLoginSuccess, onNavigateToRegister }) => {
+export default function LoginScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const theme = useTheme();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   const handleLogin = async () => {
-    try {
-      setError('');
-      
-      // Validation
-      if (!email || !password) {
-        setError('Email and password required');
-        return;
-      }
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
 
-      setLoading(true);
-      const user = await loginUser(email, password);
-      
-      if (user) {
-        onLoginSuccess?.(user);
-      }
+    setLoading(true);
+    try {
+      await loginUser(email, password);
+      // Navigation handled by auth listener in RootNavigator
     } catch (err: any) {
-      setError(err.message || 'Login failed');
-      console.error('Login error:', err);
+      Alert.alert('Login Failed', err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-blue-900 mb-2">Prochem</h1>
-        <p className="text-gray-600">Chemical Marketplace for Professionals</p>
-      </div>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <Text variant="displaySmall" style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Prochem</Text>
+          <Text variant="bodyLarge" style={styles.subtitle}>B2B Chemical Marketplace</Text>
+        </View>
 
-      {/* Form */}
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-        {/* Email Input */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Email Address
-          </label>
-          <input
-            type="email"
+        <Surface style={styles.card} elevation={2}>
+          <TextInput
+            label="Email Address"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="your@email.com"
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-lg font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:opacity-50"
+            onChangeText={setEmail}
+            mode="outlined"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            style={styles.input}
           />
-        </div>
-
-        {/* Password Input */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Password
-          </label>
-          <input
-            type="password"
+          
+          <TextInput
+            label="Password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-lg font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:opacity-50"
+            onChangeText={setPassword}
+            mode="outlined"
+            secureTextEntry
+            style={styles.input}
           />
-        </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm rounded">
-            ⚠️ {error}
-          </div>
-        )}
+          <Button 
+            mode="contained" 
+            onPress={handleLogin} 
+            loading={loading}
+            style={styles.button}
+            contentStyle={{ paddingVertical: 8 }}
+          >
+            Login
+          </Button>
 
-        {/* Login Button */}
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-colors disabled:opacity-50 mb-4"
+          <Button 
+            mode="text" 
+            onPress={() => navigation.navigate('RoleSelection')}
+            style={styles.textButton}
+          >
+            New User? Create Account
+          </Button>
+        </Surface>
+
+        {/* ✅ Legal Pages Link */}
+        <TouchableOpacity 
+          onPress={() => navigation.navigate('LegalPages' as any)} 
+          style={styles.legalLink}
         >
-          {loading ? 'Logging in...' : 'Login'}
-        </button>
-
-        {/* Register Link */}
-        <div className="text-center">
-          <p className="text-gray-600">
-            Don't have an account?{' '}
-            <button
-              onClick={onNavigateToRegister}
-              className="text-blue-600 hover:text-blue-700 font-semibold"
-            >
-              Register here
-            </button>
-          </p>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="mt-8 text-center text-sm text-gray-500">
-        <p>
-          By logging in, you agree to our{' '}
-          <a href="#" className="text-blue-600 hover:underline">
-            Terms of Service
-          </a>{' '}
-          and{' '}
-          <a href="#" className="text-blue-600 hover:underline">
-            Privacy Policy
-          </a>
-        </p>
-      </div>
-    </div>
+          <Text variant="labelMedium" style={{color: '#666', textDecorationLine: 'underline'}}>
+            Legal & Compliance
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
-};
+}
 
-export default LoginScreen;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  content: { flex: 1, padding: 20, justifyContent: 'center' },
+  header: { alignItems: 'center', marginBottom: 40 },
+  subtitle: { color: '#666', marginTop: 8 },
+  card: { padding: 24, borderRadius: 16, backgroundColor: 'white' },
+  input: { marginBottom: 16, backgroundColor: 'white' },
+  button: { marginTop: 8, borderRadius: 8 },
+  textButton: { marginTop: 16 },
+  legalLink: { marginTop: 40, alignItems: 'center' }
+});

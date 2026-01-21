@@ -1,56 +1,78 @@
-
 import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
 import { UserRole } from '../types';
 
-interface Props {
-  onBack: () => void;
-  onSelect: (role: UserRole) => void;
-}
+export default function RoleSelectionScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-const RoleSelectionScreen: React.FC<Props> = ({ onBack, onSelect }) => {
+  const handleSelect = (role: UserRole) => {
+    navigation.navigate('Registration', { role, mobile: '' });
+  };
+
   const roles = [
     { 
       type: 'buyer' as UserRole,
       title: 'Business Account', 
       desc: 'Buy and Sell industrial chemicals in a single unified platform.', 
       icon: '🏢',
-      color: 'bg-blue-50 border-blue-200 text-blue-800'
+      color: '#EFF6FF', // blue-50
+      borderColor: '#BFDBFE' // blue-200
     },
     { 
       type: 'seller' as UserRole,
       title: 'Seller Account',
       desc: 'Logistics company or driver providing professional chemical transport services.', 
       icon: '🚛',
-      color: 'bg-green-50 border-green-200 text-green-800'
+      color: '#F0FDF4', // green-50
+      borderColor: '#BBF7D0' // green-200
     },
   ];
 
   return (
-    <div className="flex-1 bg-white p-6 flex flex-col pt-12">
-      <button onClick={onBack} className="mb-8 w-10 h-10 flex items-center justify-center rounded-full bg-gray-50">
-        <svg className="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
-      </button>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
 
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Select Account Type</h1>
-      <p className="text-gray-500 mb-10">Choose how you want to interact with Prochem.</p>
+        <Text style={styles.title}>Select Account Type</Text>
+        <Text style={styles.subtitle}>Choose how you want to interact with Prochem.</Text>
 
-      <div className="space-y-4">
-        {roles.map((r) => (
-          <button 
-            key={r.type}
-            onClick={() => onSelect(r.type)}
-            className={`w-full p-6 border-2 rounded-3xl text-left flex items-start space-x-5 transition-all active:scale-98 ${r.color}`}
-          >
-            <span className="text-4xl mt-1">{r.icon}</span>
-            <div>
-              <h3 className="font-bold text-lg mb-1">{r.title}</h3>
-              <p className="text-xs opacity-80 leading-relaxed font-medium">{r.desc}</p>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
+        <View style={styles.list}>
+          {roles.map((r) => (
+            <TouchableOpacity 
+              key={r.type}
+              onPress={() => handleSelect(r.type)}
+              style={[styles.card, { backgroundColor: r.color, borderColor: r.borderColor }]}
+            >
+              <Text style={styles.icon}>{r.icon}</Text>
+              <View style={styles.textContainer}>
+                <Text style={styles.cardTitle}>{r.title}</Text>
+                <Text style={styles.cardDesc}>{r.desc}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    </SafeAreaView>
   );
-};
+}
 
-export default RoleSelectionScreen;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'white' },
+  content: { padding: 24, flex: 1 },
+  backBtn: { marginBottom: 24, width: 80 },
+  backText: { color: '#4B5563', fontSize: 16, fontWeight: '500' },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#111827', marginBottom: 8 },
+  subtitle: { fontSize: 16, color: '#6B7280', marginBottom: 32 },
+  list: { gap: 16 },
+  card: { padding: 24, borderRadius: 20, borderWidth: 2, flexDirection: 'row', alignItems: 'flex-start' },
+  icon: { fontSize: 32, marginRight: 16 },
+  textContainer: { flex: 1 },
+  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
+  cardDesc: { fontSize: 14, color: '#4B5563', lineHeight: 20 },
+});

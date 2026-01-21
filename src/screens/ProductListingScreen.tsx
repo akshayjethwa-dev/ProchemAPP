@@ -1,247 +1,92 @@
 import React, { useState } from 'react';
+import { View, StyleSheet, FlatList } from 'react-native';
+import { Text, Searchbar, Chip, useTheme, IconButton, Card } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useAppStore } from '../store/appStore';
+import { RootStackParamList } from '../navigation/types';
 import { Product } from '../types';
 
-interface Props {
-  category: string;  // ✅ FIXED: Changed from ChemicalCategory to string
-  products: Product[];
-  onBack: () => void;
-  onProductSelect: (p: Product) => void;
-  onToggleFavorite: (id: string) => void;
-  onAddToCompare: (product: Product) => void;
-}
+export default function ProductListingScreen() {
+  // ✅ 1. Get Navigation Hook
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<any>();
+  const { category } = route.params || { category: 'All' };
+  
+  // ✅ 2. Get Data from Store
+  const products = useAppStore(state => state.products);
+  const theme = useTheme();
+  const [searchQuery, setSearchQuery] = useState('');
 
-const ProductListingScreen: React.FC<Props> = ({
-  category,
-  products,
-  onBack,
-  onProductSelect,
-  onToggleFavorite,
-  onAddToCompare,
-}) => {
-  const [sortBy, setSortBy] = useState<'price_asc' | 'popularity'>('popularity');
+  // ✅ 3. Filter Logic
+  const filteredProducts = products.filter(p => 
+    (category === 'All' || p.category === category) &&
+    p.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  let filtered = products.filter((p) => p.category === category);
-
-  if (sortBy === 'price_asc') {
-    // ✅ FIXED: Added defaults for optional pricePerUnit
-    filtered.sort(
-      (a, b) =>
-        (a.pricePerUnit || a.price || 0) - (b.pricePerUnit || b.price || 0)
-    );
-  } else {
-    // ✅ FIXED: Removed sellerRating sort (doesn't exist), use verified status instead
-    filtered.sort((a, b) => (b.verified ? 1 : 0) - (a.verified ? 1 : 0));
-  }
+  // ✅ 4. Render Item (The "Clickable" Card)
+  const renderProduct = ({ item }: { item: Product }) => (
+    <Card 
+      style={styles.card} 
+      // 🚀 THE CRITICAL LINK: This opens the detail screen
+      onPress={() => navigation.navigate('ProductDetail', { productId: item.id || '' })}
+    >
+      <View style={styles.cardContent}>
+        <View style={styles.imageContainer}><Text style={{fontSize:32}}>🧪</Text></View>
+        <View style={styles.infoContainer}>
+          <Text variant="titleMedium" style={{fontWeight:'bold'}}>{item.name}</Text>
+          <View style={{flexDirection:'row', alignItems:'center', marginTop: 2}}>
+             <Text style={{fontSize:10, color:'#666'}}>Sold by: {item.sellerName || 'Verified Seller'}</Text>
+          </View>
+          <View style={styles.priceRow}>
+            <Text variant="titleLarge" style={{color: theme.colors.primary, fontWeight:'bold'}}>
+              ₹{item.pricePerUnit}
+            </Text>
+            <IconButton icon="arrow-right" size={20} />
+          </View>
+        </View>
+      </View>
+    </Card>
+  );
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">
-      <div className="bg-white p-4 pt-12 flex items-center space-x-4 border-b border-gray-100 sticky top-0 z-20">
-        <button
-          onClick={onBack}
-          className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 active:scale-95 transition-all hover:bg-gray-100"
-        >
-          <svg
-            className="w-5 h-5 text-gray-800"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2.5"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </button>
-        <div className="flex-1 overflow-hidden">
-          <h1 className="text-sm font-black text-gray-900 line-clamp-1">
-            {category}
-          </h1>
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-            {filtered.length} Verified Sources
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button className="p-2 text-[#004AAD] bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        <Text variant="titleMedium" style={{fontWeight:'bold'}}>{category} Marketplace</Text>
+      </View>
 
-      <div className="bg-white flex divide-x divide-gray-100 border-b border-gray-100 shadow-sm">
-        <button
-          onClick={() =>
-            setSortBy(sortBy === 'price_asc' ? 'popularity' : 'price_asc')
-          }
-          className="flex-1 py-3 flex items-center justify-center space-x-2 text-[11px] font-black text-gray-600 uppercase tracking-widest hover:bg-gray-50 transition-colors"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
-            />
-          </svg>
-          <span>
-            Sort: {sortBy === 'price_asc' ? 'Price' : 'Trust Score'}
-          </span>
-        </button>
-        <button className="flex-1 py-3 flex items-center justify-center space-x-2 text-[11px] font-black text-gray-600 uppercase tracking-widest hover:bg-gray-50 transition-colors">
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-            />
-          </svg>
-          <span>Filters</span>
-        </button>
-      </div>
+      <Searchbar
+        placeholder="Search chemicals..."
+        onChangeText={setSearchQuery}
+        value={searchQuery}
+        style={styles.searchBar}
+      />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar">
-        {filtered.length > 0 ? (
-          filtered.map((p) => (
-            <div
-              key={p.id}
-              className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 flex active:scale-[0.98] transition-all relative hover:shadow-md"
-            >
-              <div
-                onClick={() => onProductSelect(p)}
-                className="w-32 h-32 relative bg-gray-50 flex-shrink-0 cursor-pointer"
-              >
-                {/* ✅ FIXED: Better image fallback */}
-                <img
-                  src={p.imageUrl || p.image || '🧪'}
-                  className="w-full h-full object-cover bg-gray-100"
-                  alt={p.name}
-                />
-                {/* ✅ FIXED: Use verified property instead of isSellerVerified */}
-                {p.verified && (
-                  <div className="absolute top-2 left-2 bg-[#004AAD] text-white text-[7px] font-black px-1.5 py-0.5 rounded shadow-sm">
-                    VERIFIED
-                  </div>
-                )}
-              </div>
-              <div className="p-3 flex-1 flex flex-col justify-between">
-                <div onClick={() => onProductSelect(p)} className="cursor-pointer">
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-bold text-sm text-gray-900 line-clamp-1">
-                      {p.name}
-                    </h3>
-                  </div>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">
-                      {p.grade || 'Industrial'}
-                    </span>
-                    <span className="text-[9px] font-black text-green-600 uppercase bg-green-50 px-1 rounded flex items-center">
-                      {p.purity || 95}% Purity
-                    </span>
-                  </div>
-                  {/* ✅ FIXED: Use hardcoded seller info */}
-                  <p className="text-[8px] text-gray-400 font-bold uppercase mt-2 line-clamp-1">
-                    Verified Seller • ⭐ 4.8
-                  </p>
-                </div>
-                <div className="flex justify-between items-end mt-2">
-                  <div>
-                    {/* ✅ FIXED: Added default for pricePerUnit */}
-                    <p className="text-lg font-black text-[#004AAD]">
-                      ₹{(p.pricePerUnit || p.price || 0).toLocaleString()}
-                    </p>
-                    <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider">
-                      Per {p.unit || 'kg'} + GST
-                    </p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddToCompare(p);
-                      }}
-                      className="p-1.5 bg-gray-50 rounded-lg border border-gray-100 hover:bg-blue-50 hover:border-blue-200 transition-colors"
-                      title="Compare"
-                    >
-                      <svg
-                        className="w-4 h-4 text-gray-400 hover:text-[#004AAD]"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFavorite(p.id || '');
-                      }}
-                      className={`p-1.5 bg-gray-50 rounded-lg border transition-colors ${
-                        p.inStock !== false
-                          ? 'text-red-500 border-gray-100 hover:bg-red-50'
-                          : 'text-gray-400 border-gray-100'
-                      }`}
-                      title="Favorite"
-                    >
-                      <svg
-                        className={`w-4 h-4 ${p.inStock !== false ? 'fill-current' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="flex flex-col items-center justify-center py-16">
-            <p className="text-gray-500 font-medium">No products found</p>
-            <p className="text-[12px] text-gray-400 mt-1">
-              Try adjusting your filters or search
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+      <FlatList
+        data={filteredProducts}
+        renderItem={renderProduct}
+        keyExtractor={(item, index) => item.id || index.toString()}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={{padding: 40, alignItems:'center'}}>
+            <Text>No products found.</Text>
+          </View>
+        }
+      />
+    </SafeAreaView>
   );
-};
+}
 
-export default ProductListingScreen;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 8, backgroundColor: 'white' },
+  searchBar: { margin: 16, backgroundColor: 'white' },
+  listContent: { paddingHorizontal: 16, paddingBottom: 20 },
+  card: { marginBottom: 12, backgroundColor: 'white' },
+  cardContent: { flexDirection: 'row', padding: 12 },
+  imageContainer: { width: 80, height: 80, backgroundColor: '#F3F4F6', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
+  infoContainer: { flex: 1, justifyContent: 'space-between' },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+});

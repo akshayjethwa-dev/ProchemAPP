@@ -1,309 +1,229 @@
 import React, { useState } from 'react';
-import authService from '../services/authService';
-import { UserProfile, UserRole } from '../types';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { Text, TextInput, Button, HelperText, useTheme, Checkbox, Chip } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import { registerUser } from '../services/authService';
 
-interface Props {
-  mobile: string;
-  role: UserRole;
-  onRegister: (user: UserProfile) => void;
-  onBack: () => void;
-}
+export default function RegistrationScreen() {
+  const route = useRoute<any>();
+  const navigation = useNavigation();
+  const theme = useTheme();
+  
+  const { role } = route.params || { role: 'buyer' };
+  const isSeller = role === 'seller';
 
-const RegistrationScreen: React.FC<Props> = ({
-  mobile,
-  role,
-  onRegister,
-  onBack,
-}) => {
   const [formData, setFormData] = useState({
     companyName: '',
     email: '',
+    phone: '', // ✅ Mobile
     gstNumber: '',
     address: '',
+    pincode: '', // ✅ Pincode
     password: '',
   });
 
+  // ✅ Document Upload State (Simulated)
+  const [documents, setDocuments] = useState({
+    gstin: false,
+    shopLicense: false,
+    udyogAadhar: false,
+  });
+
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-    setError('');
+  const toggleDocument = (docKey: keyof typeof documents) => {
+    setDocuments(prev => ({ ...prev, [docKey]: !prev[docKey] }));
   };
 
-  const validateForm = (): boolean => {
-    if (!formData.companyName.trim()) {
-      setError('Company name is required');
-      return false;
+  const handleRegister = async () => {
+    // Basic Validation
+    if (!formData.companyName || !formData.email || !formData.password || !formData.phone || !formData.address || !formData.pincode) {
+      Alert.alert('Error', 'Please fill all required fields');
+      return;
+    }
+    
+    // Strict GST validation for sellers
+    if (isSeller && (!formData.gstNumber || formData.gstNumber.length !== 15)) {
+      Alert.alert('Compliance Error', 'Valid 15-digit GST Number is required for Sellers.');
+      return;
     }
 
-    if (!formData.email.trim()) {
-      setError('Email address is required');
-      return false;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setError('Enter a valid email address');
-      return false;
-    }
-
-    if (!formData.password || formData.password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return false;
-    }
-
-    // ✅ FIXED: Use role type directly (it's a string type union)
-    if (role === 'seller') {
-      if (!formData.gstNumber.trim()) {
-        setError('GST number is required');
-        return false;
-      }
-
-      if (formData.gstNumber.length !== 15) {
-        setError('GST number must be 15 characters');
-        return false;
-      }
-    }
-
-    if (!formData.address.trim()) {
-      setError('Address is required');
-      return false;
-    }
-
-    return true;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (!validateForm()) {
+    // Document Validation
+    if (!documents.gstin) {
+      Alert.alert('Compliance Error', 'Please upload/verify your GSTIN document.');
       return;
     }
 
     setLoading(true);
-
     try {
-      // Call Firebase authService.registerUser()
-      const user = await authService.registerUser(
-        formData.email,
-        formData.password,
-        role  // Already 'buyer' or 'seller'
-      );
-
-      if (user) {
-        setSuccess('Registration successful! Redirecting...');
-        console.log('✅ User registered:', user);
-
-        // ✅ FIXED: Create profile with correct field names
-        const profile: UserProfile = {
-          uid: user.uid,
-          phone: mobile,
-          email: formData.email,
-          userType: role,  // ← Changed from 'role' to 'userType'
-          companyName: formData.companyName,
-          gstNumber: formData.gstNumber || undefined,
-          address: formData.address,
-          verified: false,
-          verificationStatus: 'PENDING',
-          createdAt: new Date(),
-        };
-
-        setTimeout(() => onRegister(profile), 1500);
-      }
+      await registerUser(formData.email, formData.password, role, {
+        companyName: formData.companyName,
+        gstNumber: formData.gstNumber,
+        phone: formData.phone,
+        address: formData.address,
+        pincode: formData.pincode,
+        documents: documents
+      });
+      // Auth listener handles navigation
     } catch (err: any) {
-      setError(err.message || 'Registration failed. Please try again.');
-      console.log('❌ Registration failed:', err);
+      Alert.alert('Registration Failed', err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Role display text
-  const getRoleText = (): string => {
-    switch (role) {
-      case 'buyer':
-        return 'Set up your buyer account';
-      case 'seller':
-        return 'Set up your seller account';
-      default:
-        return 'Complete your profile';
-    }
-  };
-
-  // Check if GST is required
-  const isGSTRequired = role === 'seller';
-
   return (
-    <div className="flex-1 bg-white flex flex-col h-full overflow-y-auto hide-scrollbar pt-12 px-6 pb-12">
-      {/* Back Button */}
-      <button
-        onClick={onBack}
-        className="flex items-center space-x-2 mb-8 text-gray-500 hover:text-gray-700 transition-colors"
-      >
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
-        <span className="font-medium">Back</span>
-      </button>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <Text variant="headlineMedium" style={styles.title}>
+            {isSeller ? 'Seller Registration' : 'Buyer Registration'}
+          </Text>
+          <Text variant="bodyMedium" style={{color: '#666'}}>
+            {isSeller ? 'Verify your business to start selling' : 'Create account to browse chemicals'}
+          </Text>
+        </View>
 
-      {/* Header */}
-      <div className="mb-12">
-        <h1 className="text-3xl font-black text-gray-900 mb-3">
-          Complete Profile
-        </h1>
-        <p className="text-gray-600 font-semibold text-base">{getRoleText()}</p>
-      </div>
-
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-6 flex-1">
-        {/* Company Name */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Company Name *
-          </label>
-          <input
-            type="text"
+        <View style={styles.form}>
+          <TextInput
+            label="Company Name *"
             value={formData.companyName}
-            onChange={(e) =>
-              handleInputChange('companyName', e.target.value)
-            }
-            placeholder="Your company name"
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
+            onChangeText={(t) => setFormData({...formData, companyName: t})}
+            mode="outlined"
+            style={styles.input}
           />
-        </div>
-
-        {/* Email */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Email Address *
-          </label>
-          <input
-            type="email"
+          
+          <TextInput
+            label="Email *"
             value={formData.email}
-            onChange={(e) => handleInputChange('email', e.target.value)}
-            placeholder="your@email.com"
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
+            onChangeText={(t) => setFormData({...formData, email: t})}
+            mode="outlined"
+            autoCapitalize="none"
+            style={styles.input}
           />
-        </div>
 
-        {/* Password */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Password *
-          </label>
-          <input
-            type="password"
+          <TextInput
+            label="Mobile Number *"
+            value={formData.phone}
+            onChangeText={(t) => setFormData({...formData, phone: t})}
+            mode="outlined"
+            keyboardType="phone-pad"
+            maxLength={10}
+            style={styles.input}
+          />
+
+          <TextInput
+            label="Password *"
             value={formData.password}
-            onChange={(e) => handleInputChange('password', e.target.value)}
-            placeholder="At least 8 characters"
-            disabled={loading}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50"
+            onChangeText={(t) => setFormData({...formData, password: t})}
+            secureTextEntry
+            mode="outlined"
+            style={styles.input}
           />
-        </div>
 
-        {/* GST Number (for sellers) */}
-        {isGSTRequired && (
-          <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-              GST Number *
-            </label>
-            <input
-              type="text"
-              value={formData.gstNumber}
-              onChange={(e) =>
-                handleInputChange('gstNumber', e.target.value.toUpperCase())
-              }
-              placeholder="27AABCU9603R1Z0"
-              disabled={loading}
-              maxLength={15}
-              className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50 uppercase"
+          <TextInput
+            label="GST Number *"
+            value={formData.gstNumber}
+            onChangeText={(t) => setFormData({...formData, gstNumber: t.toUpperCase()})}
+            mode="outlined"
+            maxLength={15}
+            style={styles.input}
+          />
+          <HelperText type="info">Required for tax invoicing</HelperText>
+
+          <View style={styles.row}>
+            <TextInput
+              label="Address *"
+              value={formData.address}
+              onChangeText={(t) => setFormData({...formData, address: t})}
+              mode="outlined"
+              style={[styles.input, {flex: 2, marginRight: 8}]}
             />
-            <p className="text-xs text-gray-500 mt-1">
-              15-character GST number (e.g., 27AABCU9603R1Z0)
-            </p>
-          </div>
-        )}
+            <TextInput
+              label="Pincode *"
+              value={formData.pincode}
+              onChangeText={(t) => setFormData({...formData, pincode: t})}
+              mode="outlined"
+              keyboardType="number-pad"
+              maxLength={6}
+              style={[styles.input, {flex: 1}]}
+            />
+          </View>
 
-        {/* Address */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Business Address *
-          </label>
-          <textarea
-            value={formData.address}
-            onChange={(e) => handleInputChange('address', e.target.value)}
-            placeholder="Street address, city, state, PIN"
-            disabled={loading}
-            rows={3}
-            className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all disabled:opacity-50 resize-none"
-          />
-        </div>
+          {/* ✅ Document Upload Section */}
+          <Text variant="titleMedium" style={{marginTop: 16, marginBottom: 8, fontWeight:'bold'}}>
+            Upload Verification Documents
+          </Text>
+          <Text variant="bodySmall" style={{marginBottom: 12, color:'#666'}}>
+            Tap to simulate upload (Green = Uploaded)
+          </Text>
 
-        {/* Error Message */}
-        {error && (
-          <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
-            <p className="text-xs text-red-700 font-bold">⚠️ {error}</p>
-          </div>
-        )}
+          <View style={styles.docRow}>
+            <Chip 
+              icon={documents.gstin ? "check" : "upload"} 
+              selected={documents.gstin} 
+              onPress={() => toggleDocument('gstin')}
+              style={styles.chip}
+            >
+              GSTIN Cert.
+            </Chip>
+            <Chip 
+              icon={documents.shopLicense ? "check" : "upload"} 
+              selected={documents.shopLicense} 
+              onPress={() => toggleDocument('shopLicense')}
+              style={styles.chip}
+            >
+              Shop License
+            </Chip>
+          </View>
+          <View style={styles.docRow}>
+            <Chip 
+              icon={documents.udyogAadhar ? "check" : "upload"} 
+              selected={documents.udyogAadhar} 
+              onPress={() => toggleDocument('udyogAadhar')}
+              style={styles.chip}
+            >
+              Udyog Aadhar
+            </Chip>
+          </View>
 
-        {/* Success Message */}
-        {success && (
-          <div className="p-4 bg-green-50 border-l-4 border-green-500 rounded-lg animate-pulse">
-            <p className="text-xs text-green-700 font-bold">✅ {success}</p>
-          </div>
-        )}
+          <View style={styles.infoBox}>
+            <Text style={{color:'#854d0e', fontSize: 12}}>
+              ⚠️ Your account will be in <Text style={{fontWeight:'bold'}}>Pending Verification</Text> state. 
+              {isSeller ? ' Selling ' : ' Buying '} will be restricted until approved.
+            </Text>
+          </View>
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-4 bg-[#004AAD] hover:bg-[#003399] text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest"
-        >
-          {loading ? (
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Creating Profile...</span>
-            </div>
-          ) : (
-            'Complete Registration'
-          )}
-        </button>
-      </form>
+          <Button 
+            mode="contained" 
+            onPress={handleRegister} 
+            loading={loading}
+            style={styles.button}
+            contentStyle={{height: 50}}
+          >
+            Create Account
+          </Button>
 
-      {/* Terms Agreement */}
-      <div className="text-center space-y-4 mt-12">
-        <p className="text-xs text-gray-500 leading-relaxed">
-          By registering, you agree to our{' '}
-          <span className="text-[#004AAD] font-bold cursor-pointer hover:underline">
-            Terms
-          </span>{' '}
-          and{' '}
-          <span className="text-[#004AAD] font-bold cursor-pointer hover:underline">
-            Privacy Policy
-          </span>
-        </p>
-      </div>
-    </div>
+          <Button mode="text" onPress={() => navigation.goBack()}>
+            Go Back
+          </Button>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
-};
+}
 
-export default RegistrationScreen;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: 'white' },
+  scrollContent: { padding: 20 },
+  header: { marginBottom: 24 },
+  title: { fontWeight: 'bold', color: '#004AAD' },
+  form: { gap: 8 },
+  input: { backgroundColor: 'white' },
+  row: { flexDirection: 'row' },
+  button: { marginTop: 12, borderRadius: 12, backgroundColor: '#004AAD' },
+  docRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  chip: { flex: 1 },
+  infoBox: { backgroundColor: '#fef9c3', padding: 12, borderRadius: 8, marginTop: 12, marginBottom: 4 }
+});

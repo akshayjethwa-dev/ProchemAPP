@@ -2,8 +2,6 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signOut,
-  ConfirmationResult,
-  signInWithPhoneNumber,
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
@@ -13,13 +11,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-
-interface UserProfile {
-  email: string;
-  userType: 'buyer' | 'seller';
-  verified: boolean;
-  createdAt?: any;
-}
+import { UserRole } from '../types';
 
 // Email Login
 export const loginUser = async (email: string, password: string): Promise<any> => {
@@ -27,40 +19,52 @@ export const loginUser = async (email: string, password: string): Promise<any> =
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Get user profile from Firestore
     const userDoc = await getDoc(doc(db, 'users', user.uid));
     if (userDoc.exists()) {
       return { 
         ...user, 
-        profile: userDoc.data() as UserProfile 
+        ...userDoc.data() 
       };
     }
-    return { 
-      ...user, 
-      profile: null 
-    };
+    return user;
   } catch (error: any) {
     console.error('Login error:', error);
     throw new Error(error.message || 'Login failed');
   }
 };
 
-// Email Registration
+// ✅ UPDATED: Register with full profile data
 export const registerUser = async (
   email: string, 
   password: string, 
-  userType: 'buyer' | 'seller'
+  role: UserRole,
+  additionalData: {
+    companyName: string;
+    gstNumber: string;
+    phone: string;
+    address: string;
+    pincode: string;
+    documents: any;
+  }
 ): Promise<any> => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Create user profile in Firestore
+    // Create user profile in Firestore with "Pending" status
     await setDoc(doc(db, 'users', user.uid), {
+      uid: user.uid,
       email: email,
-      userType: userType,
+      userType: role,
+      companyName: additionalData.companyName,
+      gstNumber: additionalData.gstNumber,
+      phone: additionalData.phone,
+      address: additionalData.address,
+      pincode: additionalData.pincode,
+      documents: additionalData.documents,
+      verified: false, // 🔒 Default to false
+      verificationStatus: 'pending', // 🔒 Verification Pending
       createdAt: serverTimestamp(),
-      verified: false
     });
 
     return user;
@@ -70,7 +74,6 @@ export const registerUser = async (
   }
 };
 
-// Logout
 export const logoutUser = async (): Promise<void> => {
   try {
     await signOut(auth);
@@ -80,7 +83,6 @@ export const logoutUser = async (): Promise<void> => {
   }
 };
 
-// Send Password Reset Email
 export const resetPassword = async (email: string): Promise<void> => {
   try {
     await sendPasswordResetEmail(auth, email);
@@ -90,21 +92,9 @@ export const resetPassword = async (email: string): Promise<void> => {
   }
 };
 
-// Phone Authentication (Optional - for future)
-export const sendPhoneVerification = async (phoneNumber: string): Promise<ConfirmationResult> => {
-  try {
-    const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber);
-    return confirmationResult;
-  } catch (error: any) {
-    console.error('Phone verification error:', error);
-    throw new Error(error.message || 'Phone verification failed');
-  }
-};
-
 export default {
   loginUser,
   registerUser,
   logoutUser,
   resetPassword,
-  sendPhoneVerification
 };
