@@ -1,72 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { getProducts, searchProducts } from '../services/productService';  // ✅ Firebase
+import { View, StyleSheet, FlatList, ScrollView } from 'react-native';
+import { Text, Searchbar, ActivityIndicator, IconButton, Card, Chip, useTheme, Button } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
+import { getProducts } from '../services/productService'; 
+import { Product } from '../types';
 
-// ✅ Local Product type for TypeScript
-interface Product {
-  id?: string;
-  name: string;
-  price: number;
-  category: string;
-  description?: string;
-  quantity: number;
-  sellerId: string;
-  imageUrl?: string;
-  verified: boolean;
-  sellerName?: string;
-  sellerRating?: number;
-}
-
-interface Props {
-  onBack: () => void;
-  onProductSelect?: (product: Product) => void;  // ✅ Added callback
-}
-
-const Marketplace: React.FC<Props> = ({ onBack, onProductSelect }) => {
+export default function Marketplace() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const theme = useTheme();
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-
-  // ✅ Load products from Firebase on mount
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      setError('');
-
-      // Get products from Firebase
-      const prods = await getProducts(selectedCategory);
-      setProducts(prods);
-      setFilteredProducts(prods);
-
-      console.log('✅ Loaded', prods.length, 'products from Firebase');
-    } catch (err: any) {
-      setError(err.message || 'Failed to load products');
-      console.error('Marketplace error:', err);
-      setProducts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Filter products when search changes
-  useEffect(() => {
-    if (searchTerm) {
-      // Client-side search (Firebase doesn't support full-text yet)
-      const filtered = products.filter(p =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.category.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts(products);
-    }
-  }, [searchTerm, products]);
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined);
 
   const categories = [
     'All Products',
@@ -76,189 +27,166 @@ const Marketplace: React.FC<Props> = ({ onBack, onProductSelect }) => {
     'Salts'
   ];
 
-  const handleCategoryChange = (category: string) => {
-    setSelectedCategory(category === 'All Products' ? '' : category);
+  // Initial Load & Category Change
+  useEffect(() => {
+    loadProducts();
+  }, [selectedCategory]);
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      // ✅ FIX: Call getProducts() with NO arguments (matches your service definition)
+      let data = await getProducts(); 
+      
+      // ✅ FIX: Filter by Category Client-Side
+      const catParam = selectedCategory === 'All Products' ? undefined : selectedCategory;
+      if (catParam) {
+        data = data.filter(p => p.category === catParam);
+      }
+      
+      setProducts(data);
+      setFilteredProducts(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load products');
+      console.error('Marketplace error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return (
-    <div className="flex-1 bg-gray-50 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <button 
-          onClick={onBack}
-          className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 font-bold"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          <span>Back to Dashboard</span>
-        </button>
-        <h1 className="text-2xl font-black text-gray-900">Chemical Marketplace</h1>
-      </div>
+  // Client-side Search Filter
+  useEffect(() => {
+    if (searchTerm.trim()) {
+      const lowerTerm = searchTerm.toLowerCase();
+      const filtered = products.filter(p => 
+        p.name.toLowerCase().includes(lowerTerm) ||
+        p.category.toLowerCase().includes(lowerTerm)
+      );
+      setFilteredProducts(filtered);
+    } else {
+      setFilteredProducts(products);
+    }
+  }, [searchTerm, products]);
 
-      {/* Search & Filters */}
-      <div className="bg-white rounded-3xl p-6 shadow-lg mb-8">
-        {/* Search Bar */}
-        <div className="relative mb-6">
-          <input
-            type="text"
-            placeholder="Search chemicals, CAS numbers, suppliers..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-4 pl-12 pr-12 bg-gray-50 border-2 border-gray-100 rounded-2xl text-lg font-semibold focus:ring-2 focus:ring-[#004AAD] focus:border-transparent outline-none transition-all"
-          />
-          <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-            🔍
-          </div>
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        {/* Category Filter */}
-        <div className="flex flex-wrap gap-3">
-          {categories.map((category) => (
-            <button
-              key={category}
-              onClick={() => handleCategoryChange(category)}
-              className={`px-6 py-3 rounded-2xl text-sm font-bold transition-all shadow-sm ${
-                selectedCategory === category || (category === 'All Products' && selectedCategory === '')
-                  ? 'bg-[#004AAD] text-white shadow-md hover:shadow-lg'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:shadow-md'
-              }`}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Products Grid */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-[#004AAD]/20 border-t-[#004AAD] rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-xl font-semibold text-gray-600">Loading chemicals...</p>
-            <p className="text-sm text-gray-500 mt-1">Fetching from verified suppliers</p>
-          </div>
-        </div>
-      ) : error ? (
-        <div className="bg-red-50 border-2 border-red-200 rounded-3xl p-8 text-center shadow-lg">
-          <div className="text-4xl mb-4">⚠️</div>
-          <h3 className="text-xl font-bold text-red-800 mb-2">{error}</h3>
-          <button
-            onClick={fetchProducts}
-            className="bg-red-500 text-white px-6 py-3 rounded-2xl font-bold hover:bg-red-600 transition-all shadow-lg"
-          >
-            🔄 Retry Loading
-          </button>
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-3xl p-12 text-center shadow-xl">
-          <div className="text-6xl mb-6 mx-auto w-24 h-24 bg-blue-200 rounded-3xl flex items-center justify-center">🧪</div>
-          <h3 className="text-2xl font-black text-gray-800 mb-3">No Chemicals Found</h3>
-          <p className="text-gray-600 text-lg mb-6 max-w-md mx-auto leading-relaxed">
-            Try adjusting your search or category filters. New listings added daily by verified suppliers.
-          </p>
-          <button
-            onClick={() => {
-              setSearchTerm('');
-              setSelectedCategory('');
-            }}
-            className="bg-[#004AAD] text-white px-8 py-4 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl transition-all"
-          >
-            🔍 Show All Products
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between text-sm font-bold text-gray-700 mb-4">
-            <span>{filteredProducts.length} chemicals found</span>
-            <span>Sorted by latest</span>
-          </div>
+  const renderProduct = ({ item }: { item: Product }) => (
+    <Card 
+      style={styles.card} 
+      onPress={() => navigation.navigate('ProductDetail', { productId: item.id || '' })}
+    >
+      <View style={styles.cardContent}>
+        <View style={styles.imageContainer}>
+          <Text style={{fontSize: 32}}>🧪</Text>
+        </View>
+        
+        <View style={styles.infoContainer}>
+          <Text variant="titleMedium" numberOfLines={2} style={styles.productName}>
+            {item.name}
+          </Text>
+          <Text variant="bodySmall" style={styles.categoryText}>
+            {item.category}
+          </Text>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProducts.map((product) => (
-              <div
-                key={product.id}
-                className="group bg-white rounded-3xl p-6 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all border border-gray-100 cursor-pointer"
-                onClick={() => onProductSelect?.(product)}
-              >
-                {/* Product Image */}
-                <div className="w-full h-48 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-[#004AAD]/5 transition-colors">
-                  <span className="text-4xl group-hover:text-[#004AAD] transition-colors">
-                    {product.imageUrl ? '🧪' : '🧪'}
-                  </span>
-                </div>
+          <View style={styles.priceRow}>
+            <Text variant="titleLarge" style={{color: theme.colors.primary, fontWeight:'bold'}}>
+              ₹{item.pricePerUnit || item.price || 0}
+            </Text>
+            <Text variant="bodySmall" style={{color: '#666'}}>
+              /{item.unit || 'unit'}
+            </Text>
+          </View>
 
-                {/* Product Name */}
-                <h3 className="font-black text-xl text-gray-900 mb-2 line-clamp-2 group-hover:text-[#004AAD] transition-colors">
-                  {product.name}
-                </h3>
-
-                {/* Category */}
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-                  {product.category}
-                </p>
-
-                {/* Price */}
-                <div className="flex items-baseline space-x-2 mb-4">
-                  <span className="text-2xl font-black text-[#004AAD]">
-                    ₹{product.price?.toLocaleString() || 'Contact'}
-                  </span>
-                  <span className="text-sm text-gray-500">per unit</span>
-                </div>
-
-                {/* Seller & Rating */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center text-xs font-bold text-yellow-900">
-                      {product.sellerRating || 4.5}
-                    </div>
-                    <span className="text-sm font-bold text-gray-700">
-                      {product.sellerName || 'Verified Seller'}
-                    </span>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    product.verified 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-gray-100 text-gray-600'
-                  }`}>
-                    {product.verified ? 'Verified' : 'Pending'}
-                  </span>
-                </div>
-
-                {/* Stock & Action */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">
-                    Stock: {product.quantity || 'Contact'} units
-                  </span>
-                  <button className="bg-[#004AAD] text-white px-6 py-3 rounded-2xl font-bold text-sm uppercase tracking-wider hover:bg-[#003399] transition-all shadow-lg group-hover:shadow-xl">
-                    Add to Cart
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* No Results Footer */}
-      {filteredProducts.length === 0 && !loading && !error && (
-        <div className="mt-12 text-center py-12 border-t border-gray-200">
-          <p className="text-gray-500 text-lg mb-4">Want specific chemicals?</p>
-          <p className="text-sm text-gray-400 max-w-md mx-auto">
-            Our verified suppliers add new listings daily. Check back soon or contact support for custom sourcing.
-          </p>
-        </div>
-      )}
-    </div>
+          <View style={styles.sellerRow}>
+             <Text style={styles.sellerText}>By: {item.sellerName || 'Verified Seller'}</Text>
+             {item.verified && (
+               <Text style={styles.verifiedBadge}> ✓ Verified</Text>
+             )}
+          </View>
+        </View>
+      </View>
+    </Card>
   );
-};
 
-export default Marketplace;
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        <Text variant="headlineSmall" style={{fontWeight:'bold'}}>Marketplace</Text>
+      </View>
+
+      <View style={styles.searchContainer}>
+        <Searchbar
+          placeholder="Search chemicals..."
+          onChangeText={setSearchTerm}
+          value={searchTerm}
+          style={styles.searchbar}
+          inputStyle={{minHeight: 0}}
+        />
+      </View>
+
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catScroll}>
+          {categories.map((cat) => (
+            <Chip
+              key={cat}
+              selected={selectedCategory === cat || (cat === 'All Products' && !selectedCategory)}
+              onPress={() => setSelectedCategory(cat === 'All Products' ? undefined : cat)}
+              style={[styles.chip, selectedCategory === cat && { backgroundColor: '#E3F2FD' }]}
+              showSelectedOverlay
+            >
+              {cat}
+            </Chip>
+          ))}
+        </ScrollView>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{marginTop: 10}}>Loading marketplace...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.center}>
+          <Text style={{color:'red', marginBottom: 10}}>{error}</Text>
+          <Button mode="contained" onPress={loadProducts}>Retry</Button>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredProducts}
+          renderItem={renderProduct}
+          keyExtractor={(item, index) => item.id || index.toString()}
+          numColumns={2}
+          contentContainerStyle={styles.list}
+          columnWrapperStyle={{justifyContent:'space-between'}}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text variant="titleMedium" style={{color: '#999'}}>No products found</Text>
+            </View>
+          }
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 10 },
+  searchContainer: { paddingHorizontal: 16, marginBottom: 10 },
+  searchbar: { backgroundColor: 'white', borderRadius: 10, elevation: 1 },
+  catScroll: { paddingHorizontal: 16, paddingBottom: 10 },
+  chip: { marginRight: 8, backgroundColor: 'white', elevation: 1 },
+  list: { paddingHorizontal: 16, paddingBottom: 20 },
+  card: { width: '48%', marginBottom: 16, backgroundColor: 'white', elevation: 2 },
+  cardContent: { padding: 12 },
+  imageContainer: { height: 100, backgroundColor: '#F1F5F9', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  infoContainer: { flex: 1 },
+  productName: { fontWeight: 'bold', fontSize: 14 },
+  categoryText: { color: '#666', fontSize: 10, marginBottom: 4 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
+  sellerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap' },
+  sellerText: { fontSize: 10, color: '#64748B' },
+  verifiedBadge: { fontSize: 10, color: 'green', fontWeight: 'bold' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }
+});

@@ -1,22 +1,26 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Share, Alert, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
 import { Text, Button, IconButton, useTheme, Divider, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
+import { Product } from '../types';
 
 export default function ProductDetail() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const theme = useTheme();
-  const { productId, product: paramProduct } = route.params || {};
   
+  const { productId, product: paramProduct } = route.params || {};
   const { products, addToCart, addToCompare } = useAppStore();
-  const product = products.find(p => p.id === productId) || paramProduct || {};
+  
+  // Get initial product data
+  const product = products.find(p => p.id === productId) || paramProduct || ({} as Product);
 
   const [qty, setQty] = useState(product.moq || 10);
   const price = product.pricePerUnit || product.price || 0;
-  const totalPrice = price * qty;
+  
+  // NOTE: Seller fetching logic removed to maintain anonymity.
 
   const handleNegotiate = () => {
     navigation.navigate('Negotiation', { product });
@@ -27,13 +31,29 @@ export default function ProductDetail() {
     Alert.alert('Added to Compare', 'You can view this in the Comparison Table.');
   };
 
-  const handleDownloadMSDS = () => {
-    Alert.alert('Download', 'Downloading Material Safety Data Sheet (MSDS)...');
+  const handleBuyNow = () => {
+    if (!product || !product.id) {
+      Alert.alert('Error', 'Product data is missing');
+      return;
+    }
+    addToCart({
+      ...product,
+      id: product.id,
+      quantity: qty,
+      pricePerUnit: price,
+      unit: product.unit || 'kg',
+      sellerId: product.sellerId || 'unknown',
+      name: product.name,
+      category: product.category,
+      price: price
+    });
+    navigation.navigate('BuyerApp', { screen: 'Cart' });
   };
 
-  const handleDownloadQuote = () => {
-    Alert.alert('Quote Generated', 'Pro-forma Invoice sent to your email.');
-  };
+  const handleDownloadMSDS = () => Alert.alert('Download', 'Downloading Material Safety Data Sheet (MSDS)...');
+  const handleDownloadQuote = () => Alert.alert('Quote Generated', 'Pro-forma Invoice sent to your email.');
+
+  if (!product.name) return null;
 
   return (
     <View style={styles.container}>
@@ -59,7 +79,9 @@ export default function ProductDetail() {
               <Text variant="headlineSmall" style={styles.title}>{product.name}</Text>
               <View style={{flexDirection:'row', alignItems:'center', marginTop: 4}}>
                 <Text style={{color: '#666', fontWeight:'bold', marginRight: 8}}>{product.category}</Text>
-                <Chip icon="check-decagram" textStyle={{fontSize:10, marginVertical:0}} style={{height:24, backgroundColor:'#DCFCE7'}}>Verified</Chip>
+                {product.verified && (
+                  <Chip icon="check-decagram" textStyle={{fontSize:10, marginVertical:0}} style={{height:24, backgroundColor:'#DCFCE7'}}>Verified</Chip>
+                )}
               </View>
             </View>
             <View style={{alignItems:'flex-end'}}>
@@ -72,18 +94,28 @@ export default function ProductDetail() {
 
           <Divider style={styles.divider} />
 
-          {/* Seller Transparency */}
-          <Text variant="titleMedium" style={styles.sectionTitle}>Seller Details</Text>
+          {/* ✅ UPDATED: Anonymized Seller Details */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>Supplier Info</Text>
           <View style={styles.sellerCard}>
             <View style={styles.sellerRow}>
-              <View style={styles.sellerIcon}><Text>🏢</Text></View>
+              <View style={styles.sellerIcon}><Text>🛡️</Text></View>
               <View>
-                <Text variant="titleMedium" style={{fontWeight:'bold'}}>{product.sellerName || 'Verified Seller'}</Text>
-                <Text variant="bodySmall" style={{color:'#666'}}>Origin: {product.origin || 'Mumbai, MH'}</Text>
+                {/* Generic Name */}
+                <Text variant="titleMedium" style={{fontWeight:'bold'}}>Prochem Verified Supplier</Text>
+                
+                {/* Only show generic City/State if available, NOT full address */}
+                <Text variant="bodySmall" style={{color:'#666'}}>
+                  Origin: {product.origin || 'India'}
+                </Text>
+                
+                <Text variant="bodySmall" style={{color:'#2E7D32', fontSize: 10, fontWeight:'bold', marginTop: 2}}>
+                  ✓ Quality Checked
+                </Text>
               </View>
               <View style={{flex:1}}/>
               <View style={styles.ratingBadge}>
-                <Text style={styles.ratingText}>⭐ 4.8</Text>
+                {/* Keep rating as it reflects product quality, not identity */}
+                <Text style={styles.ratingText}>⭐ {product.sellerRating || '4.5'}</Text>
               </View>
             </View>
           </View>
@@ -100,7 +132,7 @@ export default function ProductDetail() {
             </View>
             <View style={styles.gridItem}>
               <Text style={styles.label}>CAS No.</Text>
-              <Text style={styles.value}>{product.casNumber || '7664-93-9'}</Text>
+              <Text style={styles.value}>{product.casNumber || 'N/A'}</Text>
             </View>
           </View>
 
@@ -132,7 +164,7 @@ export default function ProductDetail() {
         <View style={{width: 12}} />
         <Button 
           mode="contained" 
-          onPress={() => addToCart({...product, quantity: qty})} 
+          onPress={handleBuyNow} 
           style={[styles.actionBtn, {backgroundColor: theme.colors.primary}]}
         >
           Buy Now

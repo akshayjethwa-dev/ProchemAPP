@@ -1,73 +1,171 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
-import { Text, TextInput, Button, HelperText, useTheme, Checkbox, Chip } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { TextInput, Button, Text, HelperText, ActivityIndicator, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute, useNavigation } from '@react-navigation/native';
-import { registerUser } from '../services/authService';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
+import { validateGST } from '../services/gstService';
 
 export default function RegistrationScreen() {
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const navigation = useNavigation();
-  const theme = useTheme();
-  
-  const { role } = route.params || { role: 'buyer' };
-  const isSeller = role === 'seller';
+  const { mobile } = route.params || {}; 
 
-  const [formData, setFormData] = useState({
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    companyName: '',
+    gstNumber: '',
+    address: ''
+  });
+
+  // ✅ NEW: Comprehensive Error State
+  const [errors, setErrors] = useState({
     companyName: '',
     email: '',
-    phone: '', // ✅ Mobile
-    gstNumber: '',
-    address: '',
-    pincode: '', // ✅ Pincode
     password: '',
+    gstNumber: '',
+    address: ''
   });
-
-  // ✅ Document Upload State (Simulated)
-  const [documents, setDocuments] = useState({
-    gstin: false,
-    shopLicense: false,
-    udyogAadhar: false,
-  });
-
+  
   const [loading, setLoading] = useState(false);
+  const [gstLoading, setGstLoading] = useState(false);
+  const [gstVerified, setGstVerified] = useState(false);
+  const [secureTextEntry, setSecureTextEntry] = useState(true);
 
-  const toggleDocument = (docKey: keyof typeof documents) => {
-    setDocuments(prev => ({ ...prev, [docKey]: !prev[docKey] }));
+  // Helper to clear errors on typing
+  const updateForm = (key: string, value: string) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    // Clear the specific error when user types
+    if (errors[key as keyof typeof errors]) {
+      setErrors(prev => ({ ...prev, [key]: '' }));
+    }
   };
 
-  const handleRegister = async () => {
-    // Basic Validation
-    if (!formData.companyName || !formData.email || !formData.password || !formData.phone || !formData.address || !formData.pincode) {
-      Alert.alert('Error', 'Please fill all required fields');
+  const handleVerifyGST = async () => {
+    if (!form.gstNumber) {
+      setErrors(prev => ({ ...prev, gstNumber: 'GST Number is required to verify' }));
+      return;
+    }
+    if (form.gstNumber.length < 15) {
+      setErrors(prev => ({ ...prev, gstNumber: 'GSTIN must be 15 characters' }));
       return;
     }
     
-    // Strict GST validation for sellers
-    if (isSeller && (!formData.gstNumber || formData.gstNumber.length !== 15)) {
-      Alert.alert('Compliance Error', 'Valid 15-digit GST Number is required for Sellers.');
-      return;
+    setGstLoading(true);
+    setErrors(prev => ({ ...prev, gstNumber: '' })); // Clear error before verifying
+    
+    const result = await validateGST(form.gstNumber);
+    
+    setGstLoading(false);
+    if (result.isValid) {
+      setGstVerified(true);
+      if (result.legalName) {
+        setForm(prev => ({ ...prev, companyName: result.legalName! }));
+        // Also clear company name error if it was auto-filled
+        setErrors(prev => ({ ...prev, companyName: '' }));
+      }
+      Alert.alert('Success', 'GSTIN is Valid & Active!');
+    } else {
+      setGstVerified(false);
+      setErrors(prev => ({ ...prev, gstNumber: result.message || 'Invalid GSTIN' }));
+    }
+  };
+
+  const validateInputs = () => {
+    let isValid = true;
+    let newErrors = { ...errors };
+
+    // 1. GST Validation
+    if (!form.gstNumber) {
+      newErrors.gstNumber = 'GST Number is required';
+      isValid = false;
+    } else if (form.gstNumber.length < 15) {
+      newErrors.gstNumber = 'GSTIN must be 15 characters';
+      isValid = false;
     }
 
-    // Document Validation
-    if (!documents.gstin) {
-      Alert.alert('Compliance Error', 'Please upload/verify your GSTIN document.');
+    // 2. Company Name
+    if (!form.companyName.trim()) {
+      newErrors.companyName = 'Company / Business Name is required';
+      isValid = false;
+    }
+
+    // 3. Email Validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!form.email.trim()) {
+      newErrors.email = 'Email Address is required';
+      isValid = false;
+    } else if (!emailRegex.test(form.email)) {
+      newErrors.email = 'Please enter a valid email address';
+      isValid = false;
+    }
+
+    // 4. Password Validation
+    // Min 8 chars, 1 Uppercase, 1 Number, 1 Special Char
+    const passRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!form.password) {
+      newErrors.password = 'Password is required';
+      isValid = false;
+    } else if (!passRegex.test(form.password)) {
+      newErrors.password = 'Must be 8+ chars, 1 Uppercase, 1 Number, 1 Special Char';
+      isValid = false;
+    }
+
+    // 5. Address Validation
+    if (!form.address.trim()) {
+      newErrors.address = 'Business Address is required';
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
+  const handleRegister = async () => {
+    // 1. Run All Field Checks
+    if (!validateInputs()) {
+      // If validation fails, errors are already set in state, showing red text.
+      return; 
+    }
+
+    // 2. Check Verification Status
+    if (!gstVerified) {
+      Alert.alert('Verification Required', 'Please click the "Verify" button for your GST Number.');
+      setErrors(prev => ({ ...prev, gstNumber: 'Please verify this GST Number first' }));
       return;
     }
 
     setLoading(true);
     try {
-      await registerUser(formData.email, formData.password, role, {
-        companyName: formData.companyName,
-        gstNumber: formData.gstNumber,
-        phone: formData.phone,
-        address: formData.address,
-        pincode: formData.pincode,
-        documents: documents
+      const userCredential = await createUserWithEmailAndPassword(auth, form.email, form.password);
+      const uid = userCredential.user.uid;
+
+      await setDoc(doc(db, 'users', uid), {
+        uid,
+        email: form.email,
+        phone: mobile || '',
+        userType: 'dual', 
+        companyName: form.companyName,
+        gstNumber: form.gstNumber,
+        address: form.address,
+        verified: true,
+        kycStatus: 'verified',
+        createdAt: serverTimestamp(),
       });
-      // Auth listener handles navigation
-    } catch (err: any) {
-      Alert.alert('Registration Failed', err.message);
+
+      Alert.alert('Welcome!', 'Account created successfully.');
+      // Navigation handled by RootNavigator
+      
+    } catch (error: any) {
+      let msg = error.message;
+      if (error.code === 'auth/email-already-in-use') {
+        msg = 'This email is already registered.';
+        setErrors(prev => ({ ...prev, email: msg }));
+      }
+      Alert.alert('Registration Failed', msg);
     } finally {
       setLoading(false);
     }
@@ -75,155 +173,138 @@ export default function RegistrationScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text variant="headlineMedium" style={styles.title}>
-            {isSeller ? 'Seller Registration' : 'Buyer Registration'}
-          </Text>
-          <Text variant="bodyMedium" style={{color: '#666'}}>
-            {isSeller ? 'Verify your business to start selling' : 'Create account to browse chemicals'}
-          </Text>
-        </View>
-
-        <View style={styles.form}>
-          <TextInput
-            label="Company Name *"
-            value={formData.companyName}
-            onChangeText={(t) => setFormData({...formData, companyName: t})}
-            mode="outlined"
-            style={styles.input}
-          />
-          
-          <TextInput
-            label="Email *"
-            value={formData.email}
-            onChangeText={(t) => setFormData({...formData, email: t})}
-            mode="outlined"
-            autoCapitalize="none"
-            style={styles.input}
-          />
-
-          <TextInput
-            label="Mobile Number *"
-            value={formData.phone}
-            onChangeText={(t) => setFormData({...formData, phone: t})}
-            mode="outlined"
-            keyboardType="phone-pad"
-            maxLength={10}
-            style={styles.input}
-          />
-
-          <TextInput
-            label="Password *"
-            value={formData.password}
-            onChangeText={(t) => setFormData({...formData, password: t})}
-            secureTextEntry
-            mode="outlined"
-            style={styles.input}
-          />
-
-          <TextInput
-            label="GST Number *"
-            value={formData.gstNumber}
-            onChangeText={(t) => setFormData({...formData, gstNumber: t.toUpperCase()})}
-            mode="outlined"
-            maxLength={15}
-            style={styles.input}
-          />
-          <HelperText type="info">Required for tax invoicing</HelperText>
-
-          <View style={styles.row}>
-            <TextInput
-              label="Address *"
-              value={formData.address}
-              onChangeText={(t) => setFormData({...formData, address: t})}
-              mode="outlined"
-              style={[styles.input, {flex: 2, marginRight: 8}]}
-            />
-            <TextInput
-              label="Pincode *"
-              value={formData.pincode}
-              onChangeText={(t) => setFormData({...formData, pincode: t})}
-              mode="outlined"
-              keyboardType="number-pad"
-              maxLength={6}
-              style={[styles.input, {flex: 1}]}
-            />
-          </View>
-
-          {/* ✅ Document Upload Section */}
-          <Text variant="titleMedium" style={{marginTop: 16, marginBottom: 8, fontWeight:'bold'}}>
-            Upload Verification Documents
-          </Text>
-          <Text variant="bodySmall" style={{marginBottom: 12, color:'#666'}}>
-            Tap to simulate upload (Green = Uploaded)
-          </Text>
-
-          <View style={styles.docRow}>
-            <Chip 
-              icon={documents.gstin ? "check" : "upload"} 
-              selected={documents.gstin} 
-              onPress={() => toggleDocument('gstin')}
-              style={styles.chip}
-            >
-              GSTIN Cert.
-            </Chip>
-            <Chip 
-              icon={documents.shopLicense ? "check" : "upload"} 
-              selected={documents.shopLicense} 
-              onPress={() => toggleDocument('shopLicense')}
-              style={styles.chip}
-            >
-              Shop License
-            </Chip>
-          </View>
-          <View style={styles.docRow}>
-            <Chip 
-              icon={documents.udyogAadhar ? "check" : "upload"} 
-              selected={documents.udyogAadhar} 
-              onPress={() => toggleDocument('udyogAadhar')}
-              style={styles.chip}
-            >
-              Udyog Aadhar
-            </Chip>
-          </View>
-
-          <View style={styles.infoBox}>
-            <Text style={{color:'#854d0e', fontSize: 12}}>
-              ⚠️ Your account will be in <Text style={{fontWeight:'bold'}}>Pending Verification</Text> state. 
-              {isSeller ? ' Selling ' : ' Buying '} will be restricted until approved.
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+            <Text variant="headlineSmall" style={{fontWeight:'bold'}}>
+              Create Account
             </Text>
           </View>
 
-          <Button 
-            mode="contained" 
-            onPress={handleRegister} 
-            loading={loading}
-            style={styles.button}
-            contentStyle={{height: 50}}
-          >
-            Create Account
-          </Button>
+          <View style={styles.form}>
+            
+            {/* GST Field */}
+            <View style={{marginBottom: 4}}>
+              <View style={{flexDirection:'row', alignItems:'flex-start'}}>
+                <TextInput
+                  label="GST Number *"
+                  value={form.gstNumber}
+                  onChangeText={(t) => {
+                    setForm(prev => ({ ...prev, gstNumber: t.toUpperCase() }));
+                    setGstVerified(false); 
+                    if (errors.gstNumber) setErrors(prev => ({ ...prev, gstNumber: '' }));
+                  }}
+                  mode="outlined"
+                  maxLength={15}
+                  error={!!errors.gstNumber}
+                  style={{flex:1, backgroundColor:'white'}}
+                  right={
+                    gstLoading ? <TextInput.Icon icon={() => <ActivityIndicator size="small"/>} /> :
+                    gstVerified ? <TextInput.Icon icon="check-circle" color="green" forceTextInputFocus={false} /> : null
+                  }
+                />
+                <Button 
+                  mode="contained-tonal" 
+                  onPress={handleVerifyGST} 
+                  disabled={gstLoading || gstVerified} 
+                  style={{marginLeft:8, height:50, justifyContent:'center', marginTop: 6}}
+                >
+                  Verify
+                </Button>
+              </View>
+              <HelperText type="error" visible={!!errors.gstNumber}>
+                {errors.gstNumber}
+              </HelperText>
+            </View>
 
-          <Button mode="text" onPress={() => navigation.goBack()}>
-            Go Back
-          </Button>
-        </View>
-      </ScrollView>
+            {/* Company Name */}
+            <View style={{marginBottom: 4}}>
+              <TextInput 
+                label="Company Name *" 
+                value={form.companyName} 
+                onChangeText={(t) => updateForm('companyName', t)} 
+                mode="outlined" 
+                error={!!errors.companyName}
+                style={styles.input} 
+              />
+              <HelperText type="error" visible={!!errors.companyName}>
+                {errors.companyName}
+              </HelperText>
+            </View>
+
+            {/* Email */}
+            <View style={{marginBottom: 4}}>
+              <TextInput 
+                label="Email Address *" 
+                value={form.email} 
+                onChangeText={(t) => updateForm('email', t)} 
+                mode="outlined" 
+                keyboardType="email-address" 
+                autoCapitalize="none" 
+                error={!!errors.email}
+                style={styles.input} 
+              />
+              <HelperText type="error" visible={!!errors.email}>
+                {errors.email}
+              </HelperText>
+            </View>
+            
+            {/* Password Field */}
+            <View style={{marginBottom: 4}}>
+              <TextInput 
+                label="Password *" 
+                value={form.password} 
+                onChangeText={(t) => updateForm('password', t)} 
+                mode="outlined" 
+                secureTextEntry={secureTextEntry} 
+                error={!!errors.password}
+                style={styles.input}
+                right={
+                  <TextInput.Icon 
+                    icon={secureTextEntry ? "eye" : "eye-off"} 
+                    onPress={() => setSecureTextEntry(!secureTextEntry)} 
+                    forceTextInputFocus={false} 
+                  />
+                }
+              />
+              <HelperText type="error" visible={!!errors.password}>
+                {errors.password}
+              </HelperText>
+            </View>
+
+            {/* Address */}
+            <View style={{marginBottom: 4}}>
+              <TextInput 
+                label="Business Address *" 
+                value={form.address} 
+                onChangeText={(t) => updateForm('address', t)} 
+                mode="outlined" 
+                multiline 
+                numberOfLines={3}
+                error={!!errors.address}
+                style={styles.input} 
+              />
+              <HelperText type="error" visible={!!errors.address}>
+                {errors.address}
+              </HelperText>
+            </View>
+
+            <Button mode="contained" onPress={handleRegister} loading={loading} style={styles.btn} contentStyle={{height: 50}}>
+              Create Business Account
+            </Button>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'white' },
-  scrollContent: { padding: 20 },
-  header: { marginBottom: 24 },
-  title: { fontWeight: 'bold', color: '#004AAD' },
-  form: { gap: 8 },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { padding: 10, flexDirection: 'row', alignItems: 'center' },
+  content: { padding: 20 },
+  form: { marginTop: 10 },
   input: { backgroundColor: 'white' },
-  row: { flexDirection: 'row' },
-  button: { marginTop: 12, borderRadius: 12, backgroundColor: '#004AAD' },
-  docRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  chip: { flex: 1 },
-  infoBox: { backgroundColor: '#fef9c3', padding: 12, borderRadius: 8, marginTop: 12, marginBottom: 4 }
+  btn: { marginTop: 20, borderRadius: 8, backgroundColor: '#004AAD' }
 });

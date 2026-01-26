@@ -2,18 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppStore } from '../store/appStore';
 import { getProducts } from '../services/productService';
 import { getBuyerOrders } from '../services/orderService';
 import { logoutUser } from '../services/authService';
-import { RootStackParamList } from '../navigation/types';
 
 export default function BuyerDashboard() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // ✅ FIX: Use 'any' to allow navigation to Tabs (Categories, Orders) which are not in RootStackParamList
+  const navigation = useNavigation<any>();
   const isFocused = useIsFocused(); // ✅ Triggers update when screen is focused
   
-  // ✅ Use Global State for products so ProductListingScreen can see them
+  // ✅ Use Global State for products
   const { user, products, setProducts } = useAppStore();
   
   const [orders, setOrders] = useState<any[]>([]);
@@ -86,19 +85,20 @@ export default function BuyerDashboard() {
         <View style={styles.grid}>
           <TouchableOpacity 
             style={styles.card}
-            onPress={() => navigation.navigate('Marketplace', { category: 'All' })}
+            // ✅ FIX: Navigate to 'Categories' Tab (which replaced Marketplace)
+            onPress={() => navigation.navigate('Categories')}
           >
             <Text style={styles.cardIcon}>🧪</Text>
             <Text style={styles.cardTitle}>Browse Chemicals</Text>
             <View style={styles.badge}>
-              {/* ✅ Now displays count from global store */}
               <Text style={styles.badgeText}>{products.length} Available</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.card}
-            onPress={() => navigation.navigate('OrderHistory')}
+            // ✅ FIX: Navigate to 'Orders' Tab
+            onPress={() => navigation.navigate('Orders')}
           >
             <Text style={styles.cardIcon}>📦</Text>
             <Text style={styles.cardTitle}>Active Orders</Text>
@@ -115,7 +115,8 @@ export default function BuyerDashboard() {
           
           <TouchableOpacity 
             style={styles.listItem}
-            onPress={() => navigation.navigate('OrderHistory')}
+            // ✅ FIX: Navigate to 'Orders' Tab
+            onPress={() => navigation.navigate('Orders')}
           >
             <Text style={styles.listIcon}>📋</Text>
             <Text style={styles.listText}>Order History</Text>

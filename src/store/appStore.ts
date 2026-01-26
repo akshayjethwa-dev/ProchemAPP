@@ -1,62 +1,48 @@
 import { create } from 'zustand';
 import { User, Product, CartItem } from '../types';
 
-interface AppStore {
+interface AppState {
   user: User | null;
   products: Product[];
   cart: CartItem[];
-  compareList: Product[]; // ✅ ADDED: Comparison List
-
+  // ✅ NEW: Tracks which dashboard is active
+  viewMode: 'buyer' | 'seller'; 
+  
   setUser: (user: User | null) => void;
   setProducts: (products: Product[]) => void;
-  
-  // Cart Actions
   addToCart: (item: CartItem) => void;
-  removeFromCart: (productId: string) => void;
+  removeFromCart: (id: string) => void;
   clearCart: () => void;
-
-  // Compare Actions
   addToCompare: (product: Product) => void;
-  removeFromCompare: (productId: string) => void;
-  clearCompare: () => void;
+  // ✅ NEW: Action to toggle mode
+  setViewMode: (mode: 'buyer' | 'seller') => void; 
 }
 
-export const useAppStore = create<AppStore>((set) => ({
+export const useAppStore = create<AppState>((set) => ({
   user: null,
   products: [],
   cart: [],
-  compareList: [],
+  viewMode: 'buyer', // Default to Buyer view on login
 
   setUser: (user) => set({ user }),
   setProducts: (products) => set({ products }),
-
-  addToCart: (item) =>
-    set((state) => ({
-      cart: [...state.cart.filter((c) => c.id !== item.id), item],
-    })),
-
-  removeFromCart: (productId) =>
-    set((state) => ({
-      cart: state.cart.filter((c) => c.id !== productId),
-    })),
-
+  addToCart: (item) => set((state) => {
+    const existing = state.cart.find((i) => i.id === item.id);
+    if (existing) {
+      return {
+        cart: state.cart.map((i) =>
+          i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i
+        ),
+      };
+    }
+    return { cart: [...state.cart, item] };
+  }),
+  removeFromCart: (id) => set((state) => ({
+    cart: state.cart.filter((i) => i.id !== id),
+  })),
   clearCart: () => set({ cart: [] }),
-
-  // ✅ Compare Logic
-  addToCompare: (product) =>
-    set((state) => {
-      if (state.compareList.find((p) => p.id === product.id)) return state;
-      if (state.compareList.length >= 3) {
-        // Limit to 3 items for comparison
-        return { compareList: [...state.compareList.slice(1), product] };
-      }
-      return { compareList: [...state.compareList, product] };
-    }),
-
-  removeFromCompare: (productId) =>
-    set((state) => ({
-      compareList: state.compareList.filter((p) => p.id !== productId),
-    })),
-
-  clearCompare: () => set({ compareList: [] }),
+  addToCompare: (product) => console.log('Added to compare:', product.name),
+  
+  // ✅ Implementation
+  setViewMode: (mode) => set({ viewMode: mode }),
 }));

@@ -1,162 +1,213 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text, TextInput, Button, IconButton, Switch, useTheme } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState, useEffect } from 'react';
+import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, TextInput, Button, IconButton } from 'react-native-paper';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
-import { addProduct } from '../services/productService';
+import { addProduct, updateProduct } from '../services/productService';
 
 export default function SellerAddChemical() {
   const navigation = useNavigation();
-  const theme = useTheme();
-  const user = useAppStore(state => state.user);
+  const route = useRoute<any>();
+  const { user } = useAppStore();
+  
+  const editingProduct = route.params?.product;
+  const isEditMode = !!editingProduct;
 
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [form, setForm] = useState({
     name: '',
-    category: 'Industrial Acids',
+    category: '',
     casNumber: '',
-    grade: 'Industrial',
-    purity: '95',
-    unit: 'kg',
     pricePerUnit: '',
-    origin: '', // ✅ Added Origin
-    moq: '10',
+    unit: 'kg',
+    moq: '0',
+    purity: '',
     description: '',
-    inStock: true
+    origin: 'India'
   });
 
-  const handleChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  // Helper: Cross-Platform Alert
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}: ${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
+  useEffect(() => {
+    if (isEditMode) {
+      setForm({
+        name: editingProduct.name || '',
+        category: editingProduct.category || '',
+        casNumber: editingProduct.casNumber || '',
+        pricePerUnit: String(editingProduct.pricePerUnit || ''),
+        unit: editingProduct.unit || 'kg',
+        moq: String(editingProduct.moq || '0'),
+        purity: String(editingProduct.purity || ''),
+        description: editingProduct.description || '',
+        origin: editingProduct.origin || 'India'
+      });
+      navigation.setOptions({ title: 'Edit Product' });
+    }
+  }, [editingProduct]);
+
+  const handleChange = (key: string, value: string) => {
+    setForm(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.pricePerUnit || !formData.origin) {
-      Alert.alert('Error', 'Please fill Name, Price and Origin');
+    // 1. Validation
+    if (!form.name.trim()) {
+      showAlert('Missing Field', 'Please enter the Chemical Name.');
       return;
     }
+    if (!form.category.trim()) {
+      showAlert('Missing Field', 'Please enter a Category.');
+      return;
+    }
+    if (!form.pricePerUnit.trim()) {
+      showAlert('Missing Field', 'Please enter the Price.');
+      return;
+    }
+    // Note: Stock Quantity validation removed
 
     setLoading(true);
     try {
-      await addProduct({
-        name: formData.name,
-        category: formData.category,
-        price: parseFloat(formData.pricePerUnit),
-        pricePerUnit: parseFloat(formData.pricePerUnit),
-        description: formData.description,
-        moq: parseInt(formData.moq),
-        unit: formData.unit,
-        sellerId: user?.uid || 'unknown',
-        sellerName: user?.companyName || 'Prochem Seller',
-        origin: formData.origin, // ✅ Saving Origin
-        verified: false,
-        grade: formData.grade,
-        purity: parseFloat(formData.purity),
-        inStock: formData.inStock,
-        image: '',
-        imageUrl: ''
-      } as any);
+      // 2. Prepare Data
+      const productData = {
+        ...form,
+        pricePerUnit: parseFloat(form.pricePerUnit) || 0,
+        moq: parseInt(form.moq) || 0,
+        quantity: 1000, // Default value (since field was removed)
+        purity: parseFloat(form.purity) || 0,
+        sellerId: user?.uid,
+        sellerName: user?.companyName || 'Unknown',
+        active: isEditMode ? editingProduct.active : true 
+      };
 
-      Alert.alert('Success', 'Product added successfully!');
+      // 3. Send to Firebase
+      if (isEditMode) {
+        await updateProduct(editingProduct.id, productData);
+        showAlert('Success', 'Product updated successfully!');
+      } else {
+        await addProduct(productData);
+        showAlert('Success', 'Product listed successfully!');
+      }
+      
       navigation.goBack();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to add product');
+      console.error("Submission Error:", error);
+      showAlert('Error', error.message || 'Failed to save product.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="headlineSmall" style={{fontWeight:'bold'}}>Add Chemical</Text>
-      </View>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.header}>
+          <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+          <Text variant="headlineSmall" style={{fontWeight:'bold'}}>
+            {isEditMode ? 'Edit Product' : 'Add New Chemical'}
+          </Text>
+        </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
-        <ScrollView contentContainerStyle={styles.content}>
-          <TextInput
-            label="Product Name *"
-            mode="outlined"
-            value={formData.name}
-            onChangeText={(t) => handleChange('name', t)}
-            style={styles.input}
+        <View style={styles.form}>
+          <TextInput 
+            label="Chemical Name *" 
+            value={form.name} 
+            onChangeText={t => handleChange('name', t)} 
+            mode="outlined" 
+            style={styles.input} 
           />
-
-          <TextInput
-            label="Origin (City, State) *"
-            mode="outlined"
-            placeholder="e.g. Vapi, Gujarat"
-            value={formData.origin}
-            onChangeText={(t) => handleChange('origin', t)}
-            style={styles.input}
-          />
-
+          
           <View style={styles.row}>
-            <TextInput
-              label="Price (₹)"
-              mode="outlined"
-              value={formData.pricePerUnit}
-              keyboardType="numeric"
-              onChangeText={(t) => handleChange('pricePerUnit', t)}
-              style={[styles.input, {flex:1, marginRight:8}]}
+            <TextInput 
+              label="Category *" 
+              value={form.category} 
+              onChangeText={t => handleChange('category', t)} 
+              mode="outlined" 
+              style={[styles.input, {flex:1, marginRight:8}]} 
             />
-             <TextInput
-              label="Unit"
-              mode="outlined"
-              value={formData.unit}
-              onChangeText={(t) => handleChange('unit', t)}
-              style={[styles.input, {width: 100, marginLeft: 8}]}
+            <TextInput 
+              label="CAS Number" 
+              value={form.casNumber} 
+              onChangeText={t => handleChange('casNumber', t)} 
+              mode="outlined" 
+              style={[styles.input, {flex:1}]} 
             />
           </View>
 
-          <TextInput
-            label="MOQ (Min Order Qty)"
-            mode="outlined"
-            value={formData.moq}
-            keyboardType="numeric"
-            onChangeText={(t) => handleChange('moq', t)}
-            style={styles.input}
-          />
+          <View style={styles.row}>
+            <TextInput 
+              label="Price (₹) *" 
+              keyboardType="numeric" 
+              value={form.pricePerUnit} 
+              onChangeText={t => handleChange('pricePerUnit', t)} 
+              mode="outlined" 
+              style={[styles.input, {flex:1, marginRight:8}]} 
+            />
+            <TextInput 
+              label="Unit (e.g. kg, ton)" 
+              value={form.unit} 
+              onChangeText={t => handleChange('unit', t)} 
+              mode="outlined" 
+              style={[styles.input, {flex:1}]} 
+            />
+          </View>
 
-          <TextInput
-            label="CAS Number"
-            mode="outlined"
-            value={formData.casNumber}
-            onChangeText={(t) => handleChange('casNumber', t)}
-            style={styles.input}
-          />
-
-          <TextInput
-            label="Description"
-            mode="outlined"
-            value={formData.description}
-            onChangeText={(t) => handleChange('description', t)}
-            multiline
-            numberOfLines={3}
-            style={styles.input}
+          {/* Reorganized Row: MOQ + Purity */}
+          <View style={styles.row}>
+            <TextInput 
+              label="MOQ" 
+              keyboardType="numeric" 
+              value={form.moq} 
+              onChangeText={t => handleChange('moq', t)} 
+              mode="outlined" 
+              style={[styles.input, {flex:1, marginRight:8}]} 
+            />
+             <TextInput 
+              label="Purity (%)" 
+              keyboardType="numeric" 
+              value={form.purity} 
+              onChangeText={t => handleChange('purity', t)} 
+              mode="outlined" 
+              style={[styles.input, {flex:1}]} 
+            />
+          </View>
+          
+          <TextInput 
+            label="Description / Specs" 
+            multiline 
+            numberOfLines={3} 
+            value={form.description} 
+            onChangeText={t => handleChange('description', t)} 
+            mode="outlined" 
+            style={styles.input} 
           />
 
           <Button 
             mode="contained" 
             onPress={handleSubmit} 
-            loading={loading}
-            style={styles.submitBtn}
+            loading={loading} 
+            style={styles.btn}
             contentStyle={{height: 50}}
           >
-            List Product
+            {isEditMode ? 'Update Product' : 'List Product'}
           </Button>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'white' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 8 },
-  content: { padding: 20 },
-  input: { marginBottom: 16, backgroundColor: 'white' },
-  row: { flexDirection: 'row', marginBottom: 0 },
-  submitBtn: { marginTop: 10, borderRadius: 12 }
+  container: { flexGrow: 1, backgroundColor: '#F8FAFC', paddingBottom: 30 },
+  header: { flexDirection:'row', alignItems:'center', padding: 10 },
+  form: { padding: 20 },
+  input: { marginBottom: 12, backgroundColor: 'white' },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  btn: { marginTop: 20, borderRadius: 8, backgroundColor: '#004AAD' }
 });

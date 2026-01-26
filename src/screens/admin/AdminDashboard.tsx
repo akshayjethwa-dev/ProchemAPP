@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Text, Card, ActivityIndicator, Button, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getAdminStats } from '../services/adminService';
-import { logoutUser } from '../services/authService';
+import { getAdminStats } from '../../services/adminService';
+import { logoutUser } from '../../services/authService';
 
 export default function AdminDashboard() {
   const theme = useTheme();

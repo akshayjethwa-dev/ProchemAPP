@@ -1,99 +1,152 @@
 import React, { useState, useEffect } from 'react';
-import  orderService  from '../services/orderService';
-import { useAuthStore } from '../store/authStore';
+import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { Text, SegmentedButtons, Card, Button, Chip, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAppStore } from '../store/appStore';
+import { Order } from '../types';
 
-interface Props {
-  onBack: () => void;
-}
-
-const OrderHistoryScreen: React.FC<Props> = ({ onBack }) => {
-  const { user } = useAuthStore();
-  const [orders, setOrders] = useState<any[]>([]);
+export default function OrderHistoryScreen() {
+  const navigation = useNavigation<any>();
+  const theme = useTheme();
+  const { user } = useAppStore();
+  
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('active'); // 'active' | 'past'
 
   useEffect(() => {
-    if (user) {
-      fetchOrders();
-    }
+    if (!user) return;
+
+    setLoading(true);
+
+    // ✅ STRICTLY BUYER LOGIC
+    // We only fetch orders where the current user is the BUYER.
+    // Seller orders are handled in SellerOrdersScreen.tsx
+    const q = query(
+      collection(db, 'orders'),
+      where('buyerId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      setOrders(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Buyer order fetch error:", error);
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, [user]);
 
-const fetchOrders = async () => {
-  try {
-    setLoading(true);
-    const buyerId = (user as any)?.email || (user as any)?.uid || 'buyer_default';
-    const userOrders = await orderService.getBuyerOrders(buyerId);
-    setOrders(userOrders);
-  } catch (error) {
-    console.error('Failed to fetch orders:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  // ✅ STATUS FILTER (Matches the new flow you created)
+  // Active: Waiting for Seller, Waiting for Admin, Accepted, Shipped
+  const activeStatuses = ['PENDING_SELLER', 'PENDING_ADMIN', 'ACCEPTED', 'shipped', 'PENDING'];
+  
+  // Past: Delivered, Cancelled, Rejected, Returned
+  const pastStatuses = ['delivered', 'CANCELLED', 'REJECTED', 'returned'];
 
+  const filteredOrders = orders.filter(o => 
+    tab === 'active' 
+      ? activeStatuses.includes(o.status)
+      : pastStatuses.includes(o.status)
+  );
 
-  if (loading) {
-    return (
-      <div className="flex-1 bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-[#004AAD]/20 border-t-[#004AAD] rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading your orders...</p>
-        </div>
-      </div>
-    );
-  }
+  // Helper to format date safely
+  const formatDate = (date: any) => {
+    if (!date) return '';
+    if (typeof date === 'string') return new Date(date).toDateString();
+    if (date.seconds) return new Date(date.seconds * 1000).toDateString();
+    return '';
+  };
+
+  const renderOrder = ({ item }: { item: Order }) => (
+    <Card 
+      style={styles.card} 
+      // Clicking the card goes to tracking
+      onPress={() => navigation.navigate('OrderTracking', { orderId: item.id })}
+    >
+      <Card.Content>
+        <View style={styles.row}>
+          <Text style={{fontWeight:'bold'}}>Order #{item.id.slice(0, 6).toUpperCase()}</Text>
+          <Chip 
+            compact 
+            textStyle={{fontSize:10, fontWeight:'bold'}} 
+            style={{backgroundColor: theme.colors.surfaceVariant}}
+          >
+            {item.status.replace('_', ' ')}
+          </Chip>
+        </View>
+        
+        <Text style={{color:'#666', marginTop: 4, fontWeight:'bold'}}>
+          ₹{item.totalAmount}
+        </Text>
+        <Text style={{color:'#888', fontSize:12}}>
+          {formatDate(item.createdAt)} • {item.items?.length || 0} Items
+        </Text>
+        
+        <View style={{flexDirection:'row', marginTop: 12, justifyContent: 'flex-end'}}>
+          {tab === 'active' ? (
+             <Button 
+               mode="contained" 
+               compact 
+               onPress={() => navigation.navigate('OrderTracking', { orderId: item.id })}
+             >
+               Track Status
+             </Button>
+          ) : (
+             <Button mode="outlined" compact icon="download" onPress={() => alert('Invoice Download')}>
+               Invoice
+             </Button>
+          )}
+        </View>
+      </Card.Content>
+    </Card>
+  );
 
   return (
-    <div className="flex-1 bg-gray-50 flex flex-col pt-12">
-      <div className="px-6 flex items-center space-x-4 mb-8 bg-white pb-6 sticky top-0 z-10 shadow-sm">
-        <button onClick={onBack} className="w-12 h-12 flex items-center justify-center rounded-full bg-gray-50 shadow-sm">
-          <svg className="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h1 className="text-2xl font-bold text-gray-900">My Orders ({orders.length})</h1>
-      </div>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text variant="headlineSmall" style={{fontWeight:'bold'}}>My Purchases</Text>
+      </View>
+      
+      <View style={{paddingHorizontal: 16, paddingBottom: 10}}>
+        <SegmentedButtons
+          value={tab}
+          onValueChange={setTab}
+          buttons={[
+            { value: 'active', label: 'Active' },
+            { value: 'past', label: 'History' },
+          ]}
+        />
+      </View>
 
-      <div className="flex-1 overflow-y-auto px-6 space-y-4 pb-12 hide-scrollbar">
-        {orders.length === 0 ? (
-          <div className="text-center py-20">
-            <span className="text-6xl mb-6 block">📦</span>
-            <h2 className="text-xl font-bold text-gray-800 mb-2">No orders yet</h2>
-            <p className="text-gray-500 mb-8">Your orders will appear here once you place them</p>
-          </div>
-        ) : (
-          orders.map((order) => (
-            <div key={order.id} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">#{order.id}</h3>
-                  <p className="text-lg font-bold text-gray-900">{order.items[0]?.name || 'Multiple Items'}</p>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  order.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                  order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-blue-100 text-blue-800'
-                }`}>
-                  {order.status.toUpperCase()}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm text-gray-600 mb-4">
-                <span>{order.items.length} item{order.items.length > 1 ? 's' : ''}</span>
-                <span>₹{order.totalAmount?.toLocaleString()}</span>
-              </div>
-              <div className="flex space-x-4 pt-4 border-t border-gray-100">
-                <button className="flex-1 py-3 bg-blue-50 text-[#004AAD] rounded-xl font-bold text-sm uppercase tracking-wider">
-                  Track Order
-                </button>
-                <button className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl font-bold text-sm uppercase tracking-wider">
-                  Reorder
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+      {loading ? (
+        <ActivityIndicator size="large" color="#004AAD" style={{marginTop: 50}} />
+      ) : (
+        <FlatList
+          data={filteredOrders}
+          renderItem={renderOrder}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{padding: 16}}
+          ListEmptyComponent={
+            <View style={{alignItems:'center', marginTop:50}}>
+              <Text style={{color:'#999'}}>No {tab} orders found.</Text>
+            </View>
+          }
+        />
+      )}
+    </SafeAreaView>
   );
-};
+}
 
-export default OrderHistoryScreen;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { padding: 20 },
+  card: { marginBottom: 12, backgroundColor: 'white', elevation: 2 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }
+});

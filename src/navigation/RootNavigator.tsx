@@ -8,40 +8,52 @@ import { auth, db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { RootStackParamList } from './types';
 
-// Screens
-import LoginScreen from '../screens/LoginScreen';
-import OTPVerificationScreen from '../screens/OTPVerificationScreen';
-import RegistrationScreen from '../screens/RegistrationScreen';
-import RoleSelectionScreen from '../screens/RoleSelectionScreen';
+// 1. Import All Navigators
+import BuyerNavigator from './BuyerNavigator';
+import SellerNavigator from './SellerNavigator';
+import AdminNavigator from './AdminNavigator';
+import TransporterNavigator from './TransporterNavigator'; // ✅ Import this
+
+// Auth Screens
 import SplashScreen from '../screens/SplashScreen';
-import BuyerDashboard from '../screens/BuyerDashboard';
-import ProductListingScreen from '../screens/ProductListingScreen';
+import LoginScreen from '../screens/LoginScreen';
+import RegistrationScreen from '../screens/RegistrationScreen';
+import OTPVerificationScreen from '../screens/OTPVerificationScreen';
+import LegalPagesScreen from '../screens/LegalPagesScreen';
+
+// Feature Screens
 import ProductDetail from '../screens/ProductDetail';
 import NegotiationScreen from '../screens/NegotiationScreen';
-import CartScreen from '../screens/CartScreen';
-import OrderHistoryScreen from '../screens/OrderHistoryScreen';
-import SellerDashboard from '../screens/SellerDashboard';
+import OrderTracking from '../screens/OrderTracking';
 import SellerAddChemical from '../screens/SellerAddChemical';
-import SellerManageChemicals from '../screens/SellerManageChemicals';
-import LegalPagesScreen from '../screens/LegalPagesScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
-  const { user, setUser } = useAppStore();
+  const { user, setUser, viewMode } = useAppStore();
   const [initializing, setInitializing] = useState(true);
+
+  // Debugging: Check your logs to see if the user type is updating!
+  console.log("Logged In User Type:", user?.userType); 
+  console.log("Current View Mode:", viewMode);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u: FirebaseUser | null) => {
       if (u) {
         try {
+          // Fetch fresh data from Firestore to get the 'userType'
           const userDoc = await getDoc(doc(db, 'users', u.uid));
           if (userDoc.exists()) {
-            setUser({ uid: u.uid, email: u.email || '', ...userDoc.data() } as any);
+            const userData = userDoc.data();
+            setUser({ uid: u.uid, email: u.email || '', ...userData } as any);
           } else {
             setUser(null);
           }
-        } catch (e) { setUser(null); }
+        } catch (error) {
+          console.error("Auth Error:", error);
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
@@ -50,38 +62,64 @@ export const RootNavigator = () => {
     return unsubscribe;
   }, []);
 
-  if (initializing) return <View style={{flex:1,justifyContent:'center'}}><ActivityIndicator size="large" color="#004AAD"/></View>;
+  if (initializing) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#004AAD" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {/* ✅ KEY UPDATE: 
+         We include `user.userType` in the key. 
+         This forces the Navigator to DESTROY and REBUILD if the user role changes.
+      */}
+      <Stack.Navigator 
+        key={user ? `auth-${user.userType}-${viewMode}` : 'public'} 
+        screenOptions={{ headerShown: false }}
+      >
         {!user ? (
-          // 🛑 Public Stack
+          // 1. Public Stack (Not Logged In)
           <Stack.Group>
             <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
-            <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
             <Stack.Screen name="Registration" component={RegistrationScreen} />
+            <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
             <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
           </Stack.Group>
-        ) : user.userType === 'seller' ? (
-          // 🚚 Seller Stack
-          <Stack.Group>
-            <Stack.Screen name="SellerDashboard" component={SellerDashboard} />
-            <Stack.Screen name="AddChemical" component={SellerAddChemical} />
-            <Stack.Screen name="ManageChemicals" component={SellerManageChemicals} />
-            <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />
-          </Stack.Group>
         ) : (
-          // 🏭 Buyer Stack
+          // 2. Authenticated Stack
           <Stack.Group>
-            <Stack.Screen name="BuyerDashboard" component={BuyerDashboard} />
-            <Stack.Screen name="Marketplace" component={ProductListingScreen} />
+            
+            {/* 🛡️ ADMIN CHECK */}
+            {user.userType === 'admin' ? (
+              <Stack.Screen name="AdminApp" component={AdminNavigator} />
+            
+            /* 🚛 TRANSPORTER CHECK */
+            ) : user.userType === 'transporter' ? (
+               <Stack.Screen name="TransporterApp" component={TransporterNavigator} />
+
+            /* 🏭 SELLER CHECK (Based on Toggle) */
+            ) : viewMode === 'seller' ? (
+              <>
+                <Stack.Screen name="SellerApp" component={SellerNavigator} />
+                <Stack.Screen name="AddChemical" component={SellerAddChemical} />
+              </>
+
+            /* 🛒 BUYER CHECK (Default) */
+            ) : (
+              <>
+                <Stack.Screen name="BuyerApp" component={BuyerNavigator} />
+              </>
+            )}
+            
+            {/* Shared Screens (Accessible by everyone) */}
             <Stack.Screen name="ProductDetail" component={ProductDetail} />
             <Stack.Screen name="Negotiation" component={NegotiationScreen} />
-            <Stack.Screen name="Cart" component={CartScreen} />
-            <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />
+            <Stack.Screen name="OrderTracking" component={OrderTracking} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

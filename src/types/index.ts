@@ -1,6 +1,14 @@
 // ✅ User Types
-export type UserRole = 'buyer' | 'seller';
+export type UserRole = 'buyer' | 'seller' | 'transporter' | 'dual' | 'admin';
 export type VerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type OrderStatus = 
+  | 'PENDING_SELLER'   // Buyer placed order, waiting for Seller
+  | 'PENDING_ADMIN'    // Seller accepted, waiting for Admin verification
+  | 'ACCEPTED'         // Admin verified, Order is Live
+  | 'CANCELLED'        // Seller declined or Buyer cancelled
+  | 'REJECTED'         // Admin rejected docs
+  | 'shipped'          // Legacy/Future use
+  | 'delivered';
 
 export interface User {
   uid: string;
@@ -8,16 +16,17 @@ export interface User {
   phone?: string;
   userType: UserRole;
   companyName?: string;
+  businessName?: string;
   gstNumber?: string;
   address?: string;
-  pincode?: number;
+  pincode?: string;
   documents?: {
     gstin?: boolean;
     shopLicense?: boolean;
     udyogAadhar?: boolean;
   }  
   verified: boolean;
-  verificationStatus?: 'pending' | 'verified' | 'rejected';
+  kycStatus?: 'pending' | 'verified' | 'rejected';
   profile?: any;
   createdAt?: any;
   updatedAt?: any;
@@ -43,7 +52,7 @@ export interface UserProfile {
 
 // ✅ Product Types
 export interface Product {
-  id?: string;
+  id: string;
   name: string;
   category: string;
   description: string;
@@ -63,10 +72,12 @@ export interface Product {
   imageUrl?: string;
   image?: string;
   sellerId: string;
+  active?: boolean;
   verified: boolean;
   inStock?: boolean;
   createdAt?: any;
   updatedAt?: any;
+  
 }
 
 // ✅ Cart Types
@@ -94,16 +105,24 @@ export interface OrderItem {
 }
 
 export interface Order {
-  id?: string;
+  id: string;
   buyerId: string;
   sellerId: string;
-  items: OrderItem[];
+  items: any[];
   totalAmount: number;
-  status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+  status: OrderStatus;
   shippingAddress: string;
   paymentStatus?: 'pending' | 'completed' | 'failed';
-  createdAt?: any;
+  createdAt: string;
   updatedAt?: any;
+  date: any;
+  invoiceUrl?: string;
+  sellerDocuments?: {
+    qualityReport?: string; // URL or Ref
+    purityCertificate?: string;
+    gradeSheet?: string;
+  };
+  
 }
 
 // ✅ Notification Types

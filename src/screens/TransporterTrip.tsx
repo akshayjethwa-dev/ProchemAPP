@@ -1,139 +1,141 @@
 import React, { useState } from 'react';
-import { TransportOrder } from '../types';
+import { View, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
+import { Text, IconButton, Button, Card, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
-interface Props {
-  activeTrip: TransportOrder | null;
-  onComplete: () => void;
-  onBack?: () => void;
-}
+export default function TransporterTrip() {
+  const navigation = useNavigation();
+  const route = useRoute<any>();
+  const theme = useTheme();
+  
+  // Get order data passed from "New Orders"
+  const order = route.params?.order || {
+    material: 'Unknown Load', 
+    payout: 0, 
+    drop: 'Destination'
+  };
 
-const TransporterTrip: React.FC<Props> = ({ activeTrip, onComplete, onBack }) => {
-  // Fix: Added 'PENDING' to the step state type to match the potential status of activeTrip and avoid type mismatch during initialization
-  const [step, setStep] = useState<'PENDING' | 'ACCEPTED' | 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED'>(activeTrip?.status || 'ACCEPTED');
-
-  if (!activeTrip) return (
-    <div className="flex-1 bg-white flex flex-col items-center justify-center p-8 text-center">
-       <span className="text-6xl mb-6 opacity-30">🚚</span>
-       <h2 className="text-xl font-bold text-gray-400">No Active Trip Found</h2>
-       <button onClick={onComplete} className="mt-6 text-[#004AAD] font-bold">Back to Console</button>
-    </div>
-  );
+  const [step, setStep] = useState<'ACCEPTED' | 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED'>('ACCEPTED');
 
   return (
-    <div className="flex-1 bg-gray-900 flex flex-col h-full overflow-hidden">
-      {/* Map Simulation Area */}
-      <div className="flex-1 bg-slate-800 relative flex items-center justify-center overflow-hidden">
-         <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/gray-geology.png')]"></div>
-         
-         {/* Top Overlay - Back Button */}
-         {onBack && (
-           <button 
-             onClick={onBack}
-             className="absolute top-10 left-6 z-[60] w-12 h-12 bg-white/30 backdrop-blur-xl rounded-full flex items-center justify-center border border-white/40 text-white active:scale-95 transition-all shadow-2xl"
-           >
-             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg>
-           </button>
-         )}
+    <View style={styles.container}>
+      {/* 1. Map Simulation Area */}
+      <View style={styles.mapArea}>
+        {/* Placeholder for Map Background */}
+        <ImageBackground 
+          source={{uri: 'https://www.transparenttextures.com/patterns/gray-geology.png'}} // Use a local map image if available
+          style={styles.mapBackground}
+          imageStyle={{opacity: 0.1}}
+        >
+           {/* Top Back Button */}
+           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+             <IconButton icon="arrow-left" iconColor="white" />
+           </TouchableOpacity>
 
-         {/* Animated Vehicle/Position Marker */}
-         <div className="relative z-10 flex flex-col items-center">
-            <div className="w-24 h-24 bg-[#004AAD]/40 rounded-full animate-ping absolute"></div>
-            <div className="w-16 h-16 bg-[#004AAD] rounded-full flex items-center justify-center shadow-2xl border-4 border-white relative">
-               <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M19,8V5H5V8H3V17H5A3,3 0 0,0 8,20A3,3 0 0,0 11,17H15A3,3 0 0,0 18,20A3,3 0 0,0 21,17H23V11L19,8M8,18.5A1.5,1.5 0 0,1 6.5,17A1.5,1.5 0 0,1 8,15.5A1.5,1.5 0 0,1 9.5,17A1.5,1.5 0 0,1 8,18.5M18,18.5A1.5,1.5 0 0,1 16.5,17A1.5,1.5 0 0,1 18,15.5A1.5,1.5 0 0,1 19.5,17A1.5,1.5 0 0,1 18,18.5M18,11H6V7H18V11Z"/></svg>
-            </div>
-            <div className="mt-8 px-6 py-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-[10px] font-bold uppercase tracking-widest shadow-lg">
-               GPS Connected: Live Trip
-            </div>
-         </div>
+           {/* Vehicle Marker */}
+           <View style={styles.markerContainer}>
+             <View style={styles.pulseRing} />
+             <View style={styles.vehicleDot}>
+                <IconButton icon="truck-fast" iconColor="white" size={20} />
+             </View>
+             <View style={styles.gpsBadge}>
+               <Text style={styles.gpsText}>GPS CONNECTED • LIVE</Text>
+             </View>
+           </View>
 
-         {/* Bottom HUD */}
-         <div className="absolute bottom-10 left-6 right-6 flex items-center justify-between z-10">
-            <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10">
-               <p className="text-[8px] text-gray-300 font-bold uppercase">Distance</p>
-               <p className="text-sm text-white font-black">14.2 KM</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 text-right">
-               <p className="text-[8px] text-gray-300 font-bold uppercase">ETA</p>
-               <p className="text-sm text-white font-black">28 MIN</p>
-            </div>
-         </div>
-      </div>
+           {/* HUD Stats */}
+           <View style={styles.hudContainer}>
+             <View style={styles.hudBox}>
+               <Text style={styles.hudLabel}>DISTANCE</Text>
+               <Text style={styles.hudValue}>14.2 KM</Text>
+             </View>
+             <View style={styles.hudBox}>
+               <Text style={styles.hudLabel}>ETA</Text>
+               <Text style={styles.hudValue}>28 MIN</Text>
+             </View>
+           </View>
+        </ImageBackground>
+      </View>
 
-      {/* Control Panel */}
-      <div className="bg-white rounded-t-[3rem] p-8 pb-12 shadow-[0_-20px_60px_rgba(0,0,0,0.6)] z-20">
-         <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-8"></div>
-         
-         <div className="flex justify-between items-start mb-8">
-            <div className="flex-1">
-               <h2 className="text-2xl font-black text-gray-900 leading-tight">{activeTrip.material}</h2>
-               <div className="flex items-center space-x-2 mt-2">
-                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                 <p className="text-xs text-gray-500 font-bold uppercase tracking-tight">Destination: {activeTrip.dropLocation}</p>
-               </div>
-            </div>
-            <div className="text-right ml-4">
-               <p className="text-2xl font-black text-[#004AAD]">₹{activeTrip.payout.toLocaleString()}</p>
-               <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Job Payout</p>
-            </div>
-         </div>
+      {/* 2. Control Panel (Bottom Sheet style) */}
+      <View style={styles.controlPanel}>
+        <View style={styles.handle} />
+        
+        <View style={styles.rowBetween}>
+          <View>
+            <Text variant="headlineSmall" style={{fontWeight:'bold'}}>{order.material}</Text>
+            <View style={{flexDirection:'row', alignItems:'center', marginTop: 4}}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText}>DESTINATION: {order.drop}</Text>
+            </View>
+          </View>
+          <View style={{alignItems:'flex-end'}}>
+            <Text variant="headlineSmall" style={{color: theme.colors.primary, fontWeight:'bold'}}>
+              ₹{order.payout.toLocaleString()}
+            </Text>
+            <Text style={styles.tinyLabel}>PAYOUT</Text>
+          </View>
+        </View>
 
-         <div className="space-y-4">
-            {/* Fix: Allow 'PENDING' status to correctly trigger the start of the trip workflow */}
-            {(step === 'ACCEPTED' || step === 'PENDING') && (
-               <button onClick={() => setStep('PICKED_UP')} className="w-full py-5 bg-[#004AAD] text-white rounded-[2rem] font-bold shadow-2xl flex items-center justify-center space-x-3 active:scale-95 transition-all">
-                  <span className="text-2xl">🏗️</span>
-                  <span className="uppercase tracking-widest text-xs">Pickup Completed</span>
-               </button>
-            )}
-            
-            {(step === 'PICKED_UP') && (
-               <button onClick={() => setStep('IN_TRANSIT')} className="w-full py-5 bg-[#004AAD] text-white rounded-[2rem] font-bold shadow-2xl flex items-center justify-center space-x-3 active:scale-95 transition-all">
-                  <span className="text-2xl">🛣️</span>
-                  <span className="uppercase tracking-widest text-xs">Set Out For Delivery</span>
-               </button>
-            )}
-
-            {(step === 'IN_TRANSIT') && (
-               <button onClick={() => setStep('DELIVERED')} className="w-full py-5 bg-[#22C55E] text-white rounded-[2rem] font-bold shadow-2xl flex items-center justify-center space-x-3 active:scale-95 transition-all">
-                  <span className="text-2xl">🏁</span>
-                  <span className="uppercase tracking-widest text-xs">Confirm Delivery</span>
-               </button>
-            )}
-
-            {step === 'DELIVERED' && (
-               <div className="space-y-4 animate-slide-up">
-                  <div className="p-5 bg-green-50 border border-green-100 rounded-3xl flex items-center space-x-5">
-                     <div className="w-12 h-12 bg-green-200 rounded-full flex items-center justify-center text-2xl shadow-inner">📸</div>
-                     <div className="flex-1">
-                        <p className="text-[10px] font-bold text-green-800 uppercase tracking-widest mb-1">Proof of Delivery</p>
-                        <p className="text-xs text-green-700 font-medium italic">E-Signature & Geo-Photo Captured</p>
-                     </div>
-                  </div>
-                  <button onClick={onComplete} className="w-full py-5 bg-gray-900 text-white rounded-[2rem] font-bold shadow-2xl active:scale-95 transition-all uppercase tracking-widest text-xs">Close Trip & Get Payout</button>
-               </div>
-            )}
-         </div>
-
-         <div className="mt-10 pt-6 border-t border-gray-50 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-               <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center shadow-sm border border-gray-100 font-bold">👤</div>
-               <div>
-                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Buyer Desk</p>
-                  <p className="text-sm font-bold text-gray-800 line-clamp-1">{activeTrip.buyerName}</p>
-               </div>
-            </div>
-            <div className="flex space-x-2">
-               <button className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-[#004AAD] shadow-sm border border-gray-100 active:scale-90 transition-transform">
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6.62,10.79C8.06,13.62 10.38,15.94 13.21,17.38L15.41,15.18C15.69,14.9 16.08,14.82 16.43,14.93C17.55,15.3 18.75,15.5 20,15.5A1,1 0 0,1 21,16.5V20A1,1 0 0,1 20,21A17,17 0 0,1 3,4A1,1 0 0,1 4,3H7.5A1,1 0 0,1 8.5,4C8.5,5.25 8.7,6.45 9.07,7.57C9.18,7.92 9.1,8.31 8.82,8.59L6.62,10.79Z" /></svg>
-               </button>
-               <button className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-[#004AAD] shadow-sm border border-gray-100 active:scale-90 transition-transform">
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M20,2H4C2.89,2 2,2.89 2,4V16C2,17.11 2.89,18 4,18H18L22,22V4C22,2.89 21.11,2 20,2M20,16H4V4H20V16Z" /></svg>
-               </button>
-            </div>
-         </div>
-      </div>
-    </div>
+        <View style={{marginTop: 30}}>
+          {step === 'ACCEPTED' && (
+            <Button mode="contained" onPress={() => setStep('PICKED_UP')} style={styles.actionBtn} contentStyle={{height: 60}}>
+              🏗️  Pickup Completed
+            </Button>
+          )}
+          {step === 'PICKED_UP' && (
+            <Button mode="contained" onPress={() => setStep('IN_TRANSIT')} style={styles.actionBtn} contentStyle={{height: 60}}>
+              🛣️  Start Delivery
+            </Button>
+          )}
+          {step === 'IN_TRANSIT' && (
+            <Button mode="contained" buttonColor="#4CAF50" onPress={() => setStep('DELIVERED')} style={styles.actionBtn} contentStyle={{height: 60}}>
+              🏁  Confirm Delivery
+            </Button>
+          )}
+          {step === 'DELIVERED' && (
+            <View style={{alignItems:'center'}}>
+              <Card style={{backgroundColor:'#E8F5E9', width:'100%', marginBottom: 20}}>
+                <Card.Content style={{flexDirection:'row', alignItems:'center'}}>
+                   <IconButton icon="camera" iconColor="#2E7D32" size={30} />
+                   <View>
+                     <Text style={{fontWeight:'bold', color:'#2E7D32'}}>Proof of Delivery</Text>
+                     <Text style={{fontSize:12, color:'#2E7D32'}}>Photo & Signature Captured</Text>
+                   </View>
+                </Card.Content>
+              </Card>
+              <Button mode="contained" buttonColor="black" onPress={() => navigation.goBack()} style={{width:'100%'}} contentStyle={{height: 50}}>
+                Close Trip
+              </Button>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
   );
-};
+}
 
-export default TransporterTrip;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#1E293B' },
+  mapArea: { flex: 1, backgroundColor: '#334155' },
+  mapBackground: { flex: 1, justifyContent:'center', alignItems:'center' },
+  backBtn: { position: 'absolute', top: 50, left: 20, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 30 },
+  markerContainer: { alignItems:'center', justifyContent:'center' },
+  pulseRing: { position:'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(0, 74, 173, 0.3)' },
+  vehicleDot: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#004AAD', alignItems:'center', justifyContent:'center', borderWidth:4, borderColor:'white', elevation: 10 },
+  gpsBadge: { marginTop: 20, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  gpsText: { color:'white', fontSize: 10, fontWeight:'bold' },
+  hudContainer: { position: 'absolute', bottom: 40, flexDirection:'row', width:'100%', justifyContent:'space-between', paddingHorizontal: 20 },
+  hudBox: { backgroundColor: 'rgba(255,255,255,0.1)', padding: 10, borderRadius: 10, minWidth: 80, alignItems:'center' },
+  hudLabel: { color:'#aaa', fontSize: 8, fontWeight:'bold' },
+  hudValue: { color:'white', fontSize: 16, fontWeight:'bold' },
+  
+  controlPanel: { backgroundColor: 'white', borderTopLeftRadius: 40, borderTopRightRadius: 40, padding: 30, paddingBottom: 50, marginTop: -30 },
+  handle: { width: 50, height: 5, backgroundColor: '#E0E0E0', borderRadius: 5, alignSelf:'center', marginBottom: 20 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4CAF50', marginRight: 6 },
+  statusText: { fontSize: 10, color: '#666', fontWeight:'bold' },
+  tinyLabel: { fontSize: 9, color: '#999', fontWeight:'bold', textTransform:'uppercase' },
+  actionBtn: { borderRadius: 16, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 5, elevation: 5 }
+});

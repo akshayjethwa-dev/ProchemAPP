@@ -1,65 +1,119 @@
+import React, { useState } from 'react';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { Text, Card, Button, Avatar, IconButton, Chip, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { useAppStore } from '../store/appStore';
+import { logoutUser } from '../services/authService';
 
-import React from 'react';
+export default function TransporterDashboard() {
+  const navigation = useNavigation<any>();
+  const theme = useTheme();
+  const { user } = useAppStore();
+  
+  // Mock Data for "Assigned Jobs" (Active Deliveries)
+  const [jobs, setJobs] = useState([
+    { id: '1', from: 'Mumbai (Prochem)', to: 'Pune (ABC Corp)', status: 'Ready for Pickup', price: '₹2,500', cargo: 'Industrial Acid (500kg)' },
+    { id: '2', from: 'GIDC Gujarat', to: 'Rajasthan', status: 'In Transit', price: '₹12,000', cargo: 'Solvents (2 Ton)' }
+  ]);
 
-interface Props {
-  onLogout: () => void;
-  onNewOrders: () => void;
-  onLiveTrip: () => void;
-  onHelp: () => void;
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={{flexDirection:'row', alignItems:'center'}}>
+          <Avatar.Text size={45} label="T" style={{backgroundColor:'white'}} color={theme.colors.primary} />
+          <View style={{marginLeft: 12}}>
+            <Text style={{color:'rgba(255,255,255,0.8)', fontSize:12}}>Transporter</Text>
+            <Text variant="titleMedium" style={{color:'white', fontWeight:'bold'}}>{user?.companyName || 'Logistics Partner'}</Text>
+          </View>
+        </View>
+        <IconButton icon="logout" iconColor="white" onPress={logoutUser} />
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Stats Grid */}
+        <View style={styles.statsRow}>
+          <Card style={styles.statCard}>
+            <Card.Content style={{alignItems:'center'}}>
+              <Text variant="displaySmall" style={{fontWeight:'bold', color: theme.colors.primary}}>2</Text>
+              <Text variant="bodySmall" style={{color:'#666'}}>Active Trips</Text>
+            </Card.Content>
+          </Card>
+          <Card style={styles.statCard}>
+            <Card.Content style={{alignItems:'center'}}>
+              <Text variant="displaySmall" style={{fontWeight:'bold', color: '#2E7D32'}}>₹14k</Text>
+              <Text variant="bodySmall" style={{color:'#666'}}>Today's Earnings</Text>
+            </Card.Content>
+          </Card>
+        </View>
+
+        {/* ✅ NEW: Button to Find New Loads */}
+        <Button 
+          mode="contained" 
+          icon="magnify" 
+          onPress={() => navigation.navigate('NewOrders')} 
+          style={{marginTop: 20, borderRadius: 8}}
+          contentStyle={{height: 50}}
+        >
+          Find New Loads
+        </Button>
+
+        <Text variant="titleMedium" style={{fontWeight:'bold', marginTop: 20, marginBottom: 10}}>
+          Assigned Shipments
+        </Text>
+
+        {jobs.map((job) => (
+          <Card key={job.id} style={styles.jobCard}>
+            <Card.Content>
+              <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 8}}>
+                <Chip icon="truck" compact style={{backgroundColor:'#E3F2FD'}}>{job.status}</Chip>
+                <Text style={{fontWeight:'bold', color:'#2E7D32'}}>{job.price}</Text>
+              </View>
+              
+              <View style={styles.routeRow}>
+                <View style={{alignItems:'center'}}>
+                  <View style={styles.dot} />
+                  <View style={styles.line} />
+                  <View style={[styles.dot, {backgroundColor: theme.colors.primary}]} />
+                </View>
+                <View style={{flex:1, marginLeft: 10, height: 60, justifyContent:'space-between'}}>
+                  <View>
+                    <Text variant="labelSmall" style={{color:'#888'}}>PICKUP</Text>
+                    <Text style={{fontWeight:'bold'}}>{job.from}</Text>
+                  </View>
+                  <View>
+                    <Text variant="labelSmall" style={{color:'#888'}}>DROP</Text>
+                    <Text style={{fontWeight:'bold'}}>{job.to}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={{marginTop: 12, paddingTop: 12, borderTopWidth:1, borderTopColor:'#f0f0f0'}}>
+                 <Text style={{color:'#666', fontSize:12}}>📦 {job.cargo}</Text>
+              </View>
+            </Card.Content>
+            <Card.Actions>
+              <Button mode="contained" compact style={{width:'100%'}} onPress={() => alert('Tracking coming soon')}>
+                Update Status
+              </Button>
+            </Card.Actions>
+          </Card>
+        ))}
+
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
-const TransporterDashboard: React.FC<Props> = ({ onLogout, onNewOrders, onLiveTrip, onHelp }) => {
-  return (
-    <div className="flex-1 bg-gray-50 flex flex-col h-full overflow-y-auto hide-scrollbar">
-      <div className="bg-[#004AAD] pt-12 pb-20 px-6 relative shadow-lg">
-         <div className="flex justify-between items-center mb-6">
-            <h1 className="text-white text-2xl font-bold">Logistics Hub</h1>
-            <button onClick={onLogout} className="text-white/80 text-xs bg-white/10 px-3 py-1.5 rounded-lg border border-white/20">Logout</button>
-         </div>
-         <div className="bg-white/10 p-4 rounded-2xl flex items-center space-x-4 border border-white/10">
-            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-2xl">🚛</div>
-            <div>
-               <p className="text-blue-100 text-[10px] font-bold uppercase tracking-widest">Active Vehicle</p>
-               <h3 className="text-white font-bold">GJ 06 AX 4412</h3>
-               <p className="text-blue-200 text-xs mt-0.5">Tata Tanker • Licensed (Hazmat)</p>
-            </div>
-         </div>
-      </div>
-
-      <div className="px-6 -mt-10 space-y-6 pb-24">
-         <div className="grid grid-cols-2 gap-4">
-            <button onClick={onNewOrders} className="bg-white p-6 rounded-2xl shadow-md border border-gray-100 flex flex-col items-center text-center transition-transform active:scale-95">
-               <span className="text-3xl mb-3">🔔</span>
-               <h3 className="font-bold text-gray-900">New Load Requests</h3>
-               <p className="text-[10px] text-gray-500 mt-1">Available Nearby</p>
-            </button>
-            <button onClick={onLiveTrip} className="bg-white p-6 rounded-2xl shadow-md border border-gray-100 flex flex-col items-center text-center transition-transform active:scale-95">
-               <span className="text-3xl mb-3">🛰️</span>
-               <h3 className="font-bold text-gray-900">Live Trip</h3>
-               <p className="text-[10px] text-gray-500 mt-1">Status: In Transit</p>
-            </button>
-         </div>
-
-         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <h2 className="font-bold text-gray-800 mb-4">Operations Menu</h2>
-            <div className="space-y-3">
-               <button className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                  <span className="flex items-center text-sm font-bold text-gray-700"><span className="mr-3">✅</span> Completed Deliveries</span>
-                  <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">142</span>
-               </button>
-               <button className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                  <span className="flex items-center text-sm font-bold text-gray-700"><span className="mr-3">💰</span> Earnings Wallet</span>
-                  <span className="text-[#004AAD] text-sm font-bold">₹28,450</span>
-               </button>
-               <button onClick={onHelp} className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                  <span className="flex items-center text-sm font-bold text-gray-700"><span className="mr-3">🎧</span> Support Desk</span>
-                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-               </button>
-            </div>
-         </div>
-      </div>
-    </div>
-  );
-};
-
-export default TransporterDashboard;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { backgroundColor: '#1E293B', padding: 20, flexDirection:'row', justifyContent:'space-between', alignItems:'center', borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
+  content: { padding: 16 },
+  statsRow: { flexDirection: 'row', gap: 12, marginTop: -10 },
+  statCard: { flex: 1, elevation: 2 },
+  jobCard: { marginBottom: 16, backgroundColor: 'white', elevation: 2 },
+  routeRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 10 },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#888' },
+  line: { width: 2, height: 35, backgroundColor: '#ddd', marginLeft: 4, marginVertical: 2 }
+});
