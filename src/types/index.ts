@@ -19,6 +19,7 @@ export interface User {
   businessName?: string;
   gstNumber?: string;
   address?: string;
+  phoneNumber?: string;
   pincode?: string;
   documents?: {
     gstin?: boolean;

@@ -1,16 +1,20 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, useTheme } from 'react-native-paper';
 
 // Screens
 import SellerDashboard from '../screens/SellerDashboard';
 import SellerOrdersScreen from '../screens/SellerOrdersScreen';
 import SellerManageChemicals from '../screens/SellerManageChemicals';
+import SellerAddChemical from '../screens/SellerAddChemical';
 import AccountScreen from '../screens/AccountScreen';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-export default function SellerNavigator() {
+// ✅ 1. Define Tabs separately
+function SellerTabs() {
   const theme = useTheme();
 
   return (
@@ -24,7 +28,7 @@ export default function SellerNavigator() {
       }}
     >
       <Tab.Screen 
-        name="Home" 
+        name="Dashboard" // Changed from "Home" to match Dashboard logic usually
         component={SellerDashboard} 
         options={{
           tabBarLabel: 'Dashboard',
@@ -40,7 +44,7 @@ export default function SellerNavigator() {
         }}
       />
       <Tab.Screen 
-        name="Inventory" 
+        name="MyListings" // Renamed to match the navigation calls from Dashboard
         component={SellerManageChemicals} 
         options={{
           tabBarLabel: 'My Listings',
@@ -56,5 +60,26 @@ export default function SellerNavigator() {
         }}
       />
     </Tab.Navigator>
+  );
+}
+
+// ✅ 2. Export the Stack (Tabs + Add Chemical Screen)
+export default function SellerNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {/* The Main Tabs */}
+      <Stack.Screen name="SellerHome" component={SellerTabs} />
+      
+      {/* ✅ The Standalone "Add Chemical" Screen */}
+      <Stack.Screen 
+        name="AddChemical" 
+        component={SellerAddChemical} 
+        options={{ 
+          headerShown: true, 
+          title: 'Add New Chemical',
+          headerBackTitle: 'Back'
+        }} 
+      />
+    </Stack.Navigator>
   );
 }

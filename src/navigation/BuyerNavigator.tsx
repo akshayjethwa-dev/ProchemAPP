@@ -1,19 +1,26 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, Badge, useTheme } from 'react-native-paper';
 import { useAppStore } from '../store/appStore';
 
-// Import Your 5 Tab Screens
+// Import Tab Screens
 import BuyerHome from '../screens/BuyerHome';
 import CategoriesScreen from '../screens/CategoriesScreen';
 import CartScreen from '../screens/CartScreen';
 import OrderHistoryScreen from '../screens/OrderHistoryScreen';
 import AccountScreen from '../screens/AccountScreen';
 
-const Tab = createBottomTabNavigator();
+// Import Checkout & Address Screens
+import CheckoutScreen from '../screens/CheckoutScreen';
+import AddressListScreen from '../screens/AddressListScreen';
+import AddAddressScreen from '../screens/AddAddressScreen';
 
-export default function BuyerNavigator() {
+const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
+
+function BuyerTabs() {
   const theme = useTheme();
   const cartCount = useAppStore(state => state.cart.length);
 
@@ -28,7 +35,7 @@ export default function BuyerNavigator() {
       }}
     >
       <Tab.Screen 
-        name="Home" 
+        name="HomeTab" 
         component={BuyerHome} 
         options={{
           tabBarLabel: 'Home',
@@ -75,5 +82,43 @@ export default function BuyerNavigator() {
         }}
       />
     </Tab.Navigator>
+  );
+}
+
+export default function BuyerNavigator() {
+  return (
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: true, 
+        // ✅ FIX: Use 'headerBackTitle' instead of 'headerBackTitleVisible'
+        headerBackTitle: '' 
+      }}
+    >
+      
+      {/* Main Tabs (Hides Header) */}
+      <Stack.Screen 
+        name="BuyerTabs" 
+        component={BuyerTabs} 
+        options={{ headerShown: false }} 
+      />
+
+      {/* Checkout Flow Screens (Shows Header) */}
+      <Stack.Screen 
+        name="Checkout" 
+        component={CheckoutScreen} 
+        options={{ title: 'Checkout' }} 
+      />
+      <Stack.Screen 
+        name="AddressList" 
+        component={AddressListScreen} 
+        options={{ title: 'Select Address' }} 
+      />
+      <Stack.Screen 
+        name="AddAddress" 
+        component={AddAddressScreen} 
+        options={{ title: 'Add New Address' }} 
+      />
+
+    </Stack.Navigator>
   );
 }

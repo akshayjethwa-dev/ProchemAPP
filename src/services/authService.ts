@@ -2,7 +2,8 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  updateProfile // ✅ Added to set display name immediately
 } from 'firebase/auth';
 import { 
   doc, 
@@ -11,7 +12,16 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { UserRole } from '../types';
+import { User, UserRole } from '../types';
+
+// ✅ Define Interface for Registration Data
+interface RegisterData {
+  email: string;
+  password: string;
+  companyName: string;
+  phoneNumber: string;
+  userType: UserRole;
+}
 
 // Email Login
 export const loginUser = async (email: string, password: string): Promise<any> => {
@@ -33,41 +43,41 @@ export const loginUser = async (email: string, password: string): Promise<any> =
   }
 };
 
-// ✅ UPDATED: Register with full profile data
-export const registerUser = async (
-  email: string, 
-  password: string, 
-  role: UserRole,
-  additionalData: {
-    companyName: string;
-    gstNumber: string;
-    phone: string;
-    address: string;
-    pincode: string;
-    documents: any;
-  }
-): Promise<any> => {
+// ✅ UPDATED: Register accepts a single object now
+export const registerUser = async ({ 
+  email, 
+  password, 
+  companyName, 
+  phoneNumber, 
+  userType 
+}: RegisterData): Promise<any> => {
   try {
+    // 1. Create Auth User
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Create user profile in Firestore with "Pending" status
-    await setDoc(doc(db, 'users', user.uid), {
+    // 2. Prepare Firestore Data
+    const userData: User = {
       uid: user.uid,
       email: email,
-      userType: role,
-      companyName: additionalData.companyName,
-      gstNumber: additionalData.gstNumber,
-      phone: additionalData.phone,
-      address: additionalData.address,
-      pincode: additionalData.pincode,
-      documents: additionalData.documents,
-      verified: false, // 🔒 Default to false
-      verificationStatus: 'pending', // 🔒 Verification Pending
-      createdAt: serverTimestamp(),
-    });
+      userType: userType,
+      companyName: companyName,
+      phoneNumber: phoneNumber, // ✅ Phone Number Saved
+      verified: false,
+      kycStatus: 'pending',
+      // Initialize empty/defaults
+      addresses: [], 
+      documents: { gstin: false, shopLicense: false, udyogAadhar: false },
+      createdAt: new Date().toISOString() // or serverTimestamp() if preferred
+    };
 
-    return user;
+    // 3. Save to Firestore
+    await setDoc(doc(db, 'users', user.uid), userData);
+
+    // 4. Update Auth Profile (Optional but recommended)
+    await updateProfile(user, { displayName: companyName });
+
+    return { ...user, ...userData };
   } catch (error: any) {
     console.error('Registration error:', error);
     throw new Error(error.message || 'Registration failed');
