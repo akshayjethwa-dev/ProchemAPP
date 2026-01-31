@@ -17,46 +17,40 @@ export default function LoginScreen() {
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [loginError, setLoginError] = useState('');
 
-  // ✅ 1. Forgot Password Functionality
+  // ✅ 1. FIXED: Forgot Password (Web & Mobile Compatible)
   const handleForgotPassword = async () => {
     if (!email) {
-      setLoginError('Please enter your email address first.');
+      setLoginError('Please enter your email address to reset password.');
       return;
     }
     
-    // Simple Email Regex Check
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setLoginError('Please enter a valid email address.');
       return;
     }
 
-    Alert.alert(
-      'Reset Password',
-      `Send password reset link to ${email}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Send Email', 
-          onPress: async () => {
-            try {
-              setResetLoading(true);
-              await sendPasswordResetEmail(auth, email);
-              Alert.alert('Email Sent', 'Check your inbox (and spam) for the password reset link.');
-              setLoginError(''); // Clear errors on success
-            } catch (error: any) {
-              if (error.code === 'auth/user-not-found') {
-                Alert.alert('Error', 'This email is not registered.');
-              } else {
-                Alert.alert('Error', error.message);
-              }
-            } finally {
-              setResetLoading(false);
-            }
-          }
-        }
-      ]
-    );
+    // Direct Send (No Alert buttons, as they fail on Web)
+    setResetLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      
+      Alert.alert(
+        'Email Sent 📧', 
+        `We have sent a password reset link to ${email}. Please check your Inbox and Spam folder.`
+      );
+      setLoginError(''); 
+    } catch (error: any) {
+      console.error("Reset Error:", error);
+      if (error.code === 'auth/user-not-found') {
+        setLoginError('This email is not registered.');
+        Alert.alert('Error', 'Account not found. Please register.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to send reset email.');
+      }
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   const handleLogin = async () => {
@@ -73,27 +67,23 @@ export default function LoginScreen() {
     } catch (error: any) {
       console.log('Login Error Code:', error.code);
       
-      // ✅ 2. Fixed Error Handling Logic
+      // ✅ 2. FIXED: Error Handling & Navigation to 'Registration'
       if (error.code === 'auth/user-not-found') {
-        // STRICTLY for non-existent emails
         setLoginError('Account not found. Please register first.');
         Alert.alert(
           'Account Not Found',
           'This email is not registered. Do you want to create an account?',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Register', onPress: () => navigation.navigate('Registration') }
+            { text: 'Register', onPress: () => navigation.navigate('Registration') } // ✅ Corrected Route
           ]
         );
       } 
       else if (error.code === 'auth/wrong-password') {
-        // STRICTLY for wrong passwords
         setLoginError('Incorrect password. Please try again.');
       } 
       else if (error.code === 'auth/invalid-credential') {
-        // CATCH-ALL (Google often groups wrong pass/no user here for security)
-        // We change the message to be less confusing than "Account not found"
-        setLoginError('Invalid email or password. Please check your credentials.');
+        setLoginError('Invalid email or password.');
       } 
       else if (error.code === 'auth/invalid-email') {
         setLoginError('Please enter a valid email address.');
@@ -173,8 +163,8 @@ export default function LoginScreen() {
               disabled={resetLoading}
               style={styles.forgotPass}
             >
-              <Text style={{ color: theme.colors.primary }}>
-                {resetLoading ? 'Sending...' : 'Forgot Password?'}
+              <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>
+                {resetLoading ? 'Sending Email...' : 'Forgot Password?'}
               </Text>
             </TouchableOpacity>
 
@@ -189,7 +179,7 @@ export default function LoginScreen() {
             </Button>
           </View>
 
-          {/* Footer Section */}
+          {/* Footer Section - ✅ FIXED NAVIGATION */}
           <View style={styles.footer}>
             <Text variant="bodyMedium" style={{ color: '#666' }}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Registration')}>

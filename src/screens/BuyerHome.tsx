@@ -36,7 +36,7 @@ export default function BuyerHome() {
   };
 
   const displayProducts = products
-    .filter(p => p.name?.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(p => p.name?.toLowerCase().includes(searchQuery.toLowerCase()) && p.sellerId !== user?.uid)
     .slice(0, 6);
 
   return (

@@ -18,11 +18,20 @@ const CATEGORIES = [
 export default function CategoriesScreen() {
   const navigation = useNavigation<any>();
   const theme = useTheme();
-  const { products, addToCart } = useAppStore();
+  
+  // ✅ UPDATE: Get 'user' from store to check ID
+  const { products, addToCart, user } = useAppStore();
   const [selectedCat, setSelectedCat] = useState(CATEGORIES[0]);
 
-  // Filter Logic
+  // ✅ UPDATE: Filter Logic to hide own products and inactive items
   const filteredProducts = products.filter(p => {
+    // 1. Filter out inactive products
+    if (p.active === false) return false;
+
+    // 2. Filter out products listed by the current user (Self-Listed)
+    if (user && p.sellerId === user.uid) return false;
+
+    // 3. Category Filter
     if (selectedCat === 'All Products') return true;
     return p.category === selectedCat;
   });

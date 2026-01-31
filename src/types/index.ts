@@ -19,6 +19,7 @@ export interface User {
   businessName?: string;
   gstNumber?: string;
   address?: string;
+  addresses?: Address[];
   phoneNumber?: string;
   pincode?: string;
   documents?: {
@@ -123,6 +124,10 @@ export interface Order {
     purityCertificate?: string;
     gradeSheet?: string;
   };
+  subTotal?: number;         // For the base price before taxes
+  taxAmount?: number;        // For the calculated GST
+  platformFeeBuyer?: number; // To track how much you earned from the buyer
+  paymentId?: string;
   
 }
 
@@ -171,4 +176,15 @@ export interface NegotiationMessage {
   senderId: string;
   timestamp: number;
   isBuyer: boolean;
+}
+
+export interface Address {
+  id: string;
+  label: string; // e.g., "Main Warehouse", "Home"
+  street: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  isDefault?: boolean;
 }

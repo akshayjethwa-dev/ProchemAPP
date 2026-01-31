@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, ActivityIndicator, TextStyle } from 'react-native'; // ✅ Added TextStyle
+import { View, ScrollView, StyleSheet, ActivityIndicator, TextStyle, BackHandler } from 'react-native';
 import { Text, Card, IconButton, Divider, useTheme, Avatar, Button } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
 import { doc, onSnapshot, query, collection, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
@@ -17,6 +17,37 @@ export default function OrderTracking() {
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // ✅ FIX: Custom Back Navigation Handler
+  // Navigates to Home instead of going back to Checkout/Cart
+  const handleBackNavigation = () => {
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'BuyerApp',
+            state: {
+              routes: [{ name: 'BuyerTabs', params: { screen: 'HomeTab' } }],
+            },
+          },
+        ],
+      })
+    );
+    // Fallback if reset doesn't work in your specific stack structure:
+    // navigation.navigate('BuyerApp', { screen: 'BuyerTabs', params: { screen: 'HomeTab' } });
+  };
+
+  // ✅ FIX: Handle Android Hardware Back Button
+  useEffect(() => {
+    const backAction = () => {
+      handleBackNavigation();
+      return true; // Prevent default behavior
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, []);
 
   useEffect(() => {
     let unsubscribe: () => void;
@@ -81,7 +112,7 @@ export default function OrderTracking() {
       <View style={styles.center}>
         <Avatar.Icon size={80} icon="package-variant" style={{backgroundColor:'#F1F5F9'}} color="#999" />
         <Text variant="headlineSmall" style={{color:'#999', marginTop:20, fontWeight:'bold'}}>No Active Orders</Text>
-        <Button mode="contained" onPress={() => navigation.navigate('Home')} style={{marginTop:20}}>Start Shopping</Button>
+        <Button mode="contained" onPress={handleBackNavigation} style={{marginTop:20}}>Start Shopping</Button>
       </View>
     );
   }
@@ -113,7 +144,8 @@ export default function OrderTracking() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+          {/* ✅ FIX: Use Custom Back Handler */}
+          <IconButton icon="arrow-left" onPress={handleBackNavigation} />
           <Text variant="headlineSmall" style={{fontWeight:'bold'}}>Track Order</Text>
         </View>
         <Card style={[styles.card, {backgroundColor: '#FFEBEE', borderColor: '#EF5350', borderWidth: 1}]}>
@@ -132,7 +164,8 @@ export default function OrderTracking() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        {/* ✅ FIX: Use Custom Back Handler */}
+        <IconButton icon="arrow-left" onPress={handleBackNavigation} />
         <Text variant="headlineSmall" style={{fontWeight:'bold'}}>Track Shipment</Text>
       </View>
 
@@ -158,7 +191,6 @@ export default function OrderTracking() {
             let icon = 'circle';
             let lineColor = '#E0E0E0';
             
-            // ✅ FIX: Explicitly Type this object
             let titleStyle: TextStyle = { color: '#999', fontWeight: 'normal' };
             
             if (status === 'completed') {

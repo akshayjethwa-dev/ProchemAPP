@@ -1,9 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet, Alert } from 'react-native';
-import { Text, Card, Button, IconButton, RadioButton, useTheme } from 'react-native-paper';
+import React from 'react';
+import { View, StyleSheet, FlatList, Alert } from 'react-native';
+import { Text, Button, Card, RadioButton, IconButton, useTheme, FAB } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { doc, updateDoc, arrayRemove, getDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Address } from '../types';
 
@@ -11,115 +9,98 @@ export default function AddressListScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const theme = useTheme();
-  const { user, setUser } = useAppStore();
   
-  // Params: isSelectionMode = true if coming from Checkout
-  const isSelectionMode = route.params?.selectable || false;
-  const [addresses, setAddresses] = useState<Address[]>(user?.addresses || []);
-  const [selectedId, setSelectedId] = useState<string | null>(route.params?.currentAddressId || null);
+  // Get user data from store
+  const { user } = useAppStore();
+  const addresses = user?.addresses || []; // ✅ Fix: Ensure we get the array
 
-  useEffect(() => {
-    refreshAddresses();
-  }, []);
+  // Check if we are in "Selection Mode" (e.g. from Checkout)
+  const isSelectable = route.params?.selectable || false;
 
-  // Reload user data to get fresh addresses
-  const refreshAddresses = async () => {
-    if(!user) return;
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      setAddresses(userData.addresses || []);
-      // Update global store
-      setUser({ ...user, addresses: userData.addresses || [] });
+  const handleSelectAddress = (address: Address) => {
+    if (isSelectable) {
+      // Pass selected address back to previous screen (Checkout)
+      navigation.navigate({
+        name: 'Checkout',
+        params: { selectedAddress: address },
+        merge: true,
+      });
     }
   };
 
-  const handleSelect = (address: Address) => {
-    if (isSelectionMode) {
-      // Pass selected address back to Checkout
-      navigation.navigate('Checkout', { selectedAddress: address });
-    }
+  const handleAddAddress = () => {
+    navigation.navigate('AddAddress');
   };
 
-  const handleDelete = async (address: Address) => {
-    Alert.alert('Delete Address', 'Are you sure?', [
-      { text: 'Cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-          try {
-            const userRef = doc(db, 'users', user!.uid);
-            await updateDoc(userRef, {
-              addresses: arrayRemove(address)
-            });
-            refreshAddresses();
-          } catch (error) {
-            console.error(error);
-          }
-      }}
-    ]);
-  };
-
-  const renderItem = ({ item }: { item: Address }) => {
-    const isSelected = selectedId === item.id;
-
-    return (
-      <Card 
-        style={[styles.card, isSelected && {borderColor: theme.colors.primary, borderWidth: 2}]} 
-        onPress={() => handleSelect(item)}
-      >
-        <Card.Content style={{flexDirection:'row', alignItems:'center'}}>
-          {isSelectionMode && (
-             <RadioButton 
-               value={item.id} 
-               status={isSelected ? 'checked' : 'unchecked'} 
-               onPress={() => handleSelect(item)} 
-             />
-          )}
-          
-          <View style={{flex:1, marginLeft: 10}}>
-            <Text variant="titleMedium" style={{fontWeight:'bold'}}>{item.label}</Text>
-            <Text variant="bodyMedium" style={{color:'#555', marginTop: 4}}>
-              {item.street}, {item.city}
-            </Text>
-            <Text variant="bodySmall" style={{color:'#777'}}>
-              {item.state} - {item.zipCode}
-            </Text>
+  const renderItem = ({ item }: { item: Address }) => (
+    <Card 
+      style={[styles.card, isSelectable && styles.selectableCard]} 
+      onPress={() => handleSelectAddress(item)}
+    >
+      <Card.Content style={{flexDirection: 'row', alignItems: 'center'}}>
+        {isSelectable && (
+          <RadioButton 
+            value={item.id} 
+            status="unchecked" // Visual only, logic handled by press
+            onPress={() => handleSelectAddress(item)} 
+          />
+        )}
+        <View style={{flex: 1, marginLeft: isSelectable ? 8 : 0}}>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+            <Text variant="titleMedium" style={{fontWeight: 'bold'}}>{item.label}</Text>
+            {item.isDefault && <Text style={{color: theme.colors.primary, fontSize: 10}}>DEFAULT</Text>}
           </View>
-
-          {!isSelectionMode && (
-            <IconButton icon="delete" iconColor="red" onPress={() => handleDelete(item)} />
-          )}
-        </Card.Content>
-      </Card>
-    );
-  };
+          <Text variant="bodyMedium" style={{marginTop: 4}}>{item.street}</Text>
+          <Text variant="bodySmall" style={{color: '#666'}}>
+            {item.city}, {item.state} - {item.zipCode}
+          </Text>
+        </View>
+        {!isSelectable && (
+          <IconButton icon="pencil" size={20} onPress={() => Alert.alert('Edit', 'Edit feature coming soon')} />
+        )}
+      </Card.Content>
+    </Card>
+  );
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={addresses}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{padding: 16}}
-        ListEmptyComponent={
-          <Text style={{textAlign:'center', marginTop: 50, color:'#999'}}>No addresses saved.</Text>
-        }
-      />
-      
-      <View style={{padding: 16}}>
-        <Button 
-          mode="contained" 
-          icon="plus" 
-          onPress={() => navigation.navigate('AddAddress', { onGoBack: refreshAddresses })}
-          style={{borderRadius: 8}}
-        >
-          Add New Address
-        </Button>
-      </View>
+      {addresses.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text variant="headlineSmall" style={{color: '#999', marginBottom: 10}}>No Addresses Found</Text>
+          <Text style={{color: '#666', textAlign: 'center', marginBottom: 20}}>
+            You haven't added any delivery locations yet.
+          </Text>
+          <Button mode="contained" onPress={handleAddAddress}>
+            Add New Address
+          </Button>
+        </View>
+      ) : (
+        <FlatList
+          data={addresses}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{padding: 16}}
+        />
+      )}
+
+      {/* Floating Add Button */}
+      {addresses.length > 0 && (
+        <FAB
+          icon="plus"
+          label="Add New"
+          style={[styles.fab, {backgroundColor: theme.colors.primary}]}
+          color="white"
+          onPress={handleAddAddress}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  card: { marginBottom: 12, backgroundColor: 'white' }
+  card: { marginBottom: 12, backgroundColor: 'white' },
+  selectableCard: { borderColor: '#004AAD', borderWidth: 1 },
+  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
+  fab: { position: 'absolute', margin: 16, right: 0, bottom: 0 },
 });

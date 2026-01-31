@@ -47,7 +47,13 @@ export default function ProductDetail() {
       category: product.category,
       price: price
     });
-    navigation.navigate('BuyerApp', { screen: 'Cart' });
+    
+    // ✅ FIX: Correct Navigation Path to Cart
+    // Cart is nested inside BuyerTabs, which is inside BuyerApp
+    navigation.navigate('BuyerApp', { 
+      screen: 'BuyerTabs',
+      params: { screen: 'Cart' }
+    });
   };
 
   const handleDownloadMSDS = () => Alert.alert('Download', 'Downloading Material Safety Data Sheet (MSDS)...');
