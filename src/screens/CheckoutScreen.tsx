@@ -27,14 +27,16 @@ export default function CheckoutScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
-        <IconButton icon="arrow-left" onPress={() => navigation.navigate('BuyerTabs', { screen: 'HomeTab' })} />
+        // ✅ FIX: Go Back to Cart instead of Home
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
       ),
     });
   }, [navigation]);
 
   useEffect(() => {
     const backAction = () => {
-      navigation.navigate('BuyerTabs', { screen: 'HomeTab' });
+      // ✅ FIX: Hardware back button now goes to Cart/Previous screen
+      navigation.goBack();
       return true;
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
@@ -54,7 +56,16 @@ export default function CheckoutScreen() {
     } else if (user?.addresses && user.addresses.length > 0) {
       setSelectedAddress(user.addresses[0]); 
     } else if (user?.address) {
-      setSelectedAddress({ id: 'legacy', label: 'Default', street: user.address, city: '', state: '', zipCode: '', country: 'India' });
+      // Legacy address fallback
+      setSelectedAddress({ 
+        id: 'legacy', 
+        label: 'Default', 
+        street: user.address, 
+        city: '', 
+        state: '', 
+        zipCode: '', 
+        country: 'India' 
+      });
     }
   }, [user, route.params]);
 
@@ -94,14 +105,12 @@ export default function CheckoutScreen() {
         name: user?.companyName || 'Buyer'
       },
       theme: { color: '#004AAD' },
-      // Handler for Web Success
       handler: function (response: any) {
         console.log('Web Payment Success:', response.razorpay_payment_id);
         createOrderInBackend(response.razorpay_payment_id);
       }
     };
 
-    // 🌐 WEB PAYMENT FLOW
     if (Platform.OS === 'web') {
       const isLoaded = await loadRazorpayScript();
       if (!isLoaded) {
@@ -117,7 +126,6 @@ export default function CheckoutScreen() {
       });
       paymentObject.open();
     } 
-    // 📱 MOBILE APP PAYMENT FLOW
     else {
       if (RazorpayCheckout) {
         RazorpayCheckout.open(options)

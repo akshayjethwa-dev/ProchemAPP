@@ -1,43 +1,61 @@
 import React, { useState } from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet, FlatList, Platform } from 'react-native';
+import { View, ScrollView, StyleSheet, FlatList } from 'react-native';
 import { Text, Button, Card, useTheme, Chip, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
 
-const CATEGORIES = [
-  'All Products',
-  'Industrial Acids', 
+// Standard Categories (Matches SellerAddChemical)
+const STANDARD_CATEGORIES = [
+  'Industrial Chemicals', 
   'Pharma Chemicals', 
   'Agriculture', 
   'Food & Beverage', 
   'Lab Research'
 ];
 
+// Display Categories (Includes 'All' and 'Other')
+const CATEGORIES = [
+  'All Products',
+  ...STANDARD_CATEGORIES,
+  'Other'
+];
+
 export default function CategoriesScreen() {
   const navigation = useNavigation<any>();
   const theme = useTheme();
   
-  // ✅ UPDATE: Get 'user' from store to check ID
   const { products, addToCart, user } = useAppStore();
   const [selectedCat, setSelectedCat] = useState(CATEGORIES[0]);
 
-  // ✅ UPDATE: Filter Logic to hide own products and inactive items
+  // Filter Logic
   const filteredProducts = products.filter(p => {
     // 1. Filter out inactive products
     if (p.active === false) return false;
 
-    // 2. Filter out products listed by the current user (Self-Listed)
+    // 2. Filter out products listed by the current user
     if (user && p.sellerId === user.uid) return false;
 
     // 3. Category Filter
     if (selectedCat === 'All Products') return true;
+
+    if (selectedCat === 'Other') {
+      // If "Other" is selected, show items that DO NOT match standard categories
+      // This catches custom categories like "Polymers", "Dyes", etc.
+      return !STANDARD_CATEGORIES.includes(p.category || '');
+    }
+
+    // Standard exact match
     return p.category === selectedCat;
   });
 
   const renderProduct = ({ item }: { item: Product }) => (
-    <Card style={styles.prodCard} onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}>
+    // Pass the full item object as 'product' parameter, consistent with other screens
+    <Card 
+      style={styles.prodCard} 
+      onPress={() => navigation.navigate('ProductDetail', { product: item })}
+    >
       <View style={{flexDirection:'row'}}>
         {/* Product Image Placeholder */}
         <View style={styles.prodImage}>
@@ -91,7 +109,7 @@ export default function CategoriesScreen() {
         <IconButton icon="magnify" onPress={() => navigation.navigate('Marketplace')} />
       </View>
 
-      {/* Mobile-Friendly Horizontal Categories */}
+      {/* Horizontal Category Chips */}
       <View style={{height: 60}}>
         <ScrollView 
           horizontal 

@@ -6,32 +6,43 @@ import { IconButton } from 'react-native-paper';
 // Screens
 import AdminDashboard from '../screens/admin/AdminDashboard';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
-import AdminUserDetailsScreen from '../screens/admin/AdminUserDetailsScreen'; // ✅ New Detail Screen
+import AdminUserDetailsScreen from '../screens/admin/AdminUserDetailsScreen';
 import AdminProductsScreen from '../screens/admin/AdminProductsScreen';
 import AdminOrderVerification from '../screens/admin/AdminOrderVerification';
 import AdminPaymentsScreen from '../screens/admin/AdminPaymentsScreen';
+// ✅ IMPORT INVOICE VIEWER
+import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
+
+// ✅ DEFINE PARAM LIST FOR ADMIN
+export type AdminStackParamList = {
+  UsersList: undefined;
+  AdminUserDetails: { user: any };
+  InvoiceViewer: { order: any }; // ✅ Added this
+};
 
 const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<AdminStackParamList>(); // ✅ PASS TYPE HERE
 
-// ✅ 1. User Stack (List -> Detail)
+// 1. User Stack (List -> Detail -> Invoice)
 function UserStackNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="UsersList" component={AdminUsersScreen} />
       <Stack.Screen name="AdminUserDetails" component={AdminUserDetailsScreen} />
+      {/* ✅ ADD INVOICE VIEWER HERE SO USER DETAILS CAN NAVIGATE TO IT */}
+      <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} />
     </Stack.Navigator>
   );
 }
 
-// ✅ 2. Main Admin Tabs
+// 2. Main Admin Tabs
 export default function AdminNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: { 
-          backgroundColor: '#1E293B', // Dark Theme
+          backgroundColor: '#1E293B',
           height: 60,
           paddingBottom: 8,
           paddingTop: 8
@@ -49,7 +60,6 @@ export default function AdminNavigator() {
         }} 
       />
       
-      {/* ✅ Users Tab now uses the Stack */}
       <Tab.Screen 
         name="Users" 
         component={UserStackNavigator} 
@@ -75,7 +85,6 @@ export default function AdminNavigator() {
         }} 
       />
 
-      {/* ✅ Added Payments Tab */}
       <Tab.Screen 
         name="Payments" 
         component={AdminPaymentsScreen} 

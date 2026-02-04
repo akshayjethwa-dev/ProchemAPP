@@ -7,6 +7,8 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Order } from '../types';
+// ✅ IMPORT INVOICE SERVICE
+import { generateInvoice } from '../services/invoiceService';
 
 export default function OrderHistoryScreen() {
   const navigation = useNavigation<any>();
@@ -15,16 +17,13 @@ export default function OrderHistoryScreen() {
   
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('active'); // 'active' | 'past'
+  const [tab, setTab] = useState('active'); 
 
   useEffect(() => {
     if (!user) return;
 
     setLoading(true);
 
-    // ✅ STRICTLY BUYER LOGIC
-    // We only fetch orders where the current user is the BUYER.
-    // Seller orders are handled in SellerOrdersScreen.tsx
     const q = query(
       collection(db, 'orders'),
       where('buyerId', '==', user.uid),
@@ -43,11 +42,7 @@ export default function OrderHistoryScreen() {
     return unsubscribe;
   }, [user]);
 
-  // ✅ STATUS FILTER (Matches the new flow you created)
-  // Active: Waiting for Seller, Waiting for Admin, Accepted, Shipped
   const activeStatuses = ['PENDING_SELLER', 'PENDING_ADMIN', 'ACCEPTED', 'shipped', 'PENDING'];
-  
-  // Past: Delivered, Cancelled, Rejected, Returned
   const pastStatuses = ['delivered', 'CANCELLED', 'REJECTED', 'returned'];
 
   const filteredOrders = orders.filter(o => 
@@ -56,7 +51,6 @@ export default function OrderHistoryScreen() {
       : pastStatuses.includes(o.status)
   );
 
-  // Helper to format date safely
   const formatDate = (date: any) => {
     if (!date) return '';
     if (typeof date === 'string') return new Date(date).toDateString();
@@ -64,10 +58,14 @@ export default function OrderHistoryScreen() {
     return '';
   };
 
+  // ✅ Handler for Invoice
+  const handleDownloadInvoice = (order: Order) => {
+    navigation.navigate('InvoiceViewer', { order: order });
+  };
+
   const renderOrder = ({ item }: { item: Order }) => (
     <Card 
       style={styles.card} 
-      // Clicking the card goes to tracking
       onPress={() => navigation.navigate('OrderTracking', { orderId: item.id })}
     >
       <Card.Content>
@@ -89,18 +87,24 @@ export default function OrderHistoryScreen() {
           {formatDate(item.createdAt)} • {item.items?.length || 0} Items
         </Text>
         
-        <View style={{flexDirection:'row', marginTop: 12, justifyContent: 'flex-end'}}>
-          {tab === 'active' ? (
+        <View style={{flexDirection:'row', marginTop: 12, justifyContent: 'flex-end', gap: 10}}>
+          {/* ✅ INVOICE BUTTON (Visible for all orders) */}
+          <Button 
+            mode="outlined" 
+            compact 
+            icon="file-document-outline" 
+            onPress={() => handleDownloadInvoice(item)}
+          >
+            Invoice
+          </Button>
+
+          {tab === 'active' && (
              <Button 
                mode="contained" 
                compact 
                onPress={() => navigation.navigate('OrderTracking', { orderId: item.id })}
              >
-               Track Status
-             </Button>
-          ) : (
-             <Button mode="outlined" compact icon="download" onPress={() => alert('Invoice Download')}>
-               Invoice
+               Track
              </Button>
           )}
         </View>

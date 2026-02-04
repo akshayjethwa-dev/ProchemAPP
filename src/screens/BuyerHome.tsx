@@ -45,7 +45,6 @@ export default function BuyerHome() {
       <View style={styles.header}>
         <View style={styles.locationRow}>
           
-          {/* ✅ ADDED: Organization Name Display */}
           <View>
             <Text style={{color:'rgba(255,255,255,0.8)', fontSize:12}}>Hi,</Text>
             <Text style={{color:'white', fontWeight:'bold', fontSize:18}}>
@@ -53,10 +52,8 @@ export default function BuyerHome() {
             </Text>
           </View>
           
-          {/* Spacer to push Bell icon to the right */}
           <View style={{flex:1}} />
           
-          {/* Notification Bell */}
           <IconButton 
             icon="bell" 
             iconColor="white" 
@@ -77,9 +74,6 @@ export default function BuyerHome() {
         contentContainerStyle={{paddingBottom: 20}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
       >
-        {/* Flash Deal Banner (Hidden) */}
-
-        {/* 3. Product Listing */}
         <View style={styles.sectionHeader}>
           <Text variant="titleMedium" style={{fontWeight:'bold'}}>Trending Stock</Text>
           <Button mode="text" compact onPress={() => navigation.navigate('Categories')}>View All</Button>
@@ -98,7 +92,8 @@ export default function BuyerHome() {
               <Card 
                 key={p.id} 
                 style={styles.card} 
-                onPress={() => navigation.navigate('ProductDetail', { productId: p.id })}
+                // ✅ FIXED: Passing the full 'product' object, not just 'productId'
+                onPress={() => navigation.navigate('ProductDetail', { product: p })}
               >
                 <View style={styles.cardContent}>
                   <View style={styles.imagePlaceholder}><Text style={{fontSize:30}}>🧪</Text></View>
@@ -122,7 +117,6 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#004AAD', padding: 16, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   searchBar: { height: 45, backgroundColor: 'white', borderRadius: 10 },
-  banner: { width: width - 32, height: 150, marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', flexDirection:'row' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 20 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, justifyContent: 'space-between' },
   card: { width: '48%', marginBottom: 16, backgroundColor: 'white' },

@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Text, Card, Button, Avatar, Chip, ActivityIndicator, IconButton, SegmentedButtons, List } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { collection, query, where, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { useNavigation, useRoute } from '@react-navigation/native'; // ✅ Import hooks
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Order, Product } from '../../types';
 
 export default function AdminUserDetailsScreen() {
-  const navigation = useNavigation();
+  // ✅ FIX: Cast navigation to <any> to allow dynamic navigation
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user } = route.params || {}; // Safety check
+  const { user } = route.params || {}; 
 
   if (!user) {
     return (
@@ -44,17 +45,26 @@ export default function AdminUserDetailsScreen() {
 
       setOrders([...buyOrders, ...sellOrders]);
       setProducts(userProducts);
+      
       setStats({
         totalSpent: buyOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0),
         totalSales: sellOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0)
       });
+
     } catch (error) { console.error(error); } 
     finally { setLoading(false); }
   };
 
   const toggleVerification = async () => {
     await updateDoc(doc(db, 'users', user.uid), { verified: !user.verified });
+    Alert.alert("Success", `User status changed to ${!user.verified ? 'Verified' : 'Unverified'}`);
     navigation.goBack();
+  };
+
+  // ✅ FIX: Corrected Navigation Call
+  const handleInvoice = (order: Order) => {
+    // InvoiceViewer is a sibling screen, navigate directly to it
+    navigation.navigate('InvoiceViewer', { order });
   };
 
   return (
@@ -68,6 +78,7 @@ export default function AdminUserDetailsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{paddingBottom: 40}}>
+        {/* User Profile Card */}
         <Card style={styles.card}>
           <Card.Content style={{alignItems:'center'}}>
              <Avatar.Text size={60} label={user.companyName?.[0] || 'U'} style={{backgroundColor: user.verified ? '#2E7D32' : '#F57C00'}} />
@@ -77,10 +88,12 @@ export default function AdminUserDetailsScreen() {
                 <Chip icon={user.verified ? "check" : "alert"} compact style={{backgroundColor: user.verified ? '#DCFCE7' : '#FFF3E0'}}>
                   {user.verified ? 'Verified' : 'Pending'}
                 </Chip>
+                <Chip icon="account" compact>{user.userType.toUpperCase()}</Chip>
              </View>
           </Card.Content>
         </Card>
 
+        {/* Stats Row */}
         <View style={styles.statsRow}>
            <Card style={[styles.statCard, {backgroundColor:'#E3F2FD'}]}>
              <Card.Content>
@@ -96,21 +109,51 @@ export default function AdminUserDetailsScreen() {
            </Card>
         </View>
 
-        <View style={{paddingHorizontal: 16, marginBottom: 10}}>
-          <SegmentedButtons value={view} onValueChange={setView} buttons={[{ value: 'orders', label: 'Orders' }, { value: 'products', label: 'Listings' }]} />
+        <View style={{paddingHorizontal: 16, marginBottom: 15}}>
+          <SegmentedButtons 
+            value={view} 
+            onValueChange={setView} 
+            buttons={[
+              { value: 'orders', label: 'Orders History' }, 
+              { value: 'products', label: 'Product Listings' }
+            ]} 
+          />
         </View>
 
-        {loading ? <ActivityIndicator /> : (
+        {loading ? <ActivityIndicator style={{marginTop: 20}} /> : (
           <View style={{paddingHorizontal:16}}>
-             {view === 'orders' ? orders.map(o => (
-                <Card key={o.id} style={{marginBottom:10, backgroundColor:'white'}}>
-                  <List.Item title={`Order #${o.id.slice(0,6)}`} description={`₹${o.totalAmount}`} right={() => <Chip compact>{o.status}</Chip>} />
-                </Card>
-             )) : products.map(p => (
-                <Card key={p.id} style={{marginBottom:10, backgroundColor:'white'}}>
-                  <List.Item title={p.name} description={`₹${p.pricePerUnit}/${p.unit}`} right={() => <Text>{p.active ? 'Active' : 'Hidden'}</Text>} />
-                </Card>
-             ))}
+             {view === 'orders' ? (
+                orders.length === 0 ? <Text style={{textAlign:'center', color:'#999'}}>No orders found.</Text> :
+                orders.map(o => (
+                  <Card key={o.id} style={{marginBottom:10, backgroundColor:'white'}}>
+                    <Card.Title 
+                      title={`Order #${o.id.slice(0,6).toUpperCase()}`} 
+                      subtitle={new Date(o.createdAt).toDateString()}
+                      right={(props) => (
+                         // ✅ INVOICE BUTTON
+                         <IconButton {...props} icon="file-document-outline" onPress={() => handleInvoice(o)} />
+                      )}
+                    />
+                    <Card.Content>
+                      <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+                        <Text style={{fontWeight:'bold', fontSize:16}}>₹{o.totalAmount.toLocaleString()}</Text>
+                        <Chip compact mode="outlined" style={{borderColor: '#ccc'}}>{o.status}</Chip>
+                      </View>
+                    </Card.Content>
+                  </Card>
+                ))
+             ) : (
+                products.length === 0 ? <Text style={{textAlign:'center', color:'#999'}}>No products listed.</Text> :
+                products.map(p => (
+                  <Card key={p.id} style={{marginBottom:10, backgroundColor:'white'}}>
+                    <List.Item 
+                      title={p.name} 
+                      description={`Price: ₹${p.pricePerUnit}/${p.unit} • Stock: ${p.quantity}`} 
+                      right={() => <Text style={{color: p.active ? 'green' : 'red', alignSelf:'center'}}>{p.active ? 'Active' : 'Hidden'}</Text>} 
+                    />
+                  </Card>
+                ))
+             )}
           </View>
         )}
       </ScrollView>
@@ -120,9 +163,9 @@ export default function AdminUserDetailsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding: 10, backgroundColor:'white' },
-  card: { margin: 16, backgroundColor: 'white' },
+  header: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding: 10, backgroundColor:'white', elevation: 2 },
+  card: { margin: 16, backgroundColor: 'white', borderRadius: 12 },
   statsRow: { flexDirection:'row', paddingHorizontal:16, marginBottom: 20, gap: 10 },
-  statCard: { flex: 1 },
+  statCard: { flex: 1, borderRadius: 12 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });

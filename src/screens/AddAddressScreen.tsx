@@ -1,26 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { TextInput, Button, Checkbox, Text } from 'react-native-paper';
+import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
-import uuid from 'react-native-uuid'; // Use simple random string if not installed: Math.random().toString()
+import { Address } from '../types';
 
 export default function AddAddressScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user } = useAppStore();
+  const { user, setUser } = useAppStore();
   const [loading, setLoading] = useState(false);
 
+  // Check if editing
+  const addressToEdit = route.params?.addressToEdit;
+  const isEditing = !!addressToEdit;
+
   const [form, setForm] = useState({
-    label: '', // e.g. Warehouse A
+    label: '', 
     street: '',
     city: '',
     state: '',
     zipCode: '',
     country: 'India'
   });
+
+  // ✅ FIX: Pre-fill form if editing
+  useEffect(() => {
+    if (isEditing) {
+      setForm({
+        label: addressToEdit.label,
+        street: addressToEdit.street,
+        city: addressToEdit.city,
+        state: addressToEdit.state,
+        zipCode: addressToEdit.zipCode,
+        country: addressToEdit.country
+      });
+      navigation.setOptions({ title: 'Edit Address' });
+    }
+  }, [isEditing]);
 
   const handleSave = async () => {
     if (!form.label || !form.street || !form.city || !form.zipCode) {
@@ -30,19 +49,41 @@ export default function AddAddressScreen() {
 
     setLoading(true);
     try {
-      const newAddress = {
-        id: Math.random().toString(36).substr(2, 9), // Simple ID generation
-        ...form
-      };
+      const currentAddresses = user?.addresses || [];
+      let updatedAddresses: Address[] = [];
 
+      if (isEditing) {
+        // ✅ UPDATE Existing Address
+        const updatedAddress: Address = {
+          ...addressToEdit,
+          ...form
+        };
+
+        updatedAddresses = currentAddresses.map(addr => 
+          addr.id === addressToEdit.id ? updatedAddress : addr
+        );
+
+      } else {
+        // ✅ ADD New Address
+        const newAddress: Address = {
+          id: Math.random().toString(36).substr(2, 9), 
+          ...form
+        };
+        updatedAddresses = [...currentAddresses, newAddress];
+      }
+
+      // 1. Update Firestore (Replace entire array)
       const userRef = doc(db, 'users', user!.uid);
       await updateDoc(userRef, {
-        addresses: arrayUnion(newAddress)
+        addresses: updatedAddresses
       });
 
-      // Callback to refresh list
-      if (route.params?.onGoBack) {
-        route.params.onGoBack();
+      // 2. Update Global Store Immediately
+      if (setUser && user) {
+        setUser({ 
+          ...user, 
+          addresses: updatedAddresses 
+        });
       }
 
       navigation.goBack();
@@ -56,7 +97,9 @@ export default function AddAddressScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text variant="titleLarge" style={{marginBottom: 20, fontWeight:'bold'}}>New Address</Text>
+      <Text variant="titleLarge" style={{marginBottom: 20, fontWeight:'bold'}}>
+        {isEditing ? 'Edit Address' : 'New Address'}
+      </Text>
 
       <TextInput 
         label="Address Label (e.g., Main Warehouse)" 
@@ -101,7 +144,7 @@ export default function AddAddressScreen() {
       />
 
       <Button mode="contained" onPress={handleSave} loading={loading} style={styles.btn}>
-        Save Address
+        {isEditing ? 'Update Address' : 'Save Address'}
       </Button>
     </ScrollView>
   );

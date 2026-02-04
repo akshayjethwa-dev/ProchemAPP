@@ -1,10 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
-import { Text, TextInput, Button, IconButton, Avatar, useTheme } from 'react-native-paper';
+import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import * as DocumentPicker from 'expo-document-picker'; // ✅ Using existing picker
+import * as DocumentPicker from 'expo-document-picker'; 
 import { useAppStore } from '../store/appStore';
 import { addProduct, updateProduct } from '../services/productService';
+
+// --- CONSTANTS ---
+const UNIT_OPTIONS = [
+  'Kilogram (KGS)', 'Gram (GMS)', 'Quintal (QTL)', 'Metric Ton (MTQ)', 'Metric Ton (MTS)',
+  'Liter (LTR)', 'Milliliter (MLT)', 'Cubic Meter (MTQ)', 'Kiloliter (KLR)', 
+  'Piece (PCS)', 'Dozen (DOZ)', 'Number (NOS)', 'Bottle (BTL)', 'Pack (PAC)', 
+  'Unit (UNT)', 'Box (BOX)', 'Other'
+];
+
+const CATEGORY_OPTIONS = [
+  'Industrial Chemicals',
+  'Pharma Chemicals',
+  'Agriculture',
+  'Food & Beverage',
+  'Lab Research',
+  'Other'
+];
 
 export default function SellerAddChemical() {
   const navigation = useNavigation();
@@ -16,18 +33,26 @@ export default function SellerAddChemical() {
   const isEditMode = !!editingProduct;
 
   const [loading, setLoading] = useState(false);
-  const [imageFile, setImageFile] = useState<any>(null); // Store selected file
+  const [imageFile, setImageFile] = useState<any>(null);
+  
+  // --- DROPDOWN STATES ---
+  const [unitMenuVisible, setUnitMenuVisible] = useState(false);
+  const [unitDropdownValue, setUnitDropdownValue] = useState(UNIT_OPTIONS[0]);
+
+  const [categoryMenuVisible, setCategoryMenuVisible] = useState(false);
+  const [categoryDropdownValue, setCategoryDropdownValue] = useState(CATEGORY_OPTIONS[0]);
+
   const [form, setForm] = useState({
     name: '',
-    category: '',
+    category: CATEGORY_OPTIONS[0], // Default Category
     casNumber: '',
     pricePerUnit: '',
-    unit: 'kg',
+    unit: UNIT_OPTIONS[0], // Default Unit
     moq: '0',
     purity: '',
     description: '',
     origin: 'India',
-    imageUrl: '' // Store final URL
+    imageUrl: '' 
   });
 
   // Helper: Cross-Platform Alert
@@ -41,12 +66,22 @@ export default function SellerAddChemical() {
 
   useEffect(() => {
     if (isEditMode) {
+      // 1. Setup Unit Dropdown for Edit Mode
+      const existingUnit = editingProduct.unit || 'kg';
+      const isStandardUnit = UNIT_OPTIONS.includes(existingUnit);
+      setUnitDropdownValue(isStandardUnit ? existingUnit : 'Other');
+
+      // 2. Setup Category Dropdown for Edit Mode
+      const existingCat = editingProduct.category || 'Industrial Chemicals';
+      const isStandardCat = CATEGORY_OPTIONS.includes(existingCat);
+      setCategoryDropdownValue(isStandardCat ? existingCat : 'Other');
+
       setForm({
         name: editingProduct.name || '',
-        category: editingProduct.category || '',
+        category: existingCat,
         casNumber: editingProduct.casNumber || '',
         pricePerUnit: String(editingProduct.pricePerUnit || ''),
-        unit: editingProduct.unit || 'kg',
+        unit: existingUnit,
         moq: String(editingProduct.moq || '0'),
         purity: String(editingProduct.purity || ''),
         description: editingProduct.description || '',
@@ -61,7 +96,6 @@ export default function SellerAddChemical() {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
-  // ✅ Image Picker Logic
   const pickImage = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -71,7 +105,6 @@ export default function SellerAddChemical() {
 
       if (result.assets && result.assets.length > 0) {
         setImageFile(result.assets[0]);
-        // Temporarily show local URI
         setForm(prev => ({ ...prev, imageUrl: result.assets[0].uri }));
       }
     } catch (err) {
@@ -79,23 +112,43 @@ export default function SellerAddChemical() {
     }
   };
 
+  // --- HANDLERS FOR DROPDOWNS ---
+  
+  const handleUnitSelect = (val: string) => {
+    setUnitMenuVisible(false);
+    setUnitDropdownValue(val);
+    if (val !== 'Other') {
+      setForm(prev => ({ ...prev, unit: val }));
+    } else {
+      setForm(prev => ({ ...prev, unit: '' })); // Clear so user types it
+    }
+  };
+
+  const handleCategorySelect = (val: string) => {
+    setCategoryMenuVisible(false);
+    setCategoryDropdownValue(val);
+    if (val !== 'Other') {
+      setForm(prev => ({ ...prev, category: val }));
+    } else {
+      setForm(prev => ({ ...prev, category: '' })); // Clear so user types it
+    }
+  };
+
   const handleSubmit = async () => {
-    // 1. Validation
+    // Validation
     if (!form.name.trim()) return showAlert('Missing Field', 'Please enter Chemical Name.');
+    if (!form.category.trim()) return showAlert('Missing Field', 'Please select or enter a Category.');
     if (!form.pricePerUnit.trim()) return showAlert('Missing Field', 'Please enter Price.');
-    if (!form.category.trim()) return showAlert('Missing Field', 'Please enter Category.');
+    if (!form.unit.trim()) return showAlert('Missing Field', 'Please specify a Unit.');
 
     setLoading(true);
     try {
-      // 2. Mock Image Upload (Replace with real Firebase Storage later)
       let finalImageUrl = form.imageUrl;
       if (imageFile) {
-        // Simulating upload delay...
+        // Simulating upload...
         await new Promise(r => setTimeout(r, 1000));
-        // In real app: finalImageUrl = await uploadToFirebase(imageFile);
       }
 
-      // 3. Prepare Data
       const productData = {
         ...form,
         imageUrl: finalImageUrl,
@@ -114,7 +167,6 @@ export default function SellerAddChemical() {
         productData.createdAt = new Date().toISOString();
       }
 
-      // 4. Send to Firebase
       if (isEditMode) {
         await updateProduct(editingProduct.id, productData);
         showAlert('Success', 'Product updated!');
@@ -143,7 +195,7 @@ export default function SellerAddChemical() {
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
-        {/* ✅ IMAGE UPLOAD SECTION */}
+        {/* IMAGE UPLOAD SECTION */}
         <View style={styles.imageSection}>
           <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
             {form.imageUrl ? (
@@ -159,6 +211,8 @@ export default function SellerAddChemical() {
         </View>
 
         <View style={styles.form}>
+          
+          {/* CHEMICAL NAME */}
           <TextInput 
             label="Chemical Name *" 
             value={form.name} 
@@ -167,14 +221,37 @@ export default function SellerAddChemical() {
             style={styles.input} 
           />
           
+          {/* ROW: CATEGORY (Dropdown) & CAS NUMBER */}
           <View style={styles.row}>
-            <TextInput 
-              label="Category *" 
-              value={form.category} 
-              onChangeText={t => handleChange('category', t)} 
-              mode="outlined" 
-              style={[styles.input, {flex:1, marginRight:10}]} 
-            />
+            <View style={{flex: 1, marginRight: 10}}>
+              <Menu
+                visible={categoryMenuVisible}
+                onDismiss={() => setCategoryMenuVisible(false)}
+                anchor={
+                  <TouchableOpacity onPress={() => setCategoryMenuVisible(true)}>
+                    <TextInput
+                      label="Category *"
+                      value={categoryDropdownValue}
+                      mode="outlined"
+                      editable={false}
+                      right={<TextInput.Icon icon="chevron-down" onPress={() => setCategoryMenuVisible(true)} />}
+                      style={{backgroundColor:'white', marginBottom: 15}}
+                    />
+                  </TouchableOpacity>
+                }
+              >
+                <ScrollView style={{maxHeight: 250}}>
+                  {CATEGORY_OPTIONS.map((opt) => (
+                    <Menu.Item 
+                      key={opt} 
+                      onPress={() => handleCategorySelect(opt)} 
+                      title={opt} 
+                    />
+                  ))}
+                </ScrollView>
+              </Menu>
+            </View>
+
             <TextInput 
               label="CAS Number" 
               value={form.casNumber} 
@@ -184,6 +261,19 @@ export default function SellerAddChemical() {
             />
           </View>
 
+          {/* Conditional Input for "Other" Category */}
+          {categoryDropdownValue === 'Other' && (
+            <TextInput 
+              label="Specify Custom Category *" 
+              value={form.category} 
+              onChangeText={t => handleChange('category', t)} 
+              mode="outlined" 
+              placeholder="e.g. Polymers"
+              style={[styles.input, {marginTop: -10}]} 
+            />
+          )}
+
+          {/* ROW: PRICE & UNIT (Dropdown) */}
           <View style={styles.row}>
             <TextInput 
               label="Price (₹) *" 
@@ -193,16 +283,50 @@ export default function SellerAddChemical() {
               mode="outlined" 
               style={[styles.input, {flex:1, marginRight:10}]} 
             />
+            
+            <View style={{flex: 1}}>
+              <Menu
+                visible={unitMenuVisible}
+                onDismiss={() => setUnitMenuVisible(false)}
+                anchor={
+                  <TouchableOpacity onPress={() => setUnitMenuVisible(true)}>
+                    <TextInput
+                      label="Unit *"
+                      value={unitDropdownValue}
+                      mode="outlined"
+                      editable={false}
+                      right={<TextInput.Icon icon="chevron-down" onPress={() => setUnitMenuVisible(true)} />}
+                      style={{backgroundColor:'white', marginBottom: 15}}
+                    />
+                  </TouchableOpacity>
+                }
+              >
+                <ScrollView style={{maxHeight: 250}}>
+                  {UNIT_OPTIONS.map((opt) => (
+                    <Menu.Item 
+                      key={opt} 
+                      onPress={() => handleUnitSelect(opt)} 
+                      title={opt} 
+                    />
+                  ))}
+                </ScrollView>
+              </Menu>
+            </View>
+          </View>
+
+          {/* Conditional Input for "Other" Unit */}
+          {unitDropdownValue === 'Other' && (
             <TextInput 
-              label="Unit" 
-              placeholder="kg, ton"
+              label="Specify Custom Unit *" 
               value={form.unit} 
               onChangeText={t => handleChange('unit', t)} 
               mode="outlined" 
-              style={[styles.input, {flex:0.6}]} 
+              placeholder="e.g. Gallon"
+              style={[styles.input, {marginTop: -10}]} 
             />
-          </View>
+          )}
 
+          {/* ROW: MOQ & PURITY */}
           <View style={styles.row}>
             <TextInput 
               label="Min Order (MOQ)" 
@@ -222,6 +346,7 @@ export default function SellerAddChemical() {
             />
           </View>
           
+          {/* DESCRIPTION */}
           <TextInput 
             label="Description / Specs" 
             multiline 

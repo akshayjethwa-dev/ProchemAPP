@@ -9,6 +9,7 @@ import SellerOrdersScreen from '../screens/SellerOrdersScreen';
 import SellerManageChemicals from '../screens/SellerManageChemicals';
 import SellerAddChemical from '../screens/SellerAddChemical';
 import AccountScreen from '../screens/AccountScreen';
+import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -80,6 +81,7 @@ export default function SellerNavigator() {
           headerBackTitle: 'Back'
         }} 
       />
+      <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

@@ -12,7 +12,7 @@ export default function AddressListScreen() {
   
   // Get user data from store
   const { user } = useAppStore();
-  const addresses = user?.addresses || []; // ✅ Fix: Ensure we get the array
+  const addresses = user?.addresses || []; 
 
   // Check if we are in "Selection Mode" (e.g. from Checkout)
   const isSelectable = route.params?.selectable || false;
@@ -29,7 +29,12 @@ export default function AddressListScreen() {
   };
 
   const handleAddAddress = () => {
-    navigation.navigate('AddAddress');
+    navigation.navigate('AddAddress'); // Navigate without params for "Add New"
+  };
+
+  const handleEditAddress = (address: Address) => {
+    // ✅ FIX: Navigate with addressToEdit param
+    navigation.navigate('AddAddress', { addressToEdit: address });
   };
 
   const renderItem = ({ item }: { item: Address }) => (
@@ -41,7 +46,7 @@ export default function AddressListScreen() {
         {isSelectable && (
           <RadioButton 
             value={item.id} 
-            status="unchecked" // Visual only, logic handled by press
+            status="unchecked" 
             onPress={() => handleSelectAddress(item)} 
           />
         )}
@@ -55,8 +60,10 @@ export default function AddressListScreen() {
             {item.city}, {item.state} - {item.zipCode}
           </Text>
         </View>
+        
+        {/* ✅ FIX: Enabled Edit Button */}
         {!isSelectable && (
-          <IconButton icon="pencil" size={20} onPress={() => Alert.alert('Edit', 'Edit feature coming soon')} />
+          <IconButton icon="pencil" size={20} onPress={() => handleEditAddress(item)} />
         )}
       </Card.Content>
     </Card>
@@ -79,7 +86,7 @@ export default function AddressListScreen() {
           data={addresses}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={{padding: 16}}
+          contentContainerStyle={{padding: 16, paddingBottom: 80}}
         />
       )}
 

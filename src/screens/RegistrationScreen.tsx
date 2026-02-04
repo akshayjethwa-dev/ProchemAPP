@@ -15,17 +15,27 @@ import {
   HelperText,
   useTheme,
 } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { registerUser } from '../services/authService';
-import { verifyGSTAndFetchDetails } from '../services/gstService'; // ✅ Updated Import
+import { verifyGSTAndFetchDetails } from '../services/gstService';
+
+// ✅ Add navigation types
+type RootStackParamList = {
+  Login: undefined;
+  Registration: { role?: string } | undefined;
+};
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function RegistrationScreen() {
-  const navigation = useNavigation<any>();
-  const route = useRoute<any>();
+  const navigation = useNavigation<NavigationProp>();
+  const route = useRoute();
   const theme = useTheme();
 
   // Get params if available, otherwise default
-  const { role } = route.params || { role: 'buyer' };
+  const { role } = (route.params as { role?: string }) || { role: 'buyer' };
 
   const [loading, setLoading] = useState(false);
   const [gstLoading, setGstLoading] = useState(false);
@@ -114,12 +124,12 @@ export default function RegistrationScreen() {
       if (result.isValid) {
         setGstVerified(true);
         setGstData({ legalName: result.legalName, address: result.address });
-        
+
         // ✅ Auto-fill Company Name if available
         if (result.legalName) {
           setCompanyName(result.legalName);
         }
-        
+
         Alert.alert('Success', `Verified: ${result.legalName || 'GST Valid'}`);
       } else {
         setGstVerified(false);
@@ -148,11 +158,11 @@ export default function RegistrationScreen() {
         password,
         companyName: companyName.trim(),
         phoneNumber: phoneNumber.trim(),
-        userType: role || 'buyer', // Use role passed from previous screen
+        userType: role || 'buyer',
         gstin: gstin.toUpperCase(),
         gstVerified: true,
-        address: gstData?.address || '', // Save address if returned from API
-        verificationStatus: 'PENDING',   // B2B accounts usually pending initially
+        address: gstData?.address || '',
+        verificationStatus: 'PENDING',
       };
 
       await registerUser(registrationData);
@@ -175,168 +185,200 @@ export default function RegistrationScreen() {
     setGstin('');
     setGstVerified(false);
     setGstData(null);
-    setCompanyName(''); // Optional: clear company name too
+    setCompanyName('');
     setErrors({ ...errors, gstin: '' });
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: 'white' }}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* Header */}
-        <View style={styles.headerContainer}>
-          <Text variant="displaySmall" style={{ fontWeight: 'bold', color: theme.colors.primary }}>
-            Create Account
-          </Text>
-          <Text variant="bodyLarge" style={{ color: '#64748B', marginTop: 5 }}>
-            Join the Chemical Marketplace
-          </Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={styles.headerContainer}>
+            <Text variant="headlineMedium" style={{ fontWeight: 'bold', color: '#1E293B' }}>
+              Create Account
+            </Text>
+            <Text variant="bodyMedium" style={{ color: '#64748B', marginTop: 8 }}>
+              Join the Chemical Marketplace
+            </Text>
+          </View>
 
-        <View style={styles.formContainer}>
-          
-          {/* --- GST SECTION (First Priority for B2B) --- */}
-          <TextInput
-            label="GSTIN (15 characters) *"
-            value={gstin}
-            onChangeText={(text) => {
-              setGstin(text.toUpperCase());
-              setGstVerified(false); // Reset verification on edit
-              if (errors.gstin) setErrors({ ...errors, gstin: '' });
-            }}
-            mode="outlined"
-            maxLength={15}
-            placeholder="22AAAAA0000A1Z5"
-            left={<TextInput.Icon icon="card-account-details-outline" />}
-            right={gstVerified ? <TextInput.Icon icon="check-circle" color="green" /> : null}
-            editable={!gstVerified}
-            style={[styles.input, gstVerified && styles.inputDisabled]}
-            error={!!errors.gstin}
-          />
-          
-          {errors.gstin ? (
-            <HelperText type="error" visible={true}>{errors.gstin}</HelperText>
-          ) : (
-             !gstVerified && <HelperText type="info" visible={true}>Format: 15 characters (e.g. 22AAAAA0000A1Z5)</HelperText>
-          )}
+          <View style={styles.formContainer}>
+            {/* --- GST SECTION (First Priority for B2B) --- */}
+            <TextInput
+              label="GST Number (GSTIN)"
+              value={gstin}
+              onChangeText={(text) => {
+                setGstin(text.toUpperCase());
+                setGstVerified(false);
+                if (errors.gstin) setErrors({ ...errors, gstin: '' });
+              }}
+              mode="outlined"
+              maxLength={15}
+              placeholder="22AAAAA0000A1Z5"
+              left={<TextInput.Icon icon="certificate" />}
+              right={gstVerified ? <TextInput.Icon icon="check-circle" color="#10B981" /> : null}
+              editable={!gstVerified}
+              style={[styles.input, gstVerified && styles.inputDisabled]}
+              error={!!errors.gstin}
+            />
 
-          {!gstVerified && (
+            {errors.gstin ? (
+              <HelperText type="error" visible={true}>
+                {errors.gstin}
+              </HelperText>
+            ) : (
+              !gstVerified && (
+                <HelperText type="info" visible={true}>
+                  Format: 15 characters (e.g. 22AAAAA0000A1Z5)
+                </HelperText>
+              )
+            )}
+
+            {!gstVerified && (
+              <Button
+                mode="contained"
+                onPress={handleVerifyGST}
+                loading={gstLoading}
+                disabled={gstLoading || gstin.length !== 15}
+                style={styles.verifyBtn}
+              >
+                {gstLoading ? 'Verifying...' : 'Verify GSTIN'}
+              </Button>
+            )}
+
+            {/* Verification Success Message */}
+            {gstVerified && (
+              <View style={styles.successCard}>
+                <Text style={styles.successTitle}>✓ Verified Supplier</Text>
+                <Text style={styles.successText}>{gstData?.legalName}</Text>
+                <TouchableOpacity onPress={handleClearGST}>
+                  <Text style={styles.changeLink}>Change</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* --- COMPANY DETAILS --- */}
+            <TextInput
+              label="Company Name"
+              value={companyName}
+              onChangeText={(text) => {
+                setCompanyName(text);
+                if (errors.companyName) setErrors({ ...errors, companyName: '' });
+              }}
+              mode="outlined"
+              left={<TextInput.Icon icon="office-building" />}
+              error={!!errors.companyName}
+              style={styles.input}
+              disabled={gstVerified && !!gstData?.legalName}
+            />
+            <HelperText type="error" visible={!!errors.companyName}>
+              {errors.companyName}
+            </HelperText>
+
+            <TextInput
+              label="Email Address"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (errors.email) setErrors({ ...errors, email: '' });
+              }}
+              mode="outlined"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              left={<TextInput.Icon icon="email-outline" />}
+              error={!!errors.email}
+              style={styles.input}
+            />
+            <HelperText type="error" visible={!!errors.email}>
+              {errors.email}
+            </HelperText>
+
+            <TextInput
+              label="Phone Number"
+              value={phoneNumber}
+              onChangeText={(text) => {
+                setPhoneNumber(text.replace(/[^0-9]/g, ''));
+                if (errors.phoneNumber) setErrors({ ...errors, phoneNumber: '' });
+              }}
+              mode="outlined"
+              keyboardType="phone-pad"
+              maxLength={10}
+              left={<TextInput.Icon icon="phone" />}
+              error={!!errors.phoneNumber}
+              style={styles.input}
+            />
+            <HelperText type="error" visible={!!errors.phoneNumber}>
+              {errors.phoneNumber}
+            </HelperText>
+
+            <TextInput
+              label="Password"
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (errors.password) setErrors({ ...errors, password: '' });
+              }}
+              mode="outlined"
+              secureTextEntry={secureTextEntry}
+              left={<TextInput.Icon icon="lock-outline" />}
+              right={
+                <TextInput.Icon
+                  icon={secureTextEntry ? 'eye-off' : 'eye'}
+                  onPress={() => setSecureTextEntry(!secureTextEntry)}
+                />
+              }
+              error={!!errors.password}
+              style={styles.input}
+            />
+            <HelperText type="error" visible={!!errors.password}>
+              {errors.password}
+            </HelperText>
+
+            {/* Register Button */}
             <Button
-              mode="contained-tonal"
-              onPress={handleVerifyGST}
-              loading={gstLoading}
-              disabled={gstLoading || gstin.length < 15}
-              style={styles.verifyBtn}
+              mode="contained"
+              onPress={handleRegister}
+              loading={loading}
+              disabled={loading || !gstVerified}
+              style={[styles.btn, (!gstVerified || loading) && styles.btnDisabled]}
+              contentStyle={{ paddingVertical: 8 }}
             >
-              {gstLoading ? 'Verifying...' : 'Verify GSTIN'}
+              Create Account
             </Button>
-          )}
 
-          {/* Verification Success Message */}
-          {gstVerified && (
-            <View style={styles.successCard}>
-              <Text style={styles.successTitle}>✓ Verified Supplier</Text>
-              <Text style={styles.successText}>{gstData?.legalName}</Text>
-              <TouchableOpacity onPress={handleClearGST}>
-                 <Text style={styles.changeLink}>Change</Text>
+            {/* Footer */}
+            <View style={styles.footer}>
+              <Text>Already have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                <Text style={{ fontWeight: 'bold', color: theme.colors.primary }}>Login</Text>
               </TouchableOpacity>
             </View>
-          )}
-
-          {/* --- COMPANY DETAILS --- */}
-          <TextInput
-            label="Company Name *"
-            value={companyName}
-            onChangeText={setCompanyName}
-            mode="outlined"
-            left={<TextInput.Icon icon="domain" />}
-            error={!!errors.companyName}
-            style={styles.input}
-            // Only disable if auto-filled and verified to prevent tampering
-            disabled={gstVerified && !!gstData?.legalName} 
-          />
-          <HelperText type="error" visible={!!errors.companyName}>{errors.companyName}</HelperText>
-
-          <TextInput
-            label="Email Address *"
-            value={email}
-            onChangeText={setEmail}
-            mode="outlined"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            left={<TextInput.Icon icon="email-outline" />}
-            error={!!errors.email}
-            style={styles.input}
-          />
-          <HelperText type="error" visible={!!errors.email}>{errors.email}</HelperText>
-
-          <TextInput
-            label="Phone Number *"
-            value={phoneNumber}
-            onChangeText={(text) => setPhoneNumber(text.replace(/[^0-9]/g, ''))}
-            mode="outlined"
-            keyboardType="phone-pad"
-            maxLength={10}
-            left={<TextInput.Icon icon="phone" />}
-            error={!!errors.phoneNumber}
-            style={styles.input}
-          />
-          <HelperText type="error" visible={!!errors.phoneNumber}>{errors.phoneNumber}</HelperText>
-
-          <TextInput
-            label="Password *"
-            value={password}
-            onChangeText={setPassword}
-            mode="outlined"
-            secureTextEntry={secureTextEntry}
-            left={<TextInput.Icon icon="lock-outline" />}
-            right={
-              <TextInput.Icon
-                icon={secureTextEntry ? 'eye' : 'eye-off'}
-                onPress={() => setSecureTextEntry(!secureTextEntry)}
-              />
-            }
-            error={!!errors.password}
-            style={styles.input}
-          />
-          <HelperText type="error" visible={!!errors.password}>{errors.password}</HelperText>
-
-          {/* Register Button */}
-          <Button
-            mode="contained"
-            onPress={handleRegister}
-            loading={loading}
-            disabled={loading || !gstVerified}
-            style={[styles.btn, !gstVerified && styles.btnDisabled]}
-            contentStyle={{ height: 50 }}
-          >
-            Create Account
-          </Button>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={{ color: '#64748B' }}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Login</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
   container: {
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+    paddingBottom: 40,
     backgroundColor: 'white',
   },
   headerContainer: {

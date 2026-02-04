@@ -13,7 +13,6 @@ export default function AccountScreen() {
   const { user, viewMode, setViewMode } = useAppStore();
   const theme = useTheme();
   
-  // State for Switch Confirmation Modal
   const [showSwitchModal, setShowSwitchModal] = useState(false);
   const [switching, setSwitching] = useState(false);
 
@@ -31,7 +30,6 @@ export default function AccountScreen() {
 
     const targetMode = viewMode === 'buyer' ? 'seller' : 'buyer';
     
-    // Simulate short delay for better UX
     setTimeout(() => {
       console.log("Switching to:", targetMode);
       setViewMode(targetMode);
@@ -165,11 +163,12 @@ export default function AccountScreen() {
           />
           <Divider style={{marginLeft: 60}} />
 
+          {/* ✅ FIX: Navigate to AddressList instead of EditProfile */}
           <List.Item 
             title="Manage Address" 
             left={() => <List.Icon icon="map-marker-outline" color="#64748B" />} 
             right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => navigation.navigate('EditProfile')}
+            onPress={() => navigation.navigate('AddressList')} 
             style={styles.listItem}
           />
           <Divider style={{marginLeft: 60}} />
@@ -239,17 +238,11 @@ export default function AccountScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'white' },
   header: { padding: 24, flexDirection: 'row', alignItems: 'center' },
-  
-  // Custom Switch Card
   switchCard: { borderWidth: 1, borderRadius: 16, elevation: 2 },
   switchContent: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  
-  // List Styles
   listSection: { backgroundColor: 'white' },
   subheader: { color: '#94A3B8', fontWeight: 'bold', fontSize: 12, letterSpacing: 1 },
   listItem: { paddingVertical: 12 },
-
-  // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 20, width: '100%', maxWidth: 360, elevation: 10 },
   modalHeader: { alignItems: 'center', marginBottom: 10 },

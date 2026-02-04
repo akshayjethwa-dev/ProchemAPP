@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Alert, Platform, Linking } from 'react-native';
 import { Text, Button, IconButton, useTheme, Divider, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -17,13 +17,43 @@ export default function ProductDetail() {
   // Get initial product data
   const product = products.find(p => p.id === productId) || paramProduct || ({} as Product);
 
-  const [qty, setQty] = useState(product.moq || 10);
+  // Default Constants
+  const minQty = product.moq || 10;
+  const unit = product.unit || 'kg';
   const price = product.pricePerUnit || product.price || 0;
-  
-  // NOTE: Seller fetching logic removed to maintain anonymity.
 
-  const handleNegotiate = () => {
-    navigation.navigate('Negotiation', { product });
+  // State for Quantity
+  const [qty, setQty] = useState(minQty);
+
+  // Ensure qty resets if product changes
+  useEffect(() => {
+    setQty(minQty);
+  }, [product]);
+
+  // --- Handlers for Quantity ---
+  const increaseQty = () => setQty((prev: number) => prev + 10);
+  
+  const decreaseQty = () => {
+    if (qty > minQty) {
+      setQty((prev: number) => prev - 10);
+    } else {
+      Alert.alert('Minimum Order Limit', `You cannot order less than ${minQty} ${unit}.`);
+    }
+  };
+
+  // --- Handler for Email Inquiry (Replaces Chatbot) ---
+  const handleEnquire = async () => {
+    const subject = `Inquiry for ${product.name}`;
+    const body = `Hello Team,\n\nI am interested in purchasing:\n\nProduct: ${product.name}\nQuantity: ${qty} ${unit}\n\nPlease provide me with a quotation and availability.\n\nRegards,`;
+    
+    // Replace with your support email
+    const emailUrl = `mailto:support@prochem.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    try {
+      await Linking.openURL(emailUrl);
+    } catch (err) {
+      Alert.alert('Error', 'No email app found on this device.');
+    }
   };
 
   const handleCompare = () => {
@@ -39,21 +69,17 @@ export default function ProductDetail() {
     addToCart({
       ...product,
       id: product.id,
-      quantity: qty,
+      quantity: qty, // Uses the selected quantity
       pricePerUnit: price,
-      unit: product.unit || 'kg',
+      unit: unit,
       sellerId: product.sellerId || 'unknown',
       name: product.name,
       category: product.category,
       price: price
     });
     
-    // ✅ FIX: Correct Navigation Path to Cart
-    // Cart is nested inside BuyerTabs, which is inside BuyerApp
-    navigation.navigate('BuyerApp', { 
-      screen: 'BuyerTabs',
-      params: { screen: 'Cart' }
-    });
+    // Navigate to Cart
+    navigation.navigate('BuyerTabs', { screen: 'Cart' });
   };
 
   const handleDownloadMSDS = () => Alert.alert('Download', 'Downloading Material Safety Data Sheet (MSDS)...');
@@ -94,33 +120,28 @@ export default function ProductDetail() {
               <Text variant="headlineSmall" style={{color: theme.colors.primary, fontWeight:'bold'}}>
                 ₹{price}
               </Text>
-              <Text variant="labelSmall">per {product.unit}</Text>
+              <Text variant="labelSmall">per {unit}</Text>
             </View>
           </View>
 
           <Divider style={styles.divider} />
 
-          {/* ✅ UPDATED: Anonymized Seller Details */}
+          {/* Supplier Info */}
           <Text variant="titleMedium" style={styles.sectionTitle}>Supplier Info</Text>
           <View style={styles.sellerCard}>
             <View style={styles.sellerRow}>
               <View style={styles.sellerIcon}><Text>🛡️</Text></View>
               <View>
-                {/* Generic Name */}
                 <Text variant="titleMedium" style={{fontWeight:'bold'}}>Prochem Verified Supplier</Text>
-                
-                {/* Only show generic City/State if available, NOT full address */}
                 <Text variant="bodySmall" style={{color:'#666'}}>
                   Origin: {product.origin || 'India'}
                 </Text>
-                
                 <Text variant="bodySmall" style={{color:'#2E7D32', fontSize: 10, fontWeight:'bold', marginTop: 2}}>
                   ✓ Quality Checked
                 </Text>
               </View>
               <View style={{flex:1}}/>
               <View style={styles.ratingBadge}>
-                {/* Keep rating as it reflects product quality, not identity */}
                 <Text style={styles.ratingText}>⭐ {product.sellerRating || '4.5'}</Text>
               </View>
             </View>
@@ -152,6 +173,45 @@ export default function ProductDetail() {
             </Button>
           </View>
 
+          <Divider style={styles.divider} />
+
+          {/* ✅ 1. NEW QUANTITY SELECTOR SECTION */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>Select Quantity</Text>
+          <View style={styles.qtyContainer}>
+             <View style={styles.counterRow}>
+                <IconButton 
+                  icon="minus" 
+                  mode="contained-tonal" 
+                  size={20}
+                  onPress={decreaseQty} 
+                />
+                <View style={styles.qtyDisplay}>
+                   <Text variant="titleLarge" style={{fontWeight:'bold'}}>{qty} {unit}</Text>
+                </View>
+                <IconButton 
+                  icon="plus" 
+                  mode="contained-tonal" 
+                  size={20}
+                  onPress={increaseQty} 
+                />
+             </View>
+             
+             {/* Minimum Order Warning */}
+             <Text style={styles.moqText}>
+                *Minimum Order Quantity: {minQty} {unit}
+             </Text>
+
+             {/* Total Price Calculation */}
+             <View style={styles.totalRow}>
+                <Text variant="bodyLarge">Estimated Total:</Text>
+                <Text variant="titleMedium" style={{color: theme.colors.primary, fontWeight:'bold'}}>
+                   ₹{(price * qty).toLocaleString()}
+                </Text>
+             </View>
+          </View>
+
+          <Divider style={styles.divider} />
+
           <Text variant="titleMedium" style={styles.sectionTitle}>Description</Text>
           <Text variant="bodyMedium" style={styles.desc}>{product.description || 'No description provided.'}</Text>
         </View>
@@ -161,7 +221,7 @@ export default function ProductDetail() {
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
         <Button 
           mode="outlined" 
-          onPress={handleNegotiate} 
+          onPress={handleEnquire} /* ✅ 2. Updated to use Email Handler */
           style={[styles.actionBtn, {borderColor: theme.colors.primary, borderWidth: 2}]}
           textColor={theme.colors.primary}
         >
@@ -201,5 +261,12 @@ const styles = StyleSheet.create({
   sellerIcon: { width: 40, height: 40, backgroundColor: 'white', borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   desc: { color: '#4B5563', lineHeight: 24 },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', elevation: 20 },
-  actionBtn: { flex: 1, borderRadius: 12, paddingVertical: 4 }
+  actionBtn: { flex: 1, borderRadius: 12, paddingVertical: 4 },
+  
+  // New Styles for Quantity Section
+  qtyContainer: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 12, marginBottom: 10 },
+  counterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  qtyDisplay: { flex: 1, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginHorizontal: 20 },
+  moqText: { fontSize: 12, color: '#DC2626', marginTop: 10, textAlign: 'center', fontStyle: 'italic' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E5E7EB' }
 });

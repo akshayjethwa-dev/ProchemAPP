@@ -2,14 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { View, FlatList, Alert, Modal, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Text, Button, Card, Divider, TextInput, Chip, SegmentedButtons, IconButton, useTheme, ActivityIndicator, Avatar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+// ✅ IMPORT useNavigation
+import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import * as DocumentPicker from 'expo-document-picker'; // ✅ Import Document Picker
+import * as DocumentPicker from 'expo-document-picker'; 
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { sellerAcceptOrder, sellerDeclineOrder } from '../services/orderService';
 import { Order } from '../types';
 
 export default function SellerOrdersScreen() {
+  // ✅ INITIALIZE NAVIGATION
+  const navigation = useNavigation<any>();
   const { user } = useAppStore();
   const theme = useTheme();
   
@@ -21,9 +25,8 @@ export default function SellerOrdersScreen() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDocModal, setShowDocModal] = useState(false);
   
-  // ✅ Updated State to hold the File object
   const [docs, setDocs] = useState({ 
-    qualityFile: null as any, // Holds the file object
+    qualityFile: null as any, 
     purity: '', 
     grade: '' 
   });
@@ -35,7 +38,6 @@ export default function SellerOrdersScreen() {
       return;
     }
 
-    // Sort Client-Side (Newest First) to avoid index issues
     const q = query(collection(db, 'orders'), where('sellerId', '==', user.uid));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -70,11 +72,15 @@ export default function SellerOrdersScreen() {
     );
   };
 
-  // ✅ New Helper: Pick Document
+  const handleDownloadInvoice = (order: Order) => {
+    // ✅ NAVIGATION CALL NOW WORKS
+    navigation.navigate('InvoiceViewer', { order: order });
+  };
+
   const pickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', // Allow all file types (PDF, Images)
+        type: '*/*', 
         copyToCacheDirectory: true,
       });
 
@@ -86,10 +92,7 @@ export default function SellerOrdersScreen() {
     }
   };
 
-  // ✅ New Helper: Mock Upload (Replace with Real Firebase Storage later)
   const uploadFileToStorage = async (file: any) => {
-    // 1. In a real app, you would use: ref(storage, 'path'), uploadBytes, getDownloadURL
-    // 2. For now, we simulate a delay and return a fake URL so the flow works.
     return new Promise<string>((resolve) => {
       setTimeout(() => {
         resolve(`https://firebasestorage.googleapis.com/v0/b/mock-project/o/${file.name}?alt=media`);
@@ -100,7 +103,6 @@ export default function SellerOrdersScreen() {
   const submitDocuments = async () => {
     if (!selectedOrder) return;
     
-    // Validation
     if (!docs.qualityFile) {
       Alert.alert('Missing Document', 'Please upload the Quality Report document.');
       return;
@@ -112,13 +114,11 @@ export default function SellerOrdersScreen() {
 
     setSubmitting(true);
     try {
-      // 1. Upload File
       const fileUrl = await uploadFileToStorage(docs.qualityFile);
 
-      // 2. Update Order
       await sellerAcceptOrder(selectedOrder.id, {
-        qualityReport: fileUrl,     // Save the URL, not the file object
-        fileName: docs.qualityFile.name, // Save name for display
+        qualityReport: fileUrl,     
+        fileName: docs.qualityFile.name, 
         purityCertificate: docs.purity,
         gradeSheet: docs.grade
       });
@@ -143,13 +143,20 @@ export default function SellerOrdersScreen() {
             <Text variant="titleMedium" style={{fontWeight:'bold'}}>Order #{item.id.slice(0,6).toUpperCase()}</Text>
             <Text variant="bodySmall" style={{color:'#666'}}>{new Date(item.createdAt).toDateString()}</Text>
           </View>
-          <Chip 
-            compact 
-            style={{backgroundColor: isRequest ? '#FFF3E0' : '#E8F5E9'}} 
-            textStyle={{color: isRequest ? '#E65100' : '#2E7D32', fontWeight:'bold', fontSize:10}}
-          >
-            {item.status.replace('_', ' ')}
-          </Chip>
+          <View style={{alignItems: 'flex-end'}}>
+             <Chip 
+               compact 
+               style={{backgroundColor: isRequest ? '#FFF3E0' : '#E8F5E9', marginBottom: 4}} 
+               textStyle={{color: isRequest ? '#E65100' : '#2E7D32', fontWeight:'bold', fontSize:10}}
+             >
+               {item.status.replace('_', ' ')}
+             </Chip>
+             <TouchableOpacity onPress={() => handleDownloadInvoice(item)}>
+               <Text style={{color: '#004AAD', fontSize: 12, fontWeight:'bold', textDecorationLine: 'underline'}}>
+                 Download Invoice
+               </Text>
+             </TouchableOpacity>
+          </View>
         </View>
         <Divider style={{marginVertical: 10}} />
         <Card.Content style={{paddingHorizontal:0}}>
@@ -213,7 +220,7 @@ export default function SellerOrdersScreen() {
         />
       )}
 
-      {/* ✅ DOCUMENT UPLOAD MODAL */}
+      {/* DOCUMENT UPLOAD MODAL */}
       <Modal visible={showDocModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -226,7 +233,6 @@ export default function SellerOrdersScreen() {
               Upload the quality report/certificate for Admin approval.
             </Text>
 
-            {/* 1. File Upload Area */}
             <View style={styles.uploadArea}>
               {docs.qualityFile ? (
                 <View style={styles.filePreview}>
@@ -246,7 +252,6 @@ export default function SellerOrdersScreen() {
               )}
             </View>
 
-            {/* 2. Metadata Inputs */}
             <Text style={{fontWeight:'bold', marginBottom:8, marginTop:10}}>Verify Values</Text>
             <View style={{flexDirection:'row'}}>
               <TextInput 
@@ -291,12 +296,9 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start' },
   productRow: { flexDirection:'row', justifyContent:'space-between', marginBottom: 6 },
   infoBox: { marginTop: 10, padding: 8, backgroundColor: '#FFF3E0', borderRadius: 6, alignSelf:'flex-start' },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 16 },
   input: { marginBottom: 12, backgroundColor: 'white' },
-  
-  // New Upload Styles
   uploadArea: { marginBottom: 15 },
   uploadBtn: { borderStyle:'dashed', borderWidth:1, borderColor:'#004AAD', borderRadius:10, padding:20, alignItems:'center', backgroundColor:'#F5F9FF' },
   filePreview: { flexDirection:'row', alignItems:'center', padding:10, backgroundColor:'#F5F5F5', borderRadius:10, borderLeftWidth:4, borderLeftColor:'#004AAD' }

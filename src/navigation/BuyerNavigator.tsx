@@ -5,20 +5,32 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, Badge, useTheme } from 'react-native-paper';
 import { useAppStore } from '../store/appStore';
 
-// Import Tab Screens
+// Import Screens
 import BuyerHome from '../screens/BuyerHome';
 import CategoriesScreen from '../screens/CategoriesScreen';
 import CartScreen from '../screens/CartScreen';
 import OrderHistoryScreen from '../screens/OrderHistoryScreen';
 import AccountScreen from '../screens/AccountScreen';
-
-// Import Checkout & Address Screens
 import CheckoutScreen from '../screens/CheckoutScreen';
 import AddressListScreen from '../screens/AddressListScreen';
 import AddAddressScreen from '../screens/AddAddressScreen';
+import ProductDetail from '../screens/ProductDetail';
+import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
+
+// ✅ 1. Define the ParamList for strict typing
+// This tells the navigator that 'ProductDetail' MUST receive a 'product' param
+export type BuyerStackParamList = {
+  BuyerTabs: undefined;
+  ProductDetail: { product: any }; // Using 'any' here ensures compatibility with the component's type
+  Checkout: undefined;
+  AddressList: undefined;
+  AddAddress: undefined;
+};
 
 const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator();
+
+// ✅ 2. Pass the ParamList to the Stack Creator
+const Stack = createNativeStackNavigator<BuyerStackParamList>();
 
 function BuyerTabs() {
   const theme = useTheme();
@@ -90,7 +102,6 @@ export default function BuyerNavigator() {
     <Stack.Navigator 
       screenOptions={{ 
         headerShown: true, 
-        // ✅ FIX: Use 'headerBackTitle' instead of 'headerBackTitleVisible'
         headerBackTitle: '' 
       }}
     >
@@ -102,7 +113,14 @@ export default function BuyerNavigator() {
         options={{ headerShown: false }} 
       />
 
-      {/* Checkout Flow Screens (Shows Header) */}
+      {/* Product Detail Screen */}
+      <Stack.Screen 
+        name="ProductDetail" 
+        component={ProductDetail} 
+        options={{ headerShown: false }} 
+      />
+
+      {/* Checkout Flow Screens */}
       <Stack.Screen 
         name="Checkout" 
         component={CheckoutScreen} 
@@ -118,6 +136,7 @@ export default function BuyerNavigator() {
         component={AddAddressScreen} 
         options={{ title: 'Add New Address' }} 
       />
+      <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} options={{ headerShown: false }} />
 
     </Stack.Navigator>
   );
