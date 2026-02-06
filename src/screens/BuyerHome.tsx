@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Dimensions, RefreshControl, Alert } from 'react-native';
-import { Text, Searchbar, IconButton, Card, Button, useTheme, ActivityIndicator } from 'react-native-paper';
+import { Text, Searchbar, IconButton, Card, Button, useTheme, ActivityIndicator, Badge } from 'react-native-paper'; // ✅ Added Badge
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; // ✅ Added Firestore imports
+import { db } from '../config/firebase'; // ✅ Added db import
 import { useAppStore } from '../store/appStore';
 import { getProducts } from '../services/productService';
 
@@ -17,10 +19,30 @@ export default function BuyerHome() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0); // ✅ State for Notification Count
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // ✅ New Effect: Listen for Unread Notifications
+  useEffect(() => {
+    if (!user) return;
+
+    // We query all notifications for this user (or broadcast 'ALL')
+    const q = query(
+      collection(db, 'notifications'), 
+      where('userId', 'in', [user.uid, 'ALL'])
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // Filter client-side for unread ones to avoid complex index requirements
+      const unread = snapshot.docs.filter(doc => !doc.data().read).length;
+      setUnreadCount(unread);
+    });
+
+    return unsubscribe;
+  }, [user]);
 
   const loadData = async () => {
     try {
@@ -54,11 +76,22 @@ export default function BuyerHome() {
           
           <View style={{flex:1}} />
           
-          <IconButton 
-            icon="bell" 
-            iconColor="white" 
-            onPress={() => Alert.alert('Notifications', 'No new notifications yet.')} 
-          />
+          {/* ✅ FIXED: Bell Icon with Badge */}
+          <View>
+            <IconButton 
+              icon="bell" 
+              iconColor="white" 
+              onPress={() => navigation.navigate('Notifications')} 
+            />
+            {unreadCount > 0 && (
+              <Badge 
+                style={{ position: 'absolute', top: 5, right: 5, backgroundColor: theme.colors.error }}
+                size={16}
+              >
+                {unreadCount}
+              </Badge>
+            )}
+          </View>
         </View>
         
         <Searchbar
@@ -92,7 +125,6 @@ export default function BuyerHome() {
               <Card 
                 key={p.id} 
                 style={styles.card} 
-                // ✅ FIXED: Passing the full 'product' object, not just 'productId'
                 onPress={() => navigation.navigate('ProductDetail', { product: p })}
               >
                 <View style={styles.cardContent}>

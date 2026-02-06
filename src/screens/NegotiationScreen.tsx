@@ -1,118 +1,191 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text, TextInput, IconButton, Surface, useTheme, Avatar } from 'react-native-paper';
+import React, { useEffect, useState } from 'react';
+import { View, FlatList, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import { Text, Avatar, IconButton, ActivityIndicator, Button, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { NegotiationMessage } from '../types';
+import { useNavigation } from '@react-navigation/native';
+import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, writeBatch } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAppStore } from '../store/appStore';
 
-export default function NegotiationScreen() {
-  const navigation = useNavigation();
-  const route = useRoute<any>();
+// Updated Types to include 'admin_broadcast' and 'imageUrl'
+interface Notification {
+  id: string;
+  userId: string; 
+  type: 'ORDER' | 'PAYMENT' | 'SYSTEM' | 'PROMO' | 'ALERT' | 'admin_broadcast'; // ✅ Added
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string; 
+  data?: any; 
+  imageUrl?: string; // ✅ Added
+}
+
+export default function NotificationScreen() {
+  const navigation = useNavigation<any>();
+  const { user } = useAppStore();
   const theme = useTheme();
-  const { product } = route.params || {};
 
-  const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<NegotiationMessage[]>([
-    {
-      id: '1',
-      text: `Hi, I am interested in ${product?.name || 'your product'}. What is the best price for 10 MT?`,
-      senderId: 'buyer',
-      timestamp: Date.now(),
-      isBuyer: true,
-    },
-    {
-      id: '2',
-      text: `Hello! For 10 MT, we can offer ₹${(product?.pricePerUnit || 0) * 0.95}/kg. Where is the delivery location?`,
-      senderId: 'seller',
-      timestamp: Date.now() + 1000,
-      isBuyer: false,
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    const q = query(
+      collection(db, 'notifications'), 
+      where('userId', 'in', [user.uid, 'ALL']), 
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+      setNotifications(data);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  const markAllRead = async () => {
+    if (notifications.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      notifications.forEach(n => {
+        if (!n.read && n.userId !== 'ALL') {
+           const ref = doc(db, 'notifications', n.id);
+           batch.update(ref, { read: true });
+        }
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("Error marking read:", error);
     }
-  ]);
-
-  const handleSend = () => {
-    if (!message.trim()) return;
-    const newMsg: NegotiationMessage = {
-      id: Date.now().toString(),
-      text: message,
-      senderId: 'buyer',
-      timestamp: Date.now(),
-      isBuyer: true
-    };
-    setMessages(prev => [...prev, newMsg]);
-    setMessage('');
   };
 
-  const renderMessage = ({ item }: { item: NegotiationMessage }) => {
-    const isMe = item.isBuyer;
+  const handleNotificationPress = (item: Notification) => {
+    // 1. Mark as read (only if it's a specific user notification)
+    if (!item.read && item.userId !== 'ALL') {
+      updateDoc(doc(db, 'notifications', item.id), { read: true });
+    }
+
+    // 2. Navigate based on type
+    if (item.type === 'ORDER' && item.data?.orderId) {
+       navigation.navigate('OrderTracking', { orderId: item.data.orderId });
+    } 
+    // ✅ NEW: Handle Admin Broadcasts or Generic Messages
+    else if (item.type === 'admin_broadcast' || item.type === 'PROMO' || item.type === 'SYSTEM') {
+       navigation.navigate('NotificationDetail', { notification: item });
+    }
+  };
+
+  const getIconConfig = (type: string) => {
+    switch (type) {
+      case 'ORDER': return { icon: 'package-variant', color: '#2196F3', bg: '#E3F2FD' };
+      case 'PAYMENT': return { icon: 'credit-card-check', color: '#4CAF50', bg: '#E8F5E9' };
+      case 'ALERT': return { icon: 'alert-circle', color: '#F44336', bg: '#FFEBEE' }; 
+      case 'PROMO': return { icon: 'ticket-percent', color: '#9C27B0', bg: '#F3E5F5' };
+      case 'admin_broadcast': return { icon: 'bullhorn', color: '#FF9800', bg: '#FFF3E0' }; // ✅ New Icon
+      case 'SYSTEM': return { icon: 'cog', color: '#607D8B', bg: '#ECEFF1' };
+      default: return { icon: 'bell', color: '#004AAD', bg: '#E3F2FD' };
+    }
+  };
+
+  const renderItem = ({ item }: { item: Notification }) => {
+    const config = getIconConfig(item.type);
+    const date = new Date(item.createdAt);
+    const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     return (
-      <View style={[
-        styles.msgContainer, 
-        isMe ? styles.myMsgContainer : styles.theirMsgContainer
-      ]}>
-        {!isMe && <Avatar.Text size={32} label="S" style={{marginRight: 8}} />}
-        <Surface style={[
-          styles.bubble, 
-          isMe ? { backgroundColor: theme.colors.primary } : { backgroundColor: '#E5E7EB' }
-        ]}>
-          <Text style={{ color: isMe ? 'white' : 'black' }}>{item.text}</Text>
-        </Surface>
-      </View>
+      <TouchableOpacity 
+        style={[styles.itemContainer, !item.read && styles.unreadItem]} 
+        onPress={() => handleNotificationPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.iconBox, { backgroundColor: config.bg }]}>
+           <Avatar.Icon size={32} icon={config.icon} color={config.color} style={{backgroundColor: 'transparent'}} />
+        </View>
+
+        <View style={{flex: 1, marginLeft: 12}}>
+           <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+              <Text variant="titleSmall" style={{fontWeight:'bold', color:'#333'}}>{item.title}</Text>
+              <Text style={{fontSize: 10, color:'#999'}}>{timeString}</Text>
+           </View>
+           <Text variant="bodySmall" style={{color:'#666', marginTop: 2}} numberOfLines={2}>
+             {item.message}
+           </Text>
+        </View>
+
+        {!item.read && <View style={styles.dot} />}
+      </TouchableOpacity>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <View>
-          <Text variant="titleMedium" style={{fontWeight: 'bold'}}>Negotiation</Text>
-          <Text variant="bodySmall">{product?.sellerName || 'Seller'}</Text>
+        <View style={{flexDirection:'row', alignItems:'center'}}>
+          <IconButton icon="arrow-left" onPress={() => navigation.goBack()} size={24} />
+          <Text variant="headlineSmall" style={{fontWeight:'bold', marginLeft: -5}}>Notifications</Text>
         </View>
-        <View style={{flex:1}} />
-        <IconButton icon="phone" />
+        <Button mode="text" compact onPress={markAllRead} textColor="#004AAD">
+          Mark all read
+        </Button>
       </View>
 
-      {/* Product Context */}
-      <View style={styles.contextBar}>
-        <Text variant="labelMedium" style={{color: '#666'}}>Discussing:</Text>
-        <Text variant="labelLarge" style={{fontWeight: 'bold', color: theme.colors.primary}}>
-          {product?.name} ({product?.origin || 'India'})
-        </Text>
-      </View>
-
-      <FlatList
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.chatList}
-      />
-
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.inputBar}>
-          <TextInput
-            mode="outlined"
-            value={message}
-            onChangeText={setMessage}
-            placeholder="Type your offer..."
-            style={styles.input}
-            right={<TextInput.Icon icon="send" onPress={handleSend} color={theme.colors.primary} />}
-          />
-        </View>
-      </KeyboardAvoidingView>
+      {loading ? (
+        <View style={{flex:1, justifyContent:'center'}}><ActivityIndicator color="#004AAD" /></View>
+      ) : (
+        <FlatList
+          data={notifications}
+          renderItem={renderItem}
+          keyExtractor={i => i.id}
+          contentContainerStyle={{paddingBottom: 20}}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {}} />}
+          ListEmptyComponent={
+            <View style={{alignItems:'center', marginTop: 100, opacity: 0.5}}>
+              <Avatar.Icon size={80} icon="bell-sleep" style={{backgroundColor:'#F1F5F9'}} color="#94A3B8" />
+              <Text style={{marginTop: 20, color:'#94A3B8'}}>No new notifications</Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 8, backgroundColor: 'white', elevation: 2 },
-  contextBar: { padding: 12, backgroundColor: '#EFF6FF', borderBottomWidth: 1, borderBottomColor: '#DBEAFE' },
-  chatList: { padding: 16 },
-  msgContainer: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-end' },
-  myMsgContainer: { justifyContent: 'flex-end' },
-  theirMsgContainer: { justifyContent: 'flex-start' },
-  bubble: { padding: 12, borderRadius: 16, maxWidth: '80%', elevation: 1 },
-  inputBar: { padding: 12, backgroundColor: 'white' },
-  input: { backgroundColor: 'white' }
+  container: { flex: 1, backgroundColor: 'white' },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 10, 
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9'
+  },
+  itemContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+    alignItems: 'center',
+    backgroundColor: 'white'
+  },
+  unreadItem: { backgroundColor: '#F0F9FF' },
+  iconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#004AAD',
+    marginLeft: 8
+  }
 });

@@ -10,32 +10,44 @@ import AdminUserDetailsScreen from '../screens/admin/AdminUserDetailsScreen';
 import AdminProductsScreen from '../screens/admin/AdminProductsScreen';
 import AdminOrderVerification from '../screens/admin/AdminOrderVerification';
 import AdminPaymentsScreen from '../screens/admin/AdminPaymentsScreen';
-// ✅ IMPORT INVOICE VIEWER
 import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
+// ✅ IMPORT NEW SCREEN
+import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationScreen';
+import AdminPayment from '../screens/admin/AdminPayment';
 
-// ✅ DEFINE PARAM LIST FOR ADMIN
 export type AdminStackParamList = {
   UsersList: undefined;
   AdminUserDetails: { user: any };
-  InvoiceViewer: { order: any }; // ✅ Added this
+  InvoiceViewer: { order: any }; 
+  AdminDashboard: undefined;
+  SendNotification: undefined; // ✅ Add Type
 };
 
 const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator<AdminStackParamList>(); // ✅ PASS TYPE HERE
+const Stack = createNativeStackNavigator<AdminStackParamList>();
 
-// 1. User Stack (List -> Detail -> Invoice)
+// 1. User Stack
 function UserStackNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="UsersList" component={AdminUsersScreen} />
       <Stack.Screen name="AdminUserDetails" component={AdminUserDetailsScreen} />
-      {/* ✅ ADD INVOICE VIEWER HERE SO USER DETAILS CAN NAVIGATE TO IT */}
       <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} />
     </Stack.Navigator>
   );
 }
 
-// 2. Main Admin Tabs
+// ✅ 2. Dashboard Stack (Wrap Dashboard to allow navigation to SendNotification)
+function DashboardStackNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
+      <Stack.Screen name="SendNotification" component={AdminSendNotificationScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// 3. Main Admin Tabs
 export default function AdminNavigator() {
   return (
     <Tab.Navigator
@@ -53,9 +65,10 @@ export default function AdminNavigator() {
       }}
     >
       <Tab.Screen 
-        name="Dashboard" 
-        component={AdminDashboard} 
+        name="DashboardTab" 
+        component={DashboardStackNavigator} // ✅ Use the Stack instead of direct screen
         options={{ 
+          tabBarLabel: 'Dashboard',
           tabBarIcon: ({color}) => <IconButton icon="view-dashboard" iconColor={color} size={24} /> 
         }} 
       />
@@ -86,13 +99,21 @@ export default function AdminNavigator() {
       />
 
       <Tab.Screen 
-        name="Payments" 
+        name="NAPayments" 
         component={AdminPaymentsScreen} 
         options={{
           tabBarLabel: 'Finance',
           tabBarIcon: ({ color }) => <IconButton icon="finance" iconColor={color} size={24} />
         }} 
       />
+      <Tab.Screen 
+  name="Payments"
+  component={AdminPayment} 
+  options={{
+    tabBarLabel: 'Finance',
+    tabBarIcon: ({ color }) => <IconButton icon="cash-multiple" iconColor={color} size={24} />
+  }} 
+/>
     </Tab.Navigator>
   );
 }

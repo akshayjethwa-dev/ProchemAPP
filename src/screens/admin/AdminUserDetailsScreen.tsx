@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, Clipboard } from 'react-native';
 import { Text, Card, Button, Avatar, Chip, ActivityIndicator, IconButton, SegmentedButtons, List } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native'; // ✅ Import hooks
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Order, Product } from '../../types';
 
 export default function AdminUserDetailsScreen() {
-  // ✅ FIX: Cast navigation to <any> to allow dynamic navigation
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = route.params || {}; 
@@ -56,14 +55,18 @@ export default function AdminUserDetailsScreen() {
   };
 
   const toggleVerification = async () => {
+    // Toggles the verified status (KYC Approval)
     await updateDoc(doc(db, 'users', user.uid), { verified: !user.verified });
     Alert.alert("Success", `User status changed to ${!user.verified ? 'Verified' : 'Unverified'}`);
     navigation.goBack();
   };
 
-  // ✅ FIX: Corrected Navigation Call
+  const copyToClipboard = (text: string) => {
+    Clipboard.setString(text);
+    Alert.alert("Copied", text);
+  };
+
   const handleInvoice = (order: Order) => {
-    // InvoiceViewer is a sibling screen, navigate directly to it
     navigation.navigate('InvoiceViewer', { order });
   };
 
@@ -84,6 +87,15 @@ export default function AdminUserDetailsScreen() {
              <Avatar.Text size={60} label={user.companyName?.[0] || 'U'} style={{backgroundColor: user.verified ? '#2E7D32' : '#F57C00'}} />
              <Text variant="headlineSmall" style={{fontWeight:'bold', marginTop:10}}>{user.companyName}</Text>
              <Text style={{color:'#666'}}>{user.email}</Text>
+             
+             {/* ✅ SHOW GSTIN FOR MANUAL VERIFICATION */}
+             <View style={styles.gstRow}>
+                <Text style={{fontWeight:'bold', color: '#004AAD'}}>GSTIN: {user.gstin || 'N/A'}</Text>
+                {user.gstin && (
+                  <IconButton icon="content-copy" size={16} onPress={() => copyToClipboard(user.gstin)} />
+                )}
+             </View>
+
              <View style={{flexDirection:'row', marginTop:8, gap: 10}}>
                 <Chip icon={user.verified ? "check" : "alert"} compact style={{backgroundColor: user.verified ? '#DCFCE7' : '#FFF3E0'}}>
                   {user.verified ? 'Verified' : 'Pending'}
@@ -130,7 +142,6 @@ export default function AdminUserDetailsScreen() {
                       title={`Order #${o.id.slice(0,6).toUpperCase()}`} 
                       subtitle={new Date(o.createdAt).toDateString()}
                       right={(props) => (
-                         // ✅ INVOICE BUTTON
                          <IconButton {...props} icon="file-document-outline" onPress={() => handleInvoice(o)} />
                       )}
                     />
@@ -165,6 +176,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding: 10, backgroundColor:'white', elevation: 2 },
   card: { margin: 16, backgroundColor: 'white', borderRadius: 12 },
+  gstRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5, backgroundColor: '#F1F5F9', paddingHorizontal: 10, borderRadius: 6 },
   statsRow: { flexDirection:'row', paddingHorizontal:16, marginBottom: 20, gap: 10 },
   statCard: { flex: 1, borderRadius: 12 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' }

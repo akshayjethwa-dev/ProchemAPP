@@ -20,9 +20,10 @@ export type RootStackParamList = {
   Negotiation: { product: any };
   OrderTracking: { orderId?: string; order?: any }; 
   EditProfile: undefined; 
+  Notifications: undefined;
+  NotificationDetail: { notification: any }; 
 
-  // Seller specific (These can now be accessed inside SellerApp tabs, 
-  // but we keep them here if accessed directly from Stack)
+  // Seller specific
   SellerDashboard: undefined;
   AddChemical: undefined;
   ManageChemicals: undefined;

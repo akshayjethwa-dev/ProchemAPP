@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
-import { Text, Card, ActivityIndicator, Button, useTheme } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, } from 'react-native';
+import { Text, Card, ActivityIndicator, Button, useTheme, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native'; // ✅ Import Navigation
 import { getAdminStats } from '../../services/adminService';
 import { logoutUser } from '../../services/authService';
 
 export default function AdminDashboard() {
   const theme = useTheme();
+  const navigation = useNavigation<any>(); // ✅ Initialize Navigation
   const [stats, setStats] = useState({ totalUsers: 0, totalProducts: 0, totalOrders: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -29,8 +31,6 @@ export default function AdminDashboard() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text variant="headlineSmall" style={{color:'white', fontWeight:'bold'}}>Admin Console</Text>
-        
-        {/* ✅ FIX: 'compact' is a boolean prop, 'mode' must be text/outlined/contained */}
         <Button 
           mode="text" 
           compact={true} 
@@ -66,8 +66,32 @@ export default function AdminDashboard() {
             </Card>
           </View>
         )}
+        {/* ✅ NEW: Finance & Actions Section */}
+        <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Finance & Actions</Text>
+        
+        <Card 
+          style={{marginBottom: 12, backgroundColor: 'white'}} 
+          onPress={() => navigation.navigate('Payments')} // ✅ Navigates to Payment Tab
+        >
+          <Card.Title 
+            title="Seller Payouts" 
+            subtitle="Manage pending payments and release funds" 
+            left={(props) => <IconButton icon="cash-multiple" iconColor={theme.colors.primary} size={28} />}
+            right={(props) => <IconButton icon="chevron-right" {...props} />}
+          />
+        </Card>
 
-        <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>System Health</Text>
+        {/* ✅ NEW: Send Notification Button */}
+        <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Quick Actions</Text>
+        <Card style={{marginBottom: 20}} onPress={() => navigation.navigate('SendNotification')}>
+          <Card.Title 
+            title="Send Broadcast Notification" 
+            subtitle="Send alerts or promos to all users"
+            left={(props) => <Button icon="bell-ring" mode="contained" onPress={() => navigation.navigate('SendNotification')}>Send</Button>}
+          />
+        </Card>
+
+        <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold'}}>System Health</Text>
         <Card style={{backgroundColor:'#E3F2FD'}}>
           <Card.Title 
             title="GST API Status" 

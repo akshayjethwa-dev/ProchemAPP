@@ -14,12 +14,12 @@ import {
   Button,
   HelperText,
   useTheme,
+  Checkbox,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { registerUser } from '../services/authService';
-import { verifyGSTAndFetchDetails } from '../services/gstService';
 
 // ✅ Add navigation types
 type RootStackParamList = {
@@ -38,7 +38,6 @@ export default function RegistrationScreen() {
   const { role } = (route.params as { role?: string }) || { role: 'buyer' };
 
   const [loading, setLoading] = useState(false);
-  const [gstLoading, setGstLoading] = useState(false);
 
   // Form State
   const [companyName, setCompanyName] = useState('');
@@ -48,9 +47,8 @@ export default function RegistrationScreen() {
   const [gstin, setGstin] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
 
-  // GST Verification State
-  const [gstVerified, setGstVerified] = useState(false);
-  const [gstData, setGstData] = useState<{ legalName?: string, address?: string } | null>(null);
+  // Terms & Conditions
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   // Error States
   const [errors, setErrors] = useState({
@@ -59,11 +57,19 @@ export default function RegistrationScreen() {
     phoneNumber: '',
     password: '',
     gstin: '',
+    terms: '',
   });
 
-  /**
-   * Validate form fields
-   */
+  // ✅ HELPER: Web-Compatible Alert
+  const showAlert = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+      if (onOk) onOk();
+    } else {
+      Alert.alert(title, message, onOk ? [{ text: "OK", onPress: onOk }] : undefined);
+    }
+  };
+
   const validate = () => {
     let isValid = true;
     let newErrors = {
@@ -72,31 +78,32 @@ export default function RegistrationScreen() {
       phoneNumber: '',
       password: '',
       gstin: '',
+      terms: '',
     };
 
     if (!companyName.trim()) {
       newErrors.companyName = 'Company Name is required';
       isValid = false;
     }
-
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = 'Valid Email is required';
       isValid = false;
     }
-
     if (!phoneNumber.trim() || phoneNumber.length < 10) {
       newErrors.phoneNumber = 'Valid 10-digit Phone Number is required';
       isValid = false;
     }
-
     if (!password || password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters';
       isValid = false;
     }
-
-    // ✅ GST VERIFICATION IS MANDATORY
-    if (!gstVerified) {
-      newErrors.gstin = 'Please verify your GST Number first';
+    // ✅ CHANGED: Manual check only (Length must be 15)
+    if (!gstin || gstin.length !== 15) {
+      newErrors.gstin = 'Enter a valid 15-digit GST Number';
+      isValid = false;
+    }
+    if (!acceptTerms) {
+      newErrors.terms = 'You must accept the Terms & Conditions';
       isValid = false;
     }
 
@@ -105,51 +112,15 @@ export default function RegistrationScreen() {
   };
 
   /**
-   * Handle GST Verification via Razorpay Service
-   */
-  const handleVerifyGST = async () => {
-    // 1. Basic Length Check
-    if (!gstin || gstin.length !== 15) {
-      setErrors({ ...errors, gstin: 'GSTIN must be exactly 15 characters' });
-      return;
-    }
-
-    setGstLoading(true);
-    setErrors({ ...errors, gstin: '' });
-
-    try {
-      // 2. Call the Razorpay Service
-      const result = await verifyGSTAndFetchDetails(gstin);
-
-      if (result.isValid) {
-        setGstVerified(true);
-        setGstData({ legalName: result.legalName, address: result.address });
-
-        // ✅ Auto-fill Company Name if available
-        if (result.legalName) {
-          setCompanyName(result.legalName);
-        }
-
-        Alert.alert('Success', `Verified: ${result.legalName || 'GST Valid'}`);
-      } else {
-        setGstVerified(false);
-        setErrors({ ...errors, gstin: result.message || 'Verification failed' });
-        Alert.alert('Verification Failed', result.message);
-      }
-    } catch (error: any) {
-      console.error('GST Verification Error:', error);
-      setGstVerified(false);
-      setErrors({ ...errors, gstin: 'Unable to connect to verification server.' });
-    } finally {
-      setGstLoading(false);
-    }
-  };
-
-  /**
    * Handle User Registration
    */
   const handleRegister = async () => {
-    if (!validate()) return;
+    if (!validate()) {
+      if (!acceptTerms) {
+        showAlert("Required", "Please accept the Terms and Conditions to proceed.");
+      }
+      return;
+    }
 
     setLoading(true);
     try {
@@ -160,33 +131,36 @@ export default function RegistrationScreen() {
         phoneNumber: phoneNumber.trim(),
         userType: role || 'buyer',
         gstin: gstin.toUpperCase(),
-        gstVerified: true,
-        address: gstData?.address || '',
+        // ✅ CHANGED: Set verification to false so Admin must approve it
+        gstVerified: false, 
         verificationStatus: 'PENDING',
+        address: '', 
       };
 
       await registerUser(registrationData);
 
-      Alert.alert('Success', 'Account created successfully! Please login.', [
-        { text: 'OK', onPress: () => navigation.navigate('Login') }
-      ]);
+      showAlert('Success', 'Account created! Admin will verify your GST details manually.', () => {
+        navigation.navigate('Login');
+      });
+
     } catch (error: any) {
       console.error('Registration Error:', error);
-      Alert.alert(
-        'Registration Failed',
-        error.message || 'Something went wrong. Please try again.'
-      );
+      showAlert('Registration Failed', error.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClearGST = () => {
-    setGstin('');
-    setGstVerified(false);
-    setGstData(null);
-    setCompanyName('');
-    setErrors({ ...errors, gstin: '' });
+  // ✅ Fixed Terms Link for Web & Mobile
+  const openTerms = () => {
+    const title = "Terms & Conditions";
+    const message = `This is a dummy Terms and Conditions page.\n\n1. All chemicals must be handled with care.\n2. GST verification is mandatory.\n3. Payments are subject to verification.\n4. Admin has the right to ban users.\n\n(In a real app, this would open a page.)`;
+    
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
   };
 
   return (
@@ -212,60 +186,7 @@ export default function RegistrationScreen() {
           </View>
 
           <View style={styles.formContainer}>
-            {/* --- GST SECTION (First Priority for B2B) --- */}
-            <TextInput
-              label="GST Number (GSTIN)"
-              value={gstin}
-              onChangeText={(text) => {
-                setGstin(text.toUpperCase());
-                setGstVerified(false);
-                if (errors.gstin) setErrors({ ...errors, gstin: '' });
-              }}
-              mode="outlined"
-              maxLength={15}
-              placeholder="22AAAAA0000A1Z5"
-              left={<TextInput.Icon icon="certificate" />}
-              right={gstVerified ? <TextInput.Icon icon="check-circle" color="#10B981" /> : null}
-              editable={!gstVerified}
-              style={[styles.input, gstVerified && styles.inputDisabled]}
-              error={!!errors.gstin}
-            />
-
-            {errors.gstin ? (
-              <HelperText type="error" visible={true}>
-                {errors.gstin}
-              </HelperText>
-            ) : (
-              !gstVerified && (
-                <HelperText type="info" visible={true}>
-                  Format: 15 characters (e.g. 22AAAAA0000A1Z5)
-                </HelperText>
-              )
-            )}
-
-            {!gstVerified && (
-              <Button
-                mode="contained"
-                onPress={handleVerifyGST}
-                loading={gstLoading}
-                disabled={gstLoading || gstin.length !== 15}
-                style={styles.verifyBtn}
-              >
-                {gstLoading ? 'Verifying...' : 'Verify GSTIN'}
-              </Button>
-            )}
-
-            {/* Verification Success Message */}
-            {gstVerified && (
-              <View style={styles.successCard}>
-                <Text style={styles.successTitle}>✓ Verified Supplier</Text>
-                <Text style={styles.successText}>{gstData?.legalName}</Text>
-                <TouchableOpacity onPress={handleClearGST}>
-                  <Text style={styles.changeLink}>Change</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
+            
             {/* --- COMPANY DETAILS --- */}
             <TextInput
               label="Company Name"
@@ -278,10 +199,26 @@ export default function RegistrationScreen() {
               left={<TextInput.Icon icon="office-building" />}
               error={!!errors.companyName}
               style={styles.input}
-              disabled={gstVerified && !!gstData?.legalName}
             />
-            <HelperText type="error" visible={!!errors.companyName}>
-              {errors.companyName}
+            <HelperText type="error" visible={!!errors.companyName}>{errors.companyName}</HelperText>
+
+            {/* GST SECTION (Manual Entry) */}
+            <TextInput
+              label="GST Number (GSTIN)"
+              value={gstin}
+              onChangeText={(text) => {
+                setGstin(text.toUpperCase());
+                if (errors.gstin) setErrors({ ...errors, gstin: '' });
+              }}
+              mode="outlined"
+              maxLength={15}
+              placeholder="22AAAAA0000A1Z5"
+              left={<TextInput.Icon icon="certificate" />}
+              style={styles.input}
+              error={!!errors.gstin}
+            />
+            <HelperText type={errors.gstin ? "error" : "info"} visible={true}>
+              {errors.gstin || "Enter your 15-digit GSTIN for verification."}
             </HelperText>
 
             <TextInput
@@ -298,9 +235,7 @@ export default function RegistrationScreen() {
               error={!!errors.email}
               style={styles.input}
             />
-            <HelperText type="error" visible={!!errors.email}>
-              {errors.email}
-            </HelperText>
+            <HelperText type="error" visible={!!errors.email}>{errors.email}</HelperText>
 
             <TextInput
               label="Phone Number"
@@ -316,9 +251,7 @@ export default function RegistrationScreen() {
               error={!!errors.phoneNumber}
               style={styles.input}
             />
-            <HelperText type="error" visible={!!errors.phoneNumber}>
-              {errors.phoneNumber}
-            </HelperText>
+            <HelperText type="error" visible={!!errors.phoneNumber}>{errors.phoneNumber}</HelperText>
 
             <TextInput
               label="Password"
@@ -339,17 +272,39 @@ export default function RegistrationScreen() {
               error={!!errors.password}
               style={styles.input}
             />
-            <HelperText type="error" visible={!!errors.password}>
-              {errors.password}
-            </HelperText>
+            <HelperText type="error" visible={!!errors.password}>{errors.password}</HelperText>
+
+            {/* TERMS CHECKBOX */}
+            <View style={styles.termsContainer}>
+              <Checkbox.Android
+                status={acceptTerms ? 'checked' : 'unchecked'}
+                onPress={() => {
+                  setAcceptTerms(!acceptTerms);
+                  setErrors({ ...errors, terms: '' });
+                }}
+                color={theme.colors.primary}
+              />
+              <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', marginLeft: 8 }}>
+                <Text style={{ color: '#666' }}>I accept the </Text>
+                <TouchableOpacity onPress={openTerms}>
+                  <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>
+                    Terms and Conditions
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {errors.terms ? (
+              <HelperText type="error" visible={true} style={{ marginBottom: 5 }}>{errors.terms}</HelperText>
+            ) : null}
 
             {/* Register Button */}
             <Button
               mode="contained"
               onPress={handleRegister}
               loading={loading}
-              disabled={loading || !gstVerified}
-              style={[styles.btn, (!gstVerified || loading) && styles.btnDisabled]}
+              disabled={loading}
+              style={styles.btn}
               contentStyle={{ paddingVertical: 8 }}
             >
               Create Account
@@ -370,74 +325,12 @@ export default function RegistrationScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  container: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-    paddingBottom: 40,
-    backgroundColor: 'white',
-  },
-  headerContainer: {
-    marginBottom: 30,
-    alignItems: 'center',
-  },
-  formContainer: {
-    width: '100%',
-  },
-  input: {
-    backgroundColor: 'white',
-    fontSize: 15,
-    marginBottom: 2,
-  },
-  inputDisabled: {
-    backgroundColor: '#f5f5f5',
-    opacity: 0.7,
-  },
-  verifyBtn: {
-    marginVertical: 10,
-    borderRadius: 8,
-  },
-  successCard: {
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-  successTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#047857',
-  },
-  successText: {
-    fontSize: 14,
-    color: '#065F46',
-    marginTop: 2,
-  },
-  changeLink: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#059669',
-    marginTop: 8,
-    textDecorationLine: 'underline',
-  },
-  btn: {
-    marginTop: 16,
-    borderRadius: 8,
-    backgroundColor: '#004AAD',
-  },
-  btnDisabled: {
-    backgroundColor: '#94A3B8',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-    marginBottom: 20
-  },
+  safeArea: { flex: 1, backgroundColor: 'white' },
+  container: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingBottom: 40, backgroundColor: 'white' },
+  headerContainer: { marginBottom: 30, alignItems: 'center' },
+  formContainer: { width: '100%' },
+  input: { backgroundColor: 'white', fontSize: 15, marginBottom: 2 },
+  btn: { marginTop: 16, borderRadius: 8, backgroundColor: '#004AAD' },
+  termsContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 5, marginTop: 5 },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, marginBottom: 20 },
 });

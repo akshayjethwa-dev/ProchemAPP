@@ -124,22 +124,32 @@ export interface Order {
     purityCertificate?: string;
     gradeSheet?: string;
   };
-  subTotal?: number;         // For the base price before taxes
-  taxAmount?: number;        // For the calculated GST
+  subTotal: number;         // For the base price before taxes
+  taxAmount: number; 
+  payoutAmount: number;       
   platformFeeBuyer?: number; // To track how much you earned from the buyer
+  platformFeeSeller: number;
+  safetyFee: number;
   paymentId?: string;
-  
+  sellerPayoutStatus?: 'PENDING' | 'COMPLETED' | 'FAILED';
+  sellerPayoutTxId?: string;
+  sellerPayoutDate?: any;
+  paymentMode: 'BANK_TRANSFER';
+  paymentReference: string; // UTR Number
+  paymentScreenshot?: string; // URL
 }
 
 // ✅ Notification Types
 export interface Notification {
   id?: string;
-  userId: string;
+  userId: string; // 'ALL' or specific UserUID
   title: string;
   message: string;
-  type: 'order' | 'product' | 'promotion' | 'system';
+  type: 'order' | 'product' | 'promotion' | 'system' | 'admin_broadcast'; // Added 'admin_broadcast'
   read: boolean;
+  imageUrl?: string; // ✅ New Field for Images
   createdAt?: any;
+  data?: any; // For deep links (e.g., orderId)
 }
 
 // ✅ Auth Response Types

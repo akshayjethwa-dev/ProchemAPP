@@ -38,6 +38,8 @@ export default function SplashScreen() {
           style={styles.button}
           contentStyle={{height: 56}}
           labelStyle={{fontSize: 18, fontWeight: 'bold'}}
+          buttonColor="white"
+          textColor="#004AAD"
         >
           Continue
         </Button>

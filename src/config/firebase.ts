@@ -2,14 +2,15 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { 
   getAuth, 
   initializeAuth,
-  Auth 
+  Auth,
+  // @ts-ignore
+  getReactNativePersistence 
 } from 'firebase/auth';
-// @ts-ignore: TypeScript resolves to web types, but this exists in RN
-import { getReactNativePersistence } from 'firebase/auth'; 
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyC0cRo4vmdwsbNkdiIKwStxGsxJhuhRpYo", 
   authDomain: "prochemapp-dev.firebaseapp.com",
@@ -25,16 +26,18 @@ let auth: Auth;
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
   
-  // Initialize Auth with persistence
-  // We use a try-catch block to handle potential environment differences safely
-  try {
-    auth = initializeAuth(app, {
-      // @ts-ignore: getReactNativePersistence is valid in React Native context
-      persistence: getReactNativePersistence(AsyncStorage)
-    });
-  } catch (e) {
-    console.warn("Failed to initialize custom persistence, falling back to default", e);
+  // ✅ FIX: specific check for Web vs Native to avoid the "not a function" error
+  if (Platform.OS === 'web') {
     auth = getAuth(app);
+  } else {
+    try {
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage)
+      });
+    } catch (e) {
+      console.warn("Auth init error, falling back to default:", e);
+      auth = getAuth(app);
+    }
   }
 } else {
   app = getApp();
@@ -42,5 +45,6 @@ if (!getApps().length) {
 }
 
 export const db: Firestore = getFirestore(app);
+export const storage: FirebaseStorage = getStorage(app);
 export { auth };
 export default app;

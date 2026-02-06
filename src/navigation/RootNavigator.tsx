@@ -27,6 +27,8 @@ import NegotiationScreen from '../screens/NegotiationScreen';
 import OrderTracking from '../screens/OrderTracking';
 import SellerAddChemical from '../screens/SellerAddChemical';
 import EditProfileScreen from '../screens/EditProfileScreen';
+import NotificationScreen from '../screens/NotificationScreen';
+import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -120,6 +122,8 @@ export const RootNavigator = () => {
             <Stack.Screen name="Negotiation" component={NegotiationScreen} />
             <Stack.Screen name="OrderTracking" component={OrderTracking} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="Notifications" component={NotificationScreen} />
+            <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

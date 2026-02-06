@@ -7,7 +7,6 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Order } from '../types';
-// ✅ IMPORT INVOICE SERVICE
 import { generateInvoice } from '../services/invoiceService';
 
 export default function OrderHistoryScreen() {
@@ -24,6 +23,7 @@ export default function OrderHistoryScreen() {
 
     setLoading(true);
 
+    // 1. Query to fetch orders for this buyer
     const q = query(
       collection(db, 'orders'),
       where('buyerId', '==', user.uid),
@@ -32,33 +32,38 @@ export default function OrderHistoryScreen() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      console.log(`Fetched ${data.length} orders for buyer`); // ✅ Debug Log
       setOrders(data);
       setLoading(false);
     }, (error) => {
       console.error("Buyer order fetch error:", error);
+      // If you see "The query requires an index" in console, follow Step 1!
       setLoading(false);
     });
 
     return unsubscribe;
   }, [user]);
 
-  const activeStatuses = ['PENDING_SELLER', 'PENDING_ADMIN', 'ACCEPTED', 'shipped', 'PENDING'];
-  const pastStatuses = ['delivered', 'CANCELLED', 'REJECTED', 'returned'];
+  // ✅ 2. Robust Filtering (Case Insensitive)
+  const activeStatuses = ['PENDING_SELLER', 'PENDING_ADMIN', 'ACCEPTED', 'SHIPPED', 'PENDING', 'IN_TRANSIT'];
+  const pastStatuses = ['DELIVERED', 'CANCELLED', 'REJECTED', 'RETURNED'];
 
-  const filteredOrders = orders.filter(o => 
-    tab === 'active' 
-      ? activeStatuses.includes(o.status)
-      : pastStatuses.includes(o.status)
-  );
+  const filteredOrders = orders.filter(o => {
+    const status = o.status?.toUpperCase() || ''; // Normalize to uppercase
+    if (tab === 'active') return activeStatuses.includes(status);
+    if (tab === 'past') return pastStatuses.includes(status);
+    return true; 
+  });
 
   const formatDate = (date: any) => {
     if (!date) return '';
-    if (typeof date === 'string') return new Date(date).toDateString();
-    if (date.seconds) return new Date(date.seconds * 1000).toDateString();
+    try {
+        if (typeof date === 'string') return new Date(date).toDateString();
+        if (date.seconds) return new Date(date.seconds * 1000).toDateString();
+    } catch(e) { return '' }
     return '';
   };
 
-  // ✅ Handler for Invoice
   const handleDownloadInvoice = (order: Order) => {
     navigation.navigate('InvoiceViewer', { order: order });
   };
@@ -76,7 +81,7 @@ export default function OrderHistoryScreen() {
             textStyle={{fontSize:10, fontWeight:'bold'}} 
             style={{backgroundColor: theme.colors.surfaceVariant}}
           >
-            {item.status.replace('_', ' ')}
+            {item.status?.replace('_', ' ') || 'UNKNOWN'}
           </Chip>
         </View>
         
@@ -88,7 +93,6 @@ export default function OrderHistoryScreen() {
         </Text>
         
         <View style={{flexDirection:'row', marginTop: 12, justifyContent: 'flex-end', gap: 10}}>
-          {/* ✅ INVOICE BUTTON (Visible for all orders) */}
           <Button 
             mode="outlined" 
             compact 
@@ -98,7 +102,8 @@ export default function OrderHistoryScreen() {
             Invoice
           </Button>
 
-          {tab === 'active' && (
+          {/* Show Track button if Active */}
+          {activeStatuses.includes(item.status?.toUpperCase()) && (
              <Button 
                mode="contained" 
                compact 
@@ -139,7 +144,13 @@ export default function OrderHistoryScreen() {
           contentContainerStyle={{padding: 16}}
           ListEmptyComponent={
             <View style={{alignItems:'center', marginTop:50}}>
-              <Text style={{color:'#999'}}>No {tab} orders found.</Text>
+              <Text style={{color:'#999'}}>No orders found in {tab} tab.</Text>
+              {/* Debug Helper: Show total orders if strict filtering hid them */}
+              {orders.length > 0 && (
+                <Text style={{fontSize:10, color:'red', marginTop:10}}>
+                  (Debug: {orders.length} total orders fetched, but status didn't match filters)
+                </Text>
+              )}
             </View>
           }
         />
