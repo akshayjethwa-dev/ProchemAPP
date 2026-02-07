@@ -23,7 +23,21 @@ export default function AdminPaymentsScreen() {
       data.forEach(order => {
         const orderVal = order.totalAmount || 0;
         grossVol += orderVal;
-        netRevenue += (orderVal * 0.0475); 
+        
+        // ✅ UPDATED: Calculate exact revenue from stored fees
+        // Fallback to legacy calc if fees are missing on old orders
+        const fees = (order.platformFeeBuyer || 0) + 
+                     (order.logisticFee || 0) + 
+                     (order.platformFeeSeller || 0) + 
+                     (order.safetyFee || 0) + 
+                     (order.freightFee || 0);
+        
+        if (fees > 0) {
+          netRevenue += fees;
+        } else {
+          // Legacy calculation for old orders (approx 4.75%)
+          netRevenue += (orderVal * 0.0475);
+        }
       });
 
       setOrders(data);
@@ -46,15 +60,20 @@ export default function AdminPaymentsScreen() {
         <FlatList 
           data={orders}
           keyExtractor={i => i.id}
-          renderItem={({ item }) => (
-            <Card style={styles.card}>
-              <Card.Title 
-                title={`Order #${item.id.slice(0,6).toUpperCase()}`} 
-                subtitle={`Total: ₹${item.totalAmount}`} 
-                right={(props) => <Text {...props} style={{fontWeight:'bold', color:'green', marginRight:16}}>+ ₹{(item.totalAmount! * 0.0475).toFixed(0)}</Text>} 
-              />
-            </Card>
-          )}
+          renderItem={({ item }) => {
+            const fees = (item.platformFeeBuyer || 0) + (item.logisticFee || 0) + (item.platformFeeSeller || 0) + (item.safetyFee || 0) + (item.freightFee || 0);
+            const revenueDisplay = fees > 0 ? fees : (item.totalAmount! * 0.0475);
+
+            return (
+              <Card style={styles.card}>
+                <Card.Title 
+                  title={`Order #${item.id.slice(0,6).toUpperCase()}`} 
+                  subtitle={`Total: ₹${item.totalAmount?.toFixed(2)}`} 
+                  right={(props) => <Text {...props} style={{fontWeight:'bold', color:'green', marginRight:16}}>+ ₹{revenueDisplay.toFixed(2)}</Text>} 
+                />
+              </Card>
+            );
+          }}
           contentContainerStyle={{padding: 16}}
           ListEmptyComponent={<Text style={{textAlign:'center', marginTop: 20, color:'#999'}}>No completed orders found.</Text>}
         />

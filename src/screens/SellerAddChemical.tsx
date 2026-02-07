@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
-import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu } from 'react-native-paper';
+import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu, Card, Divider } from 'react-native-paper'; // ✅ Added Card, Divider
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker'; 
 import { useAppStore } from '../store/appStore';
@@ -23,6 +23,11 @@ const CATEGORY_OPTIONS = [
   'Other'
 ];
 
+// ✅ FEE CONSTANTS (Matches Checkout Logic)
+const SELLER_PLATFORM_FEE = 0.015; // 1.5%
+const SELLER_SAFETY_FEE = 0.0025;  // 0.25%
+const SELLER_FREIGHT_FEE = 0.01;   // 1.0%
+
 export default function SellerAddChemical() {
   const navigation = useNavigation();
   const theme = useTheme();
@@ -44,15 +49,24 @@ export default function SellerAddChemical() {
 
   const [form, setForm] = useState({
     name: '',
-    category: CATEGORY_OPTIONS[0], // Default Category
+    category: CATEGORY_OPTIONS[0], 
     casNumber: '',
     pricePerUnit: '',
-    unit: UNIT_OPTIONS[0], // Default Unit
+    unit: UNIT_OPTIONS[0], 
     moq: '0',
     purity: '',
     description: '',
     origin: 'India',
     imageUrl: '' 
+  });
+
+  // ✅ Calculation State
+  const [payoutStats, setPayoutStats] = useState({
+    basePrice: 0,
+    platformFee: 0,
+    safetyFee: 0,
+    freightFee: 0,
+    netPayout: 0
   });
 
   // Helper: Cross-Platform Alert
@@ -66,12 +80,10 @@ export default function SellerAddChemical() {
 
   useEffect(() => {
     if (isEditMode) {
-      // 1. Setup Unit Dropdown for Edit Mode
       const existingUnit = editingProduct.unit || 'kg';
       const isStandardUnit = UNIT_OPTIONS.includes(existingUnit);
       setUnitDropdownValue(isStandardUnit ? existingUnit : 'Other');
 
-      // 2. Setup Category Dropdown for Edit Mode
       const existingCat = editingProduct.category || 'Industrial Chemicals';
       const isStandardCat = CATEGORY_OPTIONS.includes(existingCat);
       setCategoryDropdownValue(isStandardCat ? existingCat : 'Other');
@@ -91,6 +103,23 @@ export default function SellerAddChemical() {
       navigation.setOptions({ title: 'Edit Product' });
     }
   }, [editingProduct]);
+
+  // ✅ Update Calculations whenever Price changes
+  useEffect(() => {
+    const price = parseFloat(form.pricePerUnit) || 0;
+    const pFee = price * SELLER_PLATFORM_FEE;
+    const sFee = price * SELLER_SAFETY_FEE;
+    const fFee = price * SELLER_FREIGHT_FEE;
+    const net = price - pFee - sFee - fFee;
+
+    setPayoutStats({
+      basePrice: price,
+      platformFee: pFee,
+      safetyFee: sFee,
+      freightFee: fFee,
+      netPayout: net
+    });
+  }, [form.pricePerUnit]);
 
   const handleChange = (key: string, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -112,15 +141,13 @@ export default function SellerAddChemical() {
     }
   };
 
-  // --- HANDLERS FOR DROPDOWNS ---
-  
   const handleUnitSelect = (val: string) => {
     setUnitMenuVisible(false);
     setUnitDropdownValue(val);
     if (val !== 'Other') {
       setForm(prev => ({ ...prev, unit: val }));
     } else {
-      setForm(prev => ({ ...prev, unit: '' })); // Clear so user types it
+      setForm(prev => ({ ...prev, unit: '' }));
     }
   };
 
@@ -130,12 +157,11 @@ export default function SellerAddChemical() {
     if (val !== 'Other') {
       setForm(prev => ({ ...prev, category: val }));
     } else {
-      setForm(prev => ({ ...prev, category: '' })); // Clear so user types it
+      setForm(prev => ({ ...prev, category: '' }));
     }
   };
 
   const handleSubmit = async () => {
-    // Validation
     if (!form.name.trim()) return showAlert('Missing Field', 'Please enter Chemical Name.');
     if (!form.category.trim()) return showAlert('Missing Field', 'Please select or enter a Category.');
     if (!form.pricePerUnit.trim()) return showAlert('Missing Field', 'Please enter Price.');
@@ -145,7 +171,6 @@ export default function SellerAddChemical() {
     try {
       let finalImageUrl = form.imageUrl;
       if (imageFile) {
-        // Simulating upload...
         await new Promise(r => setTimeout(r, 1000));
       }
 
@@ -212,7 +237,6 @@ export default function SellerAddChemical() {
 
         <View style={styles.form}>
           
-          {/* CHEMICAL NAME */}
           <TextInput 
             label="Chemical Name *" 
             value={form.name} 
@@ -221,7 +245,6 @@ export default function SellerAddChemical() {
             style={styles.input} 
           />
           
-          {/* ROW: CATEGORY (Dropdown) & CAS NUMBER */}
           <View style={styles.row}>
             <View style={{flex: 1, marginRight: 10}}>
               <Menu
@@ -261,7 +284,6 @@ export default function SellerAddChemical() {
             />
           </View>
 
-          {/* Conditional Input for "Other" Category */}
           {categoryDropdownValue === 'Other' && (
             <TextInput 
               label="Specify Custom Category *" 
@@ -273,7 +295,7 @@ export default function SellerAddChemical() {
             />
           )}
 
-          {/* ROW: PRICE & UNIT (Dropdown) */}
+          {/* ROW: PRICE & UNIT */}
           <View style={styles.row}>
             <TextInput 
               label="Price (₹) *" 
@@ -314,7 +336,47 @@ export default function SellerAddChemical() {
             </View>
           </View>
 
-          {/* Conditional Input for "Other" Unit */}
+          {/* ✅ NEW: ESTIMATED PAYOUT CARD */}
+          {payoutStats.basePrice > 0 && (
+            <Card style={styles.payoutCard}>
+              <Card.Content>
+                <Text variant="labelLarge" style={{color:'#666', fontWeight:'bold', marginBottom: 5}}>
+                  💰 Estimated Payout Calculation
+                </Text>
+                <Divider style={{marginBottom: 8}} />
+                
+                <View style={styles.payoutRow}>
+                  <Text style={styles.payoutLabel}>Base Price:</Text>
+                  <Text style={styles.payoutValue}>₹{payoutStats.basePrice.toFixed(2)}</Text>
+                </View>
+
+                <View style={styles.payoutRow}>
+                  <Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Platform Fee (1.5%):</Text>
+                  <Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{payoutStats.platformFee.toFixed(2)}</Text>
+                </View>
+
+                <View style={styles.payoutRow}>
+                  <Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Safety Fee (0.25%):</Text>
+                  <Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{payoutStats.safetyFee.toFixed(2)}</Text>
+                </View>
+
+                <View style={styles.payoutRow}>
+                  <Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Freight Fee (1.0%):</Text>
+                  <Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{payoutStats.freightFee.toFixed(2)}</Text>
+                </View>
+
+                <Divider style={{marginVertical: 8}} />
+                
+                <View style={styles.payoutRow}>
+                  <Text style={{fontWeight:'bold', color: theme.colors.primary}}>Est. Net Payout (per unit):</Text>
+                  <Text style={{fontWeight:'bold', fontSize: 16, color: theme.colors.primary}}>
+                    ₹{payoutStats.netPayout.toFixed(2)}
+                  </Text>
+                </View>
+              </Card.Content>
+            </Card>
+          )}
+
           {unitDropdownValue === 'Other' && (
             <TextInput 
               label="Specify Custom Unit *" 
@@ -346,7 +408,6 @@ export default function SellerAddChemical() {
             />
           </View>
           
-          {/* DESCRIPTION */}
           <TextInput 
             label="Description / Specs" 
             multiline 
@@ -403,5 +464,11 @@ const styles = StyleSheet.create({
   form: { padding: 20 },
   input: { marginBottom: 15, backgroundColor: 'white' },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
-  btn: { marginTop: 10, borderRadius: 8, backgroundColor: '#004AAD' }
+  btn: { marginTop: 10, borderRadius: 8, backgroundColor: '#004AAD' },
+
+  // Payout Card Styles
+  payoutCard: { marginBottom: 20, backgroundColor: '#F1F8E9', borderColor: '#C8E6C9', borderWidth: 1 },
+  payoutRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  payoutLabel: { fontSize: 12, color: '#555' },
+  payoutValue: { fontSize: 12, fontWeight: 'bold', color: '#333' }
 });

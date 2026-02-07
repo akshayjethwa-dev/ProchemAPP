@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Platform, Linking } from 'react-native';
-import { Text, Button, IconButton, useTheme, Divider, Chip } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Alert, Platform, Linking, Modal } from 'react-native';
+import { Text, Button, IconButton, useTheme, Divider, Chip, Avatar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
@@ -22,15 +22,15 @@ export default function ProductDetail() {
   const unit = product.unit || 'kg';
   const price = product.pricePerUnit || product.price || 0;
 
-  // State for Quantity
+  // State
   const [qty, setQty] = useState(minQty);
+  const [showEnquireModal, setShowEnquireModal] = useState(false);
 
-  // Ensure qty resets if product changes
   useEffect(() => {
     setQty(minQty);
   }, [product]);
 
-  // --- Handlers for Quantity ---
+  // --- Handlers ---
   const increaseQty = () => setQty((prev: number) => prev + 10);
   
   const decreaseQty = () => {
@@ -41,18 +41,27 @@ export default function ProductDetail() {
     }
   };
 
-  // --- Handler for Email Inquiry (Replaces Chatbot) ---
-  const handleEnquire = async () => {
-    const subject = `Inquiry for ${product.name}`;
-    const body = `Hello Team,\n\nI am interested in purchasing:\n\nProduct: ${product.name}\nQuantity: ${qty} ${unit}\n\nPlease provide me with a quotation and availability.\n\nRegards,`;
-    
-    // Replace with your support email
-    const emailUrl = `mailto:support@prochem.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  // Open the Contact Popup
+  const handleEnquire = () => {
+    setShowEnquireModal(true);
+  };
 
+  // ✅ CALL SUPPORT
+  const handleCallSupport = () => {
+    Linking.openURL('tel:+918460852903');
+  };
+
+  // ✅ WHATSAPP SUPPORT (Includes Product ID)
+  const handleWhatsAppSupport = async () => {
+    // Added Product ID for Admin Identification
+    const text = `Hello Team,\nI am interested in purchasing:\n\n*Product:* ${product.name}\n*Product ID:* ${product.id}\n*Quantity:* ${qty} ${unit}\n\nPlease provide me with a quotation and availability.`;
+    
+    const url = `whatsapp://send?phone=918460852903&text=${encodeURIComponent(text)}`;
+    
     try {
-      await Linking.openURL(emailUrl);
+      await Linking.openURL(url);
     } catch (err) {
-      Alert.alert('Error', 'No email app found on this device.');
+      Alert.alert('Error', 'WhatsApp not found on this device.');
     }
   };
 
@@ -69,7 +78,7 @@ export default function ProductDetail() {
     addToCart({
       ...product,
       id: product.id,
-      quantity: qty, // Uses the selected quantity
+      quantity: qty,
       pricePerUnit: price,
       unit: unit,
       sellerId: product.sellerId || 'unknown',
@@ -78,17 +87,63 @@ export default function ProductDetail() {
       price: price
     });
     
-    // Navigate to Cart
     navigation.navigate('BuyerTabs', { screen: 'Cart' });
   };
-
-  const handleDownloadMSDS = () => Alert.alert('Download', 'Downloading Material Safety Data Sheet (MSDS)...');
-  const handleDownloadQuote = () => Alert.alert('Quote Generated', 'Pro-forma Invoice sent to your email.');
 
   if (!product.name) return null;
 
   return (
     <View style={styles.container}>
+      
+      {/* ✅ ENQUIRY / QUOTE MODAL */}
+      <Modal transparent visible={showEnquireModal} animationType="fade" onRequestClose={() => setShowEnquireModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+               <Avatar.Icon 
+                  size={50} 
+                  icon="headset" 
+                  style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
+                  color="#004AAD"
+               />
+               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>
+                 Request Quotation
+               </Text>
+            </View>
+            
+            <Text style={[styles.modalBody, {marginBottom: 20}]}>
+              Contact our sales team directly to get the official quotation for this product.
+            </Text>
+
+            <View style={{width: '100%'}}>
+               <Button 
+                 mode="outlined" 
+                 icon="phone" 
+                 onPress={handleCallSupport} 
+                 style={{borderColor: '#004AAD', marginBottom: 10}}
+                 textColor="#004AAD"
+               >
+                 Call +91-84608 52903
+               </Button>
+               
+               <Button 
+                 mode="outlined" 
+                 icon="whatsapp" 
+                 onPress={handleWhatsAppSupport} 
+                 style={{borderColor: '#25D366', marginBottom: 15}} 
+                 textColor="#25D366"
+               >
+                 Chat on WhatsApp
+               </Button>
+               
+               <Button mode="contained" onPress={() => setShowEnquireModal(false)} style={{backgroundColor: '#64748B'}}>
+                 Close
+               </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView contentContainerStyle={{paddingBottom: 120}}>
         {/* Image Header */}
         <View style={styles.imageHeader}>
@@ -140,10 +195,6 @@ export default function ProductDetail() {
                   ✓ Quality Checked
                 </Text>
               </View>
-              <View style={{flex:1}}/>
-              <View style={styles.ratingBadge}>
-                <Text style={styles.ratingText}>⭐ {product.sellerRating || '4.5'}</Text>
-              </View>
             </View>
           </View>
 
@@ -163,19 +214,23 @@ export default function ProductDetail() {
             </View>
           </View>
 
-          {/* Documents Actions */}
-          <View style={{flexDirection: 'row', justifyContent:'space-between', marginBottom: 20}}>
-            <Button mode="outlined" icon="file-document" onPress={handleDownloadMSDS} style={{flex:1, marginRight: 8}}>
-              MSDS
-            </Button>
-            <Button mode="outlined" icon="file-download" onPress={handleDownloadQuote} style={{flex:1, marginLeft: 8}}>
-              Get Quote
+          {/* ✅ UPDATED: "Request Quotation" button now opens the Enquiry Modal */}
+          <View style={{marginBottom: 20}}>
+            <Button 
+              mode="outlined" 
+              icon="file-document-outline" 
+              onPress={handleEnquire} 
+              style={{width: '100%', borderColor: '#004AAD'}}
+              textColor="#004AAD"
+              contentStyle={{height: 48}}
+            >
+              Request Quotation
             </Button>
           </View>
 
           <Divider style={styles.divider} />
 
-          {/* ✅ 1. NEW QUANTITY SELECTOR SECTION */}
+          {/* Quantity Selector Section */}
           <Text variant="titleMedium" style={styles.sectionTitle}>Select Quantity</Text>
           <View style={styles.qtyContainer}>
              <View style={styles.counterRow}>
@@ -196,12 +251,10 @@ export default function ProductDetail() {
                 />
              </View>
              
-             {/* Minimum Order Warning */}
              <Text style={styles.moqText}>
                 *Minimum Order Quantity: {minQty} {unit}
              </Text>
 
-             {/* Total Price Calculation */}
              <View style={styles.totalRow}>
                 <Text variant="bodyLarge">Estimated Total:</Text>
                 <Text variant="titleMedium" style={{color: theme.colors.primary, fontWeight:'bold'}}>
@@ -221,7 +274,7 @@ export default function ProductDetail() {
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
         <Button 
           mode="outlined" 
-          onPress={handleEnquire} /* ✅ 2. Updated to use Email Handler */
+          onPress={handleEnquire}
           style={[styles.actionBtn, {borderColor: theme.colors.primary, borderWidth: 2}]}
           textColor={theme.colors.primary}
         >
@@ -248,8 +301,6 @@ const styles = StyleSheet.create({
   content: { padding: 24, backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
   title: { fontWeight: 'bold', maxWidth: '70%' },
-  ratingBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  ratingText: { color: '#D97706', fontWeight: 'bold' },
   grid: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   gridItem: { flex: 1, backgroundColor: '#F9FAFB', padding: 12, borderRadius: 12, alignItems:'center' },
   label: { color: '#6B7280', fontSize: 10, textTransform: 'uppercase', marginBottom: 4 },
@@ -262,11 +313,14 @@ const styles = StyleSheet.create({
   desc: { color: '#4B5563', lineHeight: 24 },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', elevation: 20 },
   actionBtn: { flex: 1, borderRadius: 12, paddingVertical: 4 },
-  
-  // New Styles for Quantity Section
   qtyContainer: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 12, marginBottom: 10 },
   counterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   qtyDisplay: { flex: 1, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginHorizontal: 20 },
   moqText: { fontSize: 12, color: '#DC2626', marginTop: 10, textAlign: 'center', fontStyle: 'italic' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E5E7EB' }
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 20, width: '100%', maxWidth: 360, elevation: 10 },
+  modalHeader: { alignItems: 'center', marginBottom: 10 },
+  modalBody: { textAlign: 'center', color: '#64748B', marginBottom: 25, lineHeight: 20 },
 });

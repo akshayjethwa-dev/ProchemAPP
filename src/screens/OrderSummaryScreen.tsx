@@ -18,9 +18,17 @@ const OrderSummaryScreen: React.FC<Props> = ({ cart, onBack, onProceed }) => {
   const pricePerUnit = item.pricePerUnit || 0;
   const unit = item.unit || 'kg';
 
+  // Base Calculation
   const subtotal = pricePerUnit * qty;
   const gstAmount = subtotal * (gstPercent / 100);
-  const total = subtotal + gstAmount;
+  const totalWithTax = subtotal + gstAmount;
+
+  // ✅ NEW FEES
+  const platformFee = totalWithTax * 0.01; // 1%
+  const logisticFee = totalWithTax * 0.01; // 1%
+
+  // ✅ FINAL TOTAL
+  const total = totalWithTax + platformFee + logisticFee;
 
   return (
     <div className="flex-1 bg-gray-50 flex flex-col pt-12">
@@ -84,7 +92,6 @@ const OrderSummaryScreen: React.FC<Props> = ({ cart, onBack, onProceed }) => {
               <h4 className="font-bold text-sm text-gray-900 line-clamp-1">
                 {item.name}
               </h4>
-              {/* ✅ FIXED: Use defaults or removed non-existent properties */}
               <p className="text-[10px] text-gray-400 font-bold uppercase">
                 Industrial Grade • Standard
               </p>
@@ -131,18 +138,26 @@ const OrderSummaryScreen: React.FC<Props> = ({ cart, onBack, onProceed }) => {
             </span>
           </div>
           <div className="flex justify-between text-blue-100 text-sm font-medium">
-            {/* ✅ FIXED: Use gstPercent default */}
             <span>GST ({gstPercent}%)</span>
             <span className="text-white font-bold">
               ₹{gstAmount.toLocaleString()}
             </span>
           </div>
+          
+          {/* ✅ UPDATED FEES */}
           <div className="flex justify-between text-blue-100 text-sm font-medium">
-            <span>Transportation</span>
-            <span className="text-[#22C55E] font-bold text-[10px] uppercase bg-white/10 px-2 py-0.5 rounded">
-              Quote Pending
+            <span>Platform Fee (1%)</span>
+            <span className="text-white font-bold">
+              ₹{platformFee.toLocaleString()}
             </span>
           </div>
+           <div className="flex justify-between text-blue-100 text-sm font-medium">
+            <span>Logistic Fee (1%)</span>
+             <span className="text-white font-bold">
+              ₹{logisticFee.toLocaleString()}
+            </span>
+          </div>
+
           <div className="h-px bg-white/10 my-4" />
           <div className="flex justify-between items-end">
             <div>

@@ -3,21 +3,21 @@ import { View, FlatList, StyleSheet, Alert, Modal, ScrollView } from 'react-nati
 import { Text, Button, Card, Chip, Searchbar, TextInput, Divider, useTheme, IconButton, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { Picker } from '@react-native-picker/picker'; // ✅ Import Picker
+import { Picker } from '@react-native-picker/picker'; 
 import { db } from '../../config/firebase';
 import { Order, User } from '../../types';
-import { getAllUsers } from '../../services/adminService'; // ✅ Import User Service
+import { getAllUsers } from '../../services/adminService'; 
 
 export default function AdminPaymentsScreen() {
   const theme = useTheme();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [sellers, setSellers] = useState<User[]>([]); // ✅ State for Sellers
+  const [sellers, setSellers] = useState<User[]>([]); 
   const [searchQuery, setSearchQuery] = useState('');
   
   // Modal State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [txId, setTxId] = useState('');
-  const [payoutSellerId, setPayoutSellerId] = useState(''); // ✅ State for Selected Seller
+  const [payoutSellerId, setPayoutSellerId] = useState(''); 
   const [modalVisible, setModalVisible] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [loadingSellers, setLoadingSellers] = useState(true);
@@ -118,13 +118,19 @@ export default function AdminPaymentsScreen() {
              <Text style={styles.label}>Order Value (Inc Tax)</Text>
              <Text style={styles.value}>₹{(item.subTotal + (item.taxAmount || 0)).toFixed(2)}</Text>
           </View>
+          
+          {/* ✅ UPDATED SELLER FEES BREAKDOWN */}
           <View style={styles.statRow}>
-             <Text style={styles.label}>- Seller Fee (2.5%)</Text>
+             <Text style={styles.label}>- Seller Fee (1.5%)</Text>
              <Text style={[styles.value, {color:'#D32F2F'}]}>- ₹{(item.platformFeeSeller || 0).toFixed(2)}</Text>
           </View>
           <View style={styles.statRow}>
-             <Text style={styles.label}>- Safety Fee (0.75%)</Text>
+             <Text style={styles.label}>- Safety Fee (0.25%)</Text>
              <Text style={[styles.value, {color:'#D32F2F'}]}>- ₹{(item.safetyFee || 0).toFixed(2)}</Text>
+          </View>
+           <View style={styles.statRow}>
+             <Text style={styles.label}>- Freight Fee (1%)</Text>
+             <Text style={[styles.value, {color:'#D32F2F'}]}>- ₹{(item.freightFee || 0).toFixed(2)}</Text>
           </View>
           
           <Divider style={{marginVertical: 8}}/>
@@ -164,7 +170,8 @@ export default function AdminPaymentsScreen() {
         <Text variant="headlineSmall" style={{fontWeight:'bold', color:'white'}}>Seller Payouts</Text>
       </View>
       
-      <View style={{padding: 16}}>
+      {/* ✅ ADDED flex: 1 to ensure FlatList scrolls properly */}
+      <View style={{flex: 1, padding: 16}}>
         <Searchbar
           placeholder="Search Order ID"
           onChangeText={setSearchQuery}

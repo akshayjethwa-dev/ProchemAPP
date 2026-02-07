@@ -1,3 +1,5 @@
+// src/types/index.ts
+
 // ✅ User Types
 export type UserRole = 'buyer' | 'seller' | 'transporter' | 'dual' | 'admin';
 export type VerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -38,7 +40,7 @@ export interface UserProfile {
   uid: string;
   email: string;
   phone: string;
- cin?: string;
+  cin?: string;
   userType: UserRole;
   companyName?: string;
   companyDescription?: string;
@@ -79,7 +81,6 @@ export interface Product {
   inStock?: boolean;
   createdAt?: any;
   updatedAt?: any;
-  
 }
 
 // ✅ Cart Types
@@ -125,11 +126,23 @@ export interface Order {
     gradeSheet?: string;
   };
   subTotal: number;         // For the base price before taxes
-  taxAmount: number; 
+  
+  // ✅ Tax Breakdown
+  taxAmount: number;        // Total Tax
+  cgst?: number;            // Central GST (Same State)
+  sgst?: number;            // State GST (Same State)
+  igst?: number;            // Integrated GST (Different State)
+  
   payoutAmount: number;       
-  platformFeeBuyer?: number; // To track how much you earned from the buyer
-  platformFeeSeller: number;
-  safetyFee: number;
+  
+  // ✅ Fees
+  platformFeeBuyer?: number; 
+  logisticFee?: number;      
+  
+  platformFeeSeller: number; 
+  safetyFee: number;         
+  freightFee?: number;       
+
   paymentId?: string;
   sellerPayoutStatus?: 'PENDING' | 'COMPLETED' | 'FAILED';
   sellerPayoutTxId?: string;
@@ -145,11 +158,11 @@ export interface Notification {
   userId: string; // 'ALL' or specific UserUID
   title: string;
   message: string;
-  type: 'order' | 'product' | 'promotion' | 'system' | 'admin_broadcast'; // Added 'admin_broadcast'
+  type: 'order' | 'product' | 'promotion' | 'system' | 'admin_broadcast'; 
   read: boolean;
-  imageUrl?: string; // ✅ New Field for Images
+  imageUrl?: string; 
   createdAt?: any;
-  data?: any; // For deep links (e.g., orderId)
+  data?: any; 
 }
 
 // ✅ Auth Response Types

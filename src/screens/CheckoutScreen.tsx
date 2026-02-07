@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { View, ScrollView, StyleSheet, Alert, BackHandler, Image, Clipboard, Platform } from 'react-native'; // ✅ Import Platform
-import { Text, Card, Button, Divider, IconButton, TextInput, HelperText, useTheme } from 'react-native-paper';
-import { useNavigation, useRoute, CommonActions } from '@react-navigation/native'; // ✅ Import CommonActions
+import { View, ScrollView, StyleSheet, Alert, BackHandler, Image, Clipboard, Platform } from 'react-native'; 
+import { Text, Card, Button, Divider, IconButton, TextInput, HelperText, useTheme, ActivityIndicator } from 'react-native-paper';
+import { useNavigation, useRoute, CommonActions } from '@react-navigation/native'; 
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc } from 'firebase/firestore'; 
+import { collection, addDoc, doc, getDoc } from 'firebase/firestore'; 
 import { useAppStore } from '../store/appStore';
 import { placeOrder } from '../services/orderService';
 import { db, storage } from '../config/firebase';
-import { Address } from '../types';
+import { Address, User } from '../types';
 
 // 🏦 BANK DETAILS CONFIGURATION
 const BANK_DETAILS = {
@@ -29,6 +29,10 @@ export default function CheckoutScreen() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
+  
+  // ✅ GST STATE LOGIC
+  const [sellerState, setSellerState] = useState<string | null>(null);
+  const [calculatingTax, setCalculatingTax] = useState(true);
 
   // Payment Proof State
   const [utrNumber, setUtrNumber] = useState('');
@@ -54,23 +58,9 @@ export default function CheckoutScreen() {
     return () => backHandler.remove();
   }, []);
 
-  // --- FINANCIAL CALCULATIONS ---
-  const PLATFORM_FEE_PERCENT = 0.025; // 2.5%
-  const SAFETY_FEE_PERCENT = 0.0075;  // 0.75%
-
-  const productTotal = cart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
-  const gstAmount = cart.reduce((sum, item) => sum + ((item.pricePerUnit * item.quantity) * ((item.gstPercent || 18) / 100)), 0);
-  const productTotalWithTax = productTotal + gstAmount;
-  
-  const platformFeeBuyer = productTotalWithTax * PLATFORM_FEE_PERCENT;
-  const platformFeeSeller = productTotalWithTax * PLATFORM_FEE_PERCENT;
-  const safetyFee = productTotalWithTax * SAFETY_FEE_PERCENT;
-
-  const finalPayableAmount = productTotalWithTax + platformFeeBuyer; 
-  const payoutAmount = productTotalWithTax - platformFeeSeller - safetyFee;
-
-  // --- ADDRESS LOGIC ---
+  // --- ADDRESS & SELLER LOGIC ---
   useEffect(() => {
+    // 1. Set Buyer Address
     if (route.params?.selectedAddress) {
       setSelectedAddress(route.params.selectedAddress);
       setErrors(prev => ({ ...prev, address: false })); 
@@ -81,7 +71,79 @@ export default function CheckoutScreen() {
         id: 'legacy', label: 'Default', street: user.address, city: '', state: '', zipCode: '', country: 'India' 
       });
     }
+
+    // 2. Fetch Seller State
+    fetchSellerDetails();
   }, [user, route.params]);
+
+  const fetchSellerDetails = async () => {
+    if (cart.length === 0) return;
+    try {
+      const sellerId = cart[0].sellerId;
+      const sellerRef = doc(db, 'users', sellerId);
+      const sellerSnap = await getDoc(sellerRef);
+      
+      if (sellerSnap.exists()) {
+        const sellerData = sellerSnap.data() as User;
+        let state = null;
+        if (sellerData.addresses && sellerData.addresses.length > 0) {
+          state = sellerData.addresses[0].state; 
+        }
+        setSellerState(state || 'Gujarat'); 
+      }
+    } catch (error) {
+      console.error("Error fetching seller details:", error);
+    } finally {
+      setCalculatingTax(false);
+    }
+  };
+
+  // --- FINANCIAL CALCULATIONS ---
+  // Buyer Fees
+  const BUYER_PLATFORM_FEE_PERCENT = 0.01; 
+  const BUYER_LOGISTIC_FEE_PERCENT = 0.01; 
+
+  // Seller Fees
+  const SELLER_PLATFORM_FEE_PERCENT = 0.015; 
+  const SELLER_SAFETY_FEE_PERCENT = 0.0025;  
+  const SELLER_FREIGHT_FEE_PERCENT = 0.01;   
+
+  // Base Calculations
+  const productTotal = cart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
+  
+  // ✅ DYNAMIC GST CALCULATION
+  const totalGstAmount = cart.reduce((sum, item) => sum + ((item.pricePerUnit * item.quantity) * ((item.gstPercent || 18) / 100)), 0);
+  
+  let cgst = 0;
+  let sgst = 0;
+  let igst = 0;
+  let isInterState = true; 
+
+  if (selectedAddress?.state && sellerState) {
+    if (selectedAddress.state.toLowerCase() === sellerState.toLowerCase()) {
+      isInterState = false;
+      cgst = totalGstAmount / 2;
+      sgst = totalGstAmount / 2;
+    } else {
+      isInterState = true;
+      igst = totalGstAmount;
+    }
+  } else {
+     igst = totalGstAmount;
+  }
+
+  const productTotalWithTax = productTotal + totalGstAmount;
+  
+  // Buyer Charges
+  const platformFeeBuyer = productTotalWithTax * BUYER_PLATFORM_FEE_PERCENT;
+  const logisticFee = productTotalWithTax * BUYER_LOGISTIC_FEE_PERCENT;
+  const finalPayableAmount = productTotalWithTax + platformFeeBuyer + logisticFee; 
+
+  // Seller Deductions
+  const platformFeeSeller = productTotalWithTax * SELLER_PLATFORM_FEE_PERCENT;
+  const safetyFee = productTotalWithTax * SELLER_SAFETY_FEE_PERCENT;
+  const freightFee = productTotalWithTax * SELLER_FREIGHT_FEE_PERCENT;
+  const payoutAmount = productTotalWithTax - platformFeeSeller - safetyFee - freightFee;
 
   // --- IMAGE PICKER ---
   const pickImage = async () => {
@@ -128,7 +190,6 @@ export default function CheckoutScreen() {
     }
 
     setErrors(newErrors);
-
     if (hasError) {
       Alert.alert("Required Fields", "Please select a Delivery Address and enter the Payment UTR.");
       return;
@@ -155,14 +216,21 @@ export default function CheckoutScreen() {
         
         // Financials
         subTotal: productTotal,
-        taxAmount: gstAmount,
+        taxAmount: totalGstAmount,
+        cgst: cgst,
+        sgst: sgst,
+        igst: igst,
+        
         platformFeeBuyer: platformFeeBuyer,
+        logisticFee: logisticFee,
+        
         platformFeeSeller: platformFeeSeller,
         safetyFee: safetyFee,
+        freightFee: freightFee,
+
         totalAmount: finalPayableAmount,
         payoutAmount: payoutAmount,
         
-        // Status & Payment
         status: 'PENDING_SELLER', 
         paymentStatus: 'pending_verification',
         paymentMode: 'BANK_TRANSFER',
@@ -173,7 +241,7 @@ export default function CheckoutScreen() {
         date: new Date().toISOString(),
       } as any);
 
-      // 4. Notify Admin
+      // 4. Notifications
       await addDoc(collection(db, 'notifications'), {
         userId: 'ALL_ADMINS',
         type: 'ORDER',
@@ -187,23 +255,24 @@ export default function CheckoutScreen() {
       clearCart();
       setLoading(false);
       
-      // ✅ 5. ROBUST NAVIGATION FIX FOR WEB & MOBILE
+      // ✅ 5. REDIRECT LOGIC
       const resetAction = CommonActions.reset({
         index: 0,
         routes: [{
           name: 'BuyerTabs',
           state: {
-            routes: [{ name: 'Orders' }], // Force 'Orders' tab to be active
+            routes: [{ name: 'Orders' }], 
           },
         }],
       });
 
       if (Platform.OS === 'web') {
-        // 🌍 WEB FIX: Use standard window.alert which blocks execution until OK is clicked
-        window.alert("Order Placed Successfully! Redirecting to Orders...");
-        navigation.dispatch(resetAction);
+        // ✅ WEB FIX: setTimeout ensures alert closes before navigation fires
+        setTimeout(() => {
+           window.alert("Order Placed Successfully! Your order has been sent to the Seller.");
+           navigation.dispatch(resetAction);
+        }, 100);
       } else {
-        // 📱 MOBILE FIX: Use Native Alert
         Alert.alert(
           "Order Placed Successfully!", 
           "Your order has been sent to the Seller. You can track its status in the Orders tab.",
@@ -226,6 +295,10 @@ export default function CheckoutScreen() {
     Clipboard.setString(text);
   };
 
+  if (calculatingTax) {
+    return <View style={{flex:1, justifyContent:'center'}}><ActivityIndicator /></View>;
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       
@@ -236,7 +309,7 @@ export default function CheckoutScreen() {
           {selectedAddress ? (
             <View>
               <Text style={{fontWeight:'bold'}}>{selectedAddress.label}</Text>
-              <Text>{selectedAddress.street}, {selectedAddress.city}</Text>
+              <Text>{selectedAddress.street}, {selectedAddress.city}, {selectedAddress.state}</Text>
             </View>
           ) : (
             <Text style={{color: errors.address ? theme.colors.error : 'orange'}}>
@@ -254,8 +327,31 @@ export default function CheckoutScreen() {
         <Card.Title title="Order Summary" />
         <Card.Content>
            <View style={styles.row}><Text>Item Total</Text><Text>₹{productTotal.toFixed(2)}</Text></View>
-           <View style={styles.row}><Text>GST (18%)</Text><Text>₹{gstAmount.toFixed(2)}</Text></View>
-           <View style={styles.row}><Text>Platform Fee (2.5%)</Text><Text>₹{platformFeeBuyer.toFixed(2)}</Text></View>
+           
+           {/* ✅ Dynamic GST Display */}
+           {!isInterState ? (
+             <>
+                <View style={styles.row}>
+                  <Text>CGST (9%)</Text>
+                  <Text>₹{cgst.toFixed(2)}</Text>
+                </View>
+                <View style={styles.row}>
+                  <Text>SGST (9%)</Text>
+                  <Text>₹{sgst.toFixed(2)}</Text>
+                </View>
+             </>
+           ) : (
+             <View style={styles.row}>
+                <Text>IGST (18%)</Text>
+                <Text>₹{igst.toFixed(2)}</Text>
+             </View>
+           )}
+
+           <Divider style={{marginVertical: 5}} />
+           
+           <View style={styles.row}><Text>Platform Fee (1%)</Text><Text>₹{platformFeeBuyer.toFixed(2)}</Text></View>
+           <View style={styles.row}><Text>Logistic Fee (1%)</Text><Text>₹{logisticFee.toFixed(2)}</Text></View>
+           
            <Divider style={{marginVertical: 10}} />
            <View style={styles.row}>
               <Text variant="titleMedium" style={{fontWeight:'bold'}}>Total Payable</Text>

@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { Picker } from '@react-native-picker/picker'; // ✅ Import Picker
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Address } from '../types';
+import { INDIAN_STATES } from '../constants'; // ✅ Import States
 
 export default function AddAddressScreen() {
   const navigation = useNavigation<any>();
@@ -21,12 +23,12 @@ export default function AddAddressScreen() {
     label: '', 
     street: '',
     city: '',
-    state: '',
+    state: 'Gujarat', // ✅ Default State
     zipCode: '',
     country: 'India'
   });
 
-  // ✅ FIX: Pre-fill form if editing
+  // ✅ Pre-fill form if editing
   useEffect(() => {
     if (isEditing) {
       setForm({
@@ -72,13 +74,13 @@ export default function AddAddressScreen() {
         updatedAddresses = [...currentAddresses, newAddress];
       }
 
-      // 1. Update Firestore (Replace entire array)
+      // 1. Update Firestore
       const userRef = doc(db, 'users', user!.uid);
       await updateDoc(userRef, {
         addresses: updatedAddresses
       });
 
-      // 2. Update Global Store Immediately
+      // 2. Update Global Store
       if (setUser && user) {
         setUser({ 
           ...user, 
@@ -135,13 +137,18 @@ export default function AddAddressScreen() {
         />
       </View>
 
-      <TextInput 
-        label="State" 
-        value={form.state} 
-        onChangeText={t => setForm({...form, state: t})} 
-        mode="outlined" 
-        style={styles.input} 
-      />
+      {/* ✅ NEW: Dropdown for State Selection */}
+      <Text style={{marginBottom: 5, color: '#666'}}>State</Text>
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={form.state}
+          onValueChange={(itemValue) => setForm({...form, state: itemValue})}
+        >
+          {INDIAN_STATES.map((state) => (
+            <Picker.Item key={state} label={state} value={state} />
+          ))}
+        </Picker>
+      </View>
 
       <Button mode="contained" onPress={handleSave} loading={loading} style={styles.btn}>
         {isEditing ? 'Update Address' : 'Save Address'}
@@ -154,5 +161,12 @@ const styles = StyleSheet.create({
   container: { padding: 20, backgroundColor: 'white', flexGrow: 1 },
   input: { marginBottom: 15, backgroundColor: 'white' },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
+  pickerContainer: { 
+    borderWidth: 1, 
+    borderColor: '#79747E', 
+    borderRadius: 5, 
+    marginBottom: 15, 
+    backgroundColor: 'white'
+  },
   btn: { marginTop: 10, backgroundColor: '#004AAD' }
 });

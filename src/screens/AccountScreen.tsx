@@ -14,10 +14,21 @@ export default function AccountScreen() {
   const theme = useTheme();
   
   const [showSwitchModal, setShowSwitchModal] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false); // ✅ New Support Modal State
   const [switching, setSwitching] = useState(false);
 
+  // ✅ Open the Support Modal
   const handleSupport = () => {
-    Linking.openURL('mailto:support@prochem.com?subject=Support Request');
+    setShowSupportModal(true);
+  };
+
+  // ✅ Actions
+  const openDialer = () => {
+    Linking.openURL('tel:+918460852903');
+  };
+
+  const openWhatsApp = () => {
+    Linking.openURL('whatsapp://send?phone=918460852903&text=Hello, I need assistance with the ProChem App.');
   };
 
   const initiateSwitch = () => {
@@ -40,7 +51,7 @@ export default function AccountScreen() {
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* 1. CONFIRMATION MODAL */}
+      {/* 1. SWITCH MODE CONFIRMATION MODAL */}
       <Modal transparent visible={showSwitchModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -74,7 +85,56 @@ export default function AccountScreen() {
         </View>
       </Modal>
 
-      {/* 2. LOADING SPINNER OVERLAY */}
+      {/* 2. ✅ SUPPORT DETAILS MODAL */}
+      <Modal transparent visible={showSupportModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+               <Avatar.Icon 
+                  size={50} 
+                  icon="headset" 
+                  style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
+                  color="#004AAD"
+               />
+               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>
+                 Promact Support
+               </Text>
+            </View>
+            
+            <Text style={[styles.modalBody, {marginBottom: 20}]}>
+              We are here to help! Choose a method below to contact us directly.
+            </Text>
+
+            <View style={{width: '100%'}}>
+               <Button 
+                 mode="outlined" 
+                 icon="phone" 
+                 onPress={openDialer} 
+                 style={{borderColor: '#004AAD', marginBottom: 10}}
+                 textColor="#004AAD"
+               >
+                 Call +91-84608 52903
+               </Button>
+               
+               <Button 
+                 mode="outlined" 
+                 icon="whatsapp" 
+                 onPress={openWhatsApp} 
+                 style={{borderColor: '#25D366', marginBottom: 15}} 
+                 textColor="#25D366"
+               >
+                 Chat on WhatsApp
+               </Button>
+               
+               <Button mode="contained" onPress={() => setShowSupportModal(false)} style={{backgroundColor: '#64748B'}}>
+                 Close
+               </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 3. LOADING SPINNER OVERLAY */}
       <Modal transparent visible={switching}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {alignItems:'center', paddingVertical: 40}]}>
@@ -163,7 +223,6 @@ export default function AccountScreen() {
           />
           <Divider style={{marginLeft: 60}} />
 
-          {/* ✅ FIX: Navigate to AddressList instead of EditProfile */}
           <List.Item 
             title="Manage Address" 
             left={() => <List.Icon icon="map-marker-outline" color="#64748B" />} 
@@ -186,20 +245,13 @@ export default function AccountScreen() {
 
         <List.Section style={styles.listSection}>
           <List.Subheader style={styles.subheader}>SUPPORT & LEGAL</List.Subheader>
+          
+          {/* ✅ UPDATED HELP CENTER ACTION */}
           <List.Item 
             title="Help Center" 
             left={() => <List.Icon icon="headset" color="#64748B" />} 
             right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
             onPress={handleSupport}
-            style={styles.listItem}
-          />
-          <Divider style={{marginLeft: 60}} />
-
-          <List.Item 
-            title="Returns & Refunds" 
-            left={() => <List.Icon icon="refresh" color="#64748B" />}
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => navigation.navigate('LegalPages')}
             style={styles.listItem}
           />
           <Divider style={{marginLeft: 60}} />

@@ -1,6 +1,6 @@
 import { addDoc, collection, doc, updateDoc, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { Order } from '../types';
+import { Order, OrderStatus } from '../types';
 
 // 1. Create Order & RETURN ID
 export const placeOrder = async (orderData: Omit<Order, 'id'>) => {
@@ -35,7 +35,13 @@ export const adminVerifyOrder = async (orderId: string, approved: boolean) => {
   });
 };
 
-// ✅ 4. NEW: Fetch Orders for a specific Buyer
+// ✅ 4. NEW: Admin Force Status Update
+export const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+  const orderRef = doc(db, 'orders', orderId);
+  await updateDoc(orderRef, { status: newStatus });
+};
+
+// 5. Fetch Orders for a specific Buyer
 export const getBuyerOrders = async (buyerId: string): Promise<Order[]> => {
   try {
     const q = query(

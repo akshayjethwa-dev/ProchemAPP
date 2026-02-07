@@ -25,6 +25,7 @@ import { registerUser } from '../services/authService';
 type RootStackParamList = {
   Login: undefined;
   Registration: { role?: string } | undefined;
+  LegalPages: undefined; // ✅ Added LegalPages to type definition
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -97,7 +98,7 @@ export default function RegistrationScreen() {
       newErrors.password = 'Password must be at least 6 characters';
       isValid = false;
     }
-    // ✅ CHANGED: Manual check only (Length must be 15)
+    // Manual GST check (Length must be 15)
     if (!gstin || gstin.length !== 15) {
       newErrors.gstin = 'Enter a valid 15-digit GST Number';
       isValid = false;
@@ -131,7 +132,6 @@ export default function RegistrationScreen() {
         phoneNumber: phoneNumber.trim(),
         userType: role || 'buyer',
         gstin: gstin.toUpperCase(),
-        // ✅ CHANGED: Set verification to false so Admin must approve it
         gstVerified: false, 
         verificationStatus: 'PENDING',
         address: '', 
@@ -151,16 +151,9 @@ export default function RegistrationScreen() {
     }
   };
 
-  // ✅ Fixed Terms Link for Web & Mobile
+  // ✅ UPDATED: Navigates to the actual Legal Pages screen
   const openTerms = () => {
-    const title = "Terms & Conditions";
-    const message = `This is a dummy Terms and Conditions page.\n\n1. All chemicals must be handled with care.\n2. GST verification is mandatory.\n3. Payments are subject to verification.\n4. Admin has the right to ban users.\n\n(In a real app, this would open a page.)`;
-    
-    if (Platform.OS === 'web') {
-      window.alert(`${title}\n\n${message}`);
-    } else {
-      Alert.alert(title, message);
-    }
+    navigation.navigate('LegalPages');
   };
 
   return (
@@ -287,7 +280,7 @@ export default function RegistrationScreen() {
               <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', marginLeft: 8 }}>
                 <Text style={{ color: '#666' }}>I accept the </Text>
                 <TouchableOpacity onPress={openTerms}>
-                  <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>
+                  <Text style={{ color: theme.colors.primary, fontWeight: 'bold', textDecorationLine: 'underline' }}>
                     Terms and Conditions
                   </Text>
                 </TouchableOpacity>

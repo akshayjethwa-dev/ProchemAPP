@@ -12,7 +12,7 @@ import { RootStackParamList } from './types';
 import BuyerNavigator from './BuyerNavigator';
 import SellerNavigator from './SellerNavigator';
 import AdminNavigator from './AdminNavigator';
-import TransporterNavigator from './TransporterNavigator'; // ✅ Import this
+import TransporterNavigator from './TransporterNavigator'; 
 
 // Auth Screens
 import SplashScreen from '../screens/SplashScreen';
@@ -124,6 +124,7 @@ export const RootNavigator = () => {
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="Notifications" component={NotificationScreen} />
             <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
+            <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>
