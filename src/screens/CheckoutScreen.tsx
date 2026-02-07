@@ -99,19 +99,15 @@ export default function CheckoutScreen() {
   };
 
   // --- FINANCIAL CALCULATIONS ---
-  // Buyer Fees
   const BUYER_PLATFORM_FEE_PERCENT = 0.01; 
   const BUYER_LOGISTIC_FEE_PERCENT = 0.01; 
 
-  // Seller Fees
   const SELLER_PLATFORM_FEE_PERCENT = 0.015; 
   const SELLER_SAFETY_FEE_PERCENT = 0.0025;  
   const SELLER_FREIGHT_FEE_PERCENT = 0.01;   
 
-  // Base Calculations
   const productTotal = cart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
   
-  // ✅ DYNAMIC GST CALCULATION
   const totalGstAmount = cart.reduce((sum, item) => sum + ((item.pricePerUnit * item.quantity) * ((item.gstPercent || 18) / 100)), 0);
   
   let cgst = 0;
@@ -134,12 +130,10 @@ export default function CheckoutScreen() {
 
   const productTotalWithTax = productTotal + totalGstAmount;
   
-  // Buyer Charges
   const platformFeeBuyer = productTotalWithTax * BUYER_PLATFORM_FEE_PERCENT;
   const logisticFee = productTotalWithTax * BUYER_LOGISTIC_FEE_PERCENT;
   const finalPayableAmount = productTotalWithTax + platformFeeBuyer + logisticFee; 
 
-  // Seller Deductions
   const platformFeeSeller = productTotalWithTax * SELLER_PLATFORM_FEE_PERCENT;
   const safetyFee = productTotalWithTax * SELLER_SAFETY_FEE_PERCENT;
   const freightFee = productTotalWithTax * SELLER_FREIGHT_FEE_PERCENT;
@@ -241,16 +235,20 @@ export default function CheckoutScreen() {
         date: new Date().toISOString(),
       } as any);
 
-      // 4. Notifications
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'ALL_ADMINS',
-        type: 'ORDER',
-        title: 'New Manual Payment Order',
-        message: `Order #${orderId.slice(0,6).toUpperCase()} placed. UTR: ${utrNumber}`,
-        data: { orderId },
-        read: false,
-        createdAt: new Date().toISOString()
-      });
+      // ✅ 4. NOTIFICATIONS (Wrapped in try/catch to avoid false failures)
+      try {
+        await addDoc(collection(db, 'notifications'), {
+          userId: 'ALL_ADMINS',
+          type: 'ORDER',
+          title: 'New Manual Payment Order',
+          message: `Order #${orderId.slice(0,6).toUpperCase()} placed. UTR: ${utrNumber}`,
+          data: { orderId },
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      } catch (notifyError) {
+        console.warn("Notification skipped due to permissions/error:", notifyError);
+      }
       
       clearCart();
       setLoading(false);
@@ -267,11 +265,9 @@ export default function CheckoutScreen() {
       });
 
       if (Platform.OS === 'web') {
-        // ✅ WEB FIX: setTimeout ensures alert closes before navigation fires
-        setTimeout(() => {
-           window.alert("Order Placed Successfully! Your order has been sent to the Seller.");
-           navigation.dispatch(resetAction);
-        }, 100);
+        // ✅ WEB FIX: Standard window.alert blocks until clicked, then navigates
+        window.alert("Order Placed Successfully! Your order has been sent to the Seller.");
+        navigation.dispatch(resetAction);
       } else {
         Alert.alert(
           "Order Placed Successfully!", 
@@ -284,7 +280,7 @@ export default function CheckoutScreen() {
       }
 
     } catch (error) {
-      console.error(error);
+      console.error("Order Failure:", error);
       setLoading(false);
       setUploading(false);
       Alert.alert('Error', 'Failed to place order. Please try again.');
@@ -328,7 +324,6 @@ export default function CheckoutScreen() {
         <Card.Content>
            <View style={styles.row}><Text>Item Total</Text><Text>₹{productTotal.toFixed(2)}</Text></View>
            
-           {/* ✅ Dynamic GST Display */}
            {!isInterState ? (
              <>
                 <View style={styles.row}>
