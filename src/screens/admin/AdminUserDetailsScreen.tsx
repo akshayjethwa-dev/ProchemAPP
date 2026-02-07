@@ -67,7 +67,8 @@ export default function AdminUserDetailsScreen() {
   };
 
   const handleInvoice = (order: Order) => {
-    navigation.navigate('InvoiceViewer', { order });
+    // ✅ PASS ADMIN ROLE to see all invoice types (Goods, Buyer Service, Seller Service)
+    navigation.navigate('InvoiceViewer', { order, role: 'admin' });
   };
 
   return (
@@ -142,6 +143,7 @@ export default function AdminUserDetailsScreen() {
                       title={`Order #${o.id.slice(0,6).toUpperCase()}`} 
                       subtitle={new Date(o.createdAt).toDateString()}
                       right={(props) => (
+                         // ✅ ADMIN INVOICE BUTTON
                          <IconButton {...props} icon="file-document-outline" onPress={() => handleInvoice(o)} />
                       )}
                     />

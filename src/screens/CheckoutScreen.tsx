@@ -12,11 +12,11 @@ import { Address, User } from '../types';
 
 // 🏦 BANK DETAILS CONFIGURATION
 const BANK_DETAILS = {
-  accountName: "PROCHEM MARKETPLACE PVT LTD",
-  accountNumber: "987654321012",
-  ifscCode: "HDFC0001234",
-  bankName: "HDFC Bank, Mumbai Branch",
-  upiId: "prochem@hdfcbank" 
+  accountName: "AAPA CAPITAL PRIVATE LIMITED",
+  accountNumber: "0052572593",
+  ifscCode: "KKBK0000832",
+  bankName: "Kotak Mahindra Bank",
+  Branch: "Anand - Vallabh Vidyanagar" 
 };
 
 export default function CheckoutScreen() {

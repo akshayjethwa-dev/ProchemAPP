@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, FlatList, Alert, Modal, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, FlatList, Alert, Modal, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { Text, Button, Card, Divider, TextInput, Chip, SegmentedButtons, IconButton, useTheme, ActivityIndicator, Avatar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-// ✅ IMPORT useNavigation
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import * as DocumentPicker from 'expo-document-picker'; 
@@ -12,7 +11,6 @@ import { sellerAcceptOrder, sellerDeclineOrder } from '../services/orderService'
 import { Order } from '../types';
 
 export default function SellerOrdersScreen() {
-  // ✅ INITIALIZE NAVIGATION
   const navigation = useNavigation<any>();
   const { user } = useAppStore();
   const theme = useTheme();
@@ -37,9 +35,7 @@ export default function SellerOrdersScreen() {
       setLoading(false);
       return;
     }
-
     const q = query(collection(db, 'orders'), where('sellerId', '==', user.uid));
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Order));
       data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -49,7 +45,6 @@ export default function SellerOrdersScreen() {
       console.error("Seller Order Query Error:", error);
       setLoading(false);
     });
-
     return unsubscribe;
   }, [user]);
 
@@ -72,63 +67,52 @@ export default function SellerOrdersScreen() {
     );
   };
 
-  const handleDownloadInvoice = (order: Order) => {
-    // ✅ NAVIGATION CALL NOW WORKS
-    navigation.navigate('InvoiceViewer', { order: order });
+  // ✅ UPDATED: Open WhatsApp for Invoice Request
+  const handleRequestInvoice = async (order: Order) => {
+    const phoneNumber = '+918460852903'; // REPLACE with your Admin/Support WhatsApp Number
+    const message = `Hello, I need the Seller Invoice for Order #${order.id.slice(0,6).toUpperCase()}.`;
+    const url = `whatsapp://send?text=${encodeURIComponent(message)}&phone=${phoneNumber}`;
+    
+    const supported = await Linking.canOpenURL(url);
+    if (supported) await Linking.openURL(url);
+    else Alert.alert('WhatsApp not installed', 'Please contact support.');
   };
 
   const pickDocument = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', 
-        copyToCacheDirectory: true,
-      });
-
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
       if (result.assets && result.assets.length > 0) {
         setDocs({ ...docs, qualityFile: result.assets[0] });
       }
-    } catch (err) {
-      console.error("Unknown Error: ", err);
-    }
+    } catch (err) { console.error("Error: ", err); }
   };
 
   const uploadFileToStorage = async (file: any) => {
     return new Promise<string>((resolve) => {
-      setTimeout(() => {
-        resolve(`https://firebasestorage.googleapis.com/v0/b/mock-project/o/${file.name}?alt=media`);
-      }, 1500);
+      setTimeout(() => resolve(`https://mock-url.com/${file.name}`), 1000);
     });
   };
 
   const submitDocuments = async () => {
     if (!selectedOrder) return;
-    
-    if (!docs.qualityFile) {
-      Alert.alert('Missing Document', 'Please upload the Quality Report document.');
+    if (!docs.qualityFile || !docs.purity || !docs.grade) {
+      Alert.alert('Missing Info', 'Please fill all fields and upload document.');
       return;
     }
-    if (!docs.purity || !docs.grade) {
-      Alert.alert('Missing Details', 'Please enter Purity and Grade values.');
-      return;
-    }
-
     setSubmitting(true);
     try {
       const fileUrl = await uploadFileToStorage(docs.qualityFile);
-
       await sellerAcceptOrder(selectedOrder.id, {
         qualityReport: fileUrl,     
         fileName: docs.qualityFile.name, 
         purityCertificate: docs.purity,
         gradeSheet: docs.grade
       });
-      
       setShowDocModal(false);
       setDocs({ qualityFile: null, purity: '', grade: '' });
-      Alert.alert('Success', 'Order accepted! Documents sent to Admin.');
+      Alert.alert('Success', 'Order accepted!');
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to submit. Please try again.');
+      Alert.alert('Error', 'Failed to submit.');
     } finally {
       setSubmitting(false);
     }
@@ -151,9 +135,10 @@ export default function SellerOrdersScreen() {
              >
                {item.status.replace('_', ' ')}
              </Chip>
-             <TouchableOpacity onPress={() => handleDownloadInvoice(item)}>
+             {/* ✅ UPDATED LINK ACTION */}
+             <TouchableOpacity onPress={() => handleRequestInvoice(item)}>
                <Text style={{color: '#004AAD', fontSize: 12, fontWeight:'bold', textDecorationLine: 'underline'}}>
-                 Download Invoice
+                 Request Invoice
                </Text>
              </TouchableOpacity>
           </View>
@@ -171,15 +156,10 @@ export default function SellerOrdersScreen() {
              <Text style={{fontWeight:'bold'}}>Total Payout</Text>
              <Text variant="titleMedium" style={{fontWeight:'bold', color: theme.colors.primary}}>₹{item.totalAmount}</Text>
            </View>
-           {item.status === 'PENDING_ADMIN' && (
-             <View style={styles.infoBox}>
-               <Text style={{fontSize:12, color:'#E65100'}}>⏳ Documents Submitted. Waiting for Admin.</Text>
-             </View>
-           )}
         </Card.Content>
         {isRequest && (
           <Card.Actions style={{paddingHorizontal:0, marginTop:10}}>
-             <Button mode="outlined" textColor="#D32F2F" style={{flex:1, marginRight:8, borderColor:'#D32F2F'}} onPress={() => handleDecline(item.id)}>Decline</Button>
+             <Button mode="outlined" textColor="#D32F2F" style={{flex:1, marginRight:8}} onPress={() => handleDecline(item.id)}>Decline</Button>
              <Button mode="contained" style={{flex:1, marginLeft:8}} onPress={() => handleAcceptClick(item)}>Accept</Button>
           </Card.Actions>
         )}
@@ -224,63 +204,28 @@ export default function SellerOrdersScreen() {
       <Modal visible={showDocModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:5}}>
-               <Text variant="titleLarge" style={{fontWeight:'bold'}}>Upload Documents</Text>
-               <IconButton icon="close" size={20} onPress={() => setShowDocModal(false)} />
-            </View>
+            <Text variant="titleLarge" style={{fontWeight:'bold', marginBottom: 20}}>Upload Documents</Text>
             
-            <Text style={{color:'#666', marginBottom:20, fontSize:13}}>
-              Upload the quality report/certificate for Admin approval.
-            </Text>
-
             <View style={styles.uploadArea}>
               {docs.qualityFile ? (
                 <View style={styles.filePreview}>
-                  <Avatar.Icon size={40} icon="file-document" style={{backgroundColor:'#E3F2FD'}} color="#004AAD" />
-                  <View style={{flex:1, marginLeft:10}}>
-                    <Text variant="bodyMedium" numberOfLines={1} style={{fontWeight:'bold'}}>{docs.qualityFile.name}</Text>
-                    <Text variant="bodySmall" style={{color:'#666'}}>{(docs.qualityFile.size / 1024).toFixed(0)} KB</Text>
-                  </View>
-                  <IconButton icon="close-circle" iconColor="red" onPress={() => setDocs({...docs, qualityFile: null})} />
+                   <Text numberOfLines={1}>{docs.qualityFile.name}</Text>
+                   <IconButton icon="close-circle" iconColor="red" onPress={() => setDocs({...docs, qualityFile: null})} />
                 </View>
               ) : (
                 <TouchableOpacity onPress={pickDocument} style={styles.uploadBtn}>
-                  <IconButton icon="cloud-upload" size={30} iconColor="#004AAD" />
-                  <Text style={{color:'#004AAD', fontWeight:'bold'}}>Click to Upload Quality Report</Text>
-                  <Text style={{fontSize:10, color:'#999', marginTop:4}}>PDF, JPG, or PNG</Text>
+                  <Text style={{color:'#004AAD'}}>Click to Upload Quality Report</Text>
                 </TouchableOpacity>
               )}
             </View>
 
-            <Text style={{fontWeight:'bold', marginBottom:8, marginTop:10}}>Verify Values</Text>
-            <View style={{flexDirection:'row'}}>
-              <TextInput 
-                label="Purity (%)" 
-                value={docs.purity} 
-                onChangeText={t => setDocs({...docs, purity: t})} 
-                mode="outlined" 
-                keyboardType="numeric"
-                style={[styles.input, {flex:1, marginRight:8}]}
-              />
-              <TextInput 
-                label="Grade" 
-                value={docs.grade} 
-                onChangeText={t => setDocs({...docs, grade: t})} 
-                mode="outlined" 
-                placeholder="e.g. Technical"
-                style={[styles.input, {flex:1}]}
-              />
-            </View>
+            <TextInput label="Purity (%)" value={docs.purity} onChangeText={t => setDocs({...docs, purity: t})} mode="outlined" style={styles.input} />
+            <TextInput label="Grade" value={docs.grade} onChangeText={t => setDocs({...docs, grade: t})} mode="outlined" style={styles.input} />
 
-            <Button 
-              mode="contained" 
-              onPress={submitDocuments} 
-              loading={submitting} 
-              style={{marginTop:15, borderRadius:8}}
-              contentStyle={{height:50}}
-            >
-              Submit & Accept Order
-            </Button>
+            <View style={{flexDirection:'row', justifyContent:'flex-end', marginTop: 10}}>
+              <Button onPress={() => setShowDocModal(false)}>Cancel</Button>
+              <Button mode="contained" onPress={submitDocuments} loading={submitting}>Submit</Button>
+            </View>
           </View>
         </View>
       </Modal>
@@ -295,11 +240,10 @@ const styles = StyleSheet.create({
   card: { backgroundColor: 'white', marginBottom: 15, padding: 15, borderRadius: 12, elevation: 2 },
   cardHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start' },
   productRow: { flexDirection:'row', justifyContent:'space-between', marginBottom: 6 },
-  infoBox: { marginTop: 10, padding: 8, backgroundColor: '#FFF3E0', borderRadius: 6, alignSelf:'flex-start' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 16 },
   input: { marginBottom: 12, backgroundColor: 'white' },
   uploadArea: { marginBottom: 15 },
   uploadBtn: { borderStyle:'dashed', borderWidth:1, borderColor:'#004AAD', borderRadius:10, padding:20, alignItems:'center', backgroundColor:'#F5F9FF' },
-  filePreview: { flexDirection:'row', alignItems:'center', padding:10, backgroundColor:'#F5F5F5', borderRadius:10, borderLeftWidth:4, borderLeftColor:'#004AAD' }
+  filePreview: { flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:10, backgroundColor:'#F5F5F5', borderRadius:10 }
 });

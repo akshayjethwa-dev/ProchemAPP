@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, ActivityIndicator, Linking, Alert } from 'react-native';
 import { Text, SegmentedButtons, Card, Button, Chip, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -7,7 +7,6 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Order } from '../types';
-import { generateInvoice } from '../services/invoiceService';
 
 export default function OrderHistoryScreen() {
   const navigation = useNavigation<any>();
@@ -20,10 +19,8 @@ export default function OrderHistoryScreen() {
 
   useEffect(() => {
     if (!user) return;
-
     setLoading(true);
 
-    // 1. Query to fetch orders for this buyer
     const q = query(
       collection(db, 'orders'),
       where('buyerId', '==', user.uid),
@@ -32,24 +29,21 @@ export default function OrderHistoryScreen() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-      console.log(`Fetched ${data.length} orders for buyer`); // ✅ Debug Log
       setOrders(data);
       setLoading(false);
     }, (error) => {
       console.error("Buyer order fetch error:", error);
-      // If you see "The query requires an index" in console, follow Step 1!
       setLoading(false);
     });
 
     return unsubscribe;
   }, [user]);
 
-  // ✅ 2. Robust Filtering (Case Insensitive)
   const activeStatuses = ['PENDING_SELLER', 'PENDING_ADMIN', 'ACCEPTED', 'SHIPPED', 'PENDING', 'IN_TRANSIT'];
   const pastStatuses = ['DELIVERED', 'CANCELLED', 'REJECTED', 'RETURNED'];
 
   const filteredOrders = orders.filter(o => {
-    const status = o.status?.toUpperCase() || ''; // Normalize to uppercase
+    const status = o.status?.toUpperCase() || ''; 
     if (tab === 'active') return activeStatuses.includes(status);
     if (tab === 'past') return pastStatuses.includes(status);
     return true; 
@@ -64,8 +58,18 @@ export default function OrderHistoryScreen() {
     return '';
   };
 
-  const handleDownloadInvoice = (order: Order) => {
-    navigation.navigate('InvoiceViewer', { order: order });
+  // ✅ UPDATED: Open WhatsApp for Invoice Request
+  const handleRequestInvoice = async (order: Order) => {
+    const phoneNumber = '+918460852903'; // REPLACE with your Admin/Support WhatsApp Number
+    const message = `Hello, I need the invoice for Order #${order.id.slice(0,6).toUpperCase()}.`;
+    const url = `whatsapp://send?text=${encodeURIComponent(message)}&phone=${phoneNumber}`;
+
+    const supported = await Linking.canOpenURL(url);
+    if (supported) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert('WhatsApp not installed', 'Please contact support at support@prochem.com');
+    }
   };
 
   const renderOrder = ({ item }: { item: Order }) => (
@@ -93,16 +97,16 @@ export default function OrderHistoryScreen() {
         </Text>
         
         <View style={{flexDirection:'row', marginTop: 12, justifyContent: 'flex-end', gap: 10}}>
+          {/* ✅ UPDATED BUTTON ACTION */}
           <Button 
             mode="outlined" 
             compact 
-            icon="file-document-outline" 
-            onPress={() => handleDownloadInvoice(item)}
+            icon="whatsapp" 
+            onPress={() => handleRequestInvoice(item)}
           >
-            Invoice
+            Request Invoice
           </Button>
 
-          {/* Show Track button if Active */}
           {activeStatuses.includes(item.status?.toUpperCase()) && (
              <Button 
                mode="contained" 
@@ -145,12 +149,6 @@ export default function OrderHistoryScreen() {
           ListEmptyComponent={
             <View style={{alignItems:'center', marginTop:50}}>
               <Text style={{color:'#999'}}>No orders found in {tab} tab.</Text>
-              {/* Debug Helper: Show total orders if strict filtering hid them */}
-              {orders.length > 0 && (
-                <Text style={{fontSize:10, color:'red', marginTop:10}}>
-                  (Debug: {orders.length} total orders fetched, but status didn't match filters)
-                </Text>
-              )}
             </View>
           }
         />
