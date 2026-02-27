@@ -16,6 +16,7 @@ export default function LegalPagesScreen() {
       </View>
       
       <ScrollView contentContainerStyle={styles.content}>
+        {/* --- TERMS AND CONDITIONS --- */}
         <Text variant="displaySmall" style={styles.mainTitle}>Terms and Conditions</Text>
         <Text style={styles.lastUpdated}>Last Updated: February 2026</Text>
 
@@ -39,35 +40,36 @@ export default function LegalPagesScreen() {
           <Bullet>Platform Fee: 1.5% of Order Value</Bullet>
           <Bullet>Safety Fee: 0.25% of Order Value</Bullet>
           <Bullet>Freight Fee: 1% of Order Value</Bullet>
-          {'\n'}
-          <Text style={{fontStyle:'italic', fontSize:12}}>* All fees are subject to 18% GST (CGST 9% + SGST 9% for intra-state, or IGST 18%).</Text>
         </Section>
 
-        <Section title="4. Payment Terms">
-          <Bullet><Text style={{fontWeight:'bold'}}>100% Advance Payment:</Text> Full payment is required via Bank Transfer (RTGS/NEFT/IMPS) to confirm an order.</Bullet>
-          <Bullet><Text style={{fontWeight:'bold'}}>Secure Settlement:</Text> Payments collected from Buyers are held in a settlement account. Funds are released to the Seller only after the order is delivered and verified by the Buyer.</Bullet>
+        <Section title="4. Cancellation & Returns">
+          <Bullet>Once an order moves to "Processing", NO CANCELLATIONS are entertained.</Bullet>
+          <Bullet>Quality disputes must be reported within 48 Hours with valid Lab Reports.</Bullet>
         </Section>
 
-        <Section title="5. Logistics & Transportation">
-          <Bullet><Text style={{fontWeight:'bold'}}>Provider:</Text> Transportation is arranged by Prochem through third-party logistics partners.</Bullet>
-          <Bullet><Text style={{fontWeight:'bold'}}>Liability:</Text> Prochem acts solely as a facilitator/middleman. While we ensure reputable partners, the primary responsibility for goods during transit lies with the Transporter.</Bullet>
-          <Bullet><Text style={{fontWeight:'bold'}}>Delivery Timeline:</Text> Standard delivery time is 7 to 10 working days from the date of payment confirmation.</Bullet>
+        {/* --- PRIVACY POLICY (NEW FOR PLAY STORE COMPLIANCE) --- */}
+        <Divider style={{ marginVertical: 30, backgroundColor: '#004AAD', height: 2 }} />
+        
+        <Text variant="displaySmall" style={styles.mainTitle}>Privacy Policy</Text>
+        <Text style={styles.lastUpdated}>Last Updated: February 2026</Text>
+
+        <Section title="1. Data Collection">
+          To facilitate B2B transactions, we collect business-critical information including:
+          <Bullet>Company Name, Contact Details, and Email Address.</Bullet>
+          <Bullet>GSTIN, Udyog Aadhar, and Shop Act Licenses for KYC verification.</Bullet>
+          <Bullet>Bank account details and transaction history for settlement purposes.</Bullet>
         </Section>
 
-        <Section title="6. Cancellation Policy">
-          <Bullet>Once payment is confirmed and the order status moves to "Processing", <Text style={{fontWeight:'bold', color:'#D32F2F'}}>NO CANCELLATIONS</Text> are entertained.</Bullet>
-          <Bullet>In exceptional cases where Prochem cancels an order due to stock unavailability, a full refund will be processed within 5-7 business days.</Bullet>
+        <Section title="2. Data Usage & Sharing">
+          <Bullet>We use your data solely to verify business authenticity, process orders, and facilitate logistics.</Bullet>
+          <Bullet>Your delivery address and contact info may be shared with our trusted Third-Party Logistics partners.</Bullet>
+          <Bullet>We do NOT sell your data to third-party marketing agencies.</Bullet>
         </Section>
 
-        <Section title="7. Returns & Quality Disputes">
-          Returns are accepted strictly under the following conditions:
-          <Bullet>1. <Text style={{fontWeight:'bold'}}>Quality Issues Only:</Text> Material does not match the specifications (COA) provided.</Bullet>
-          <Bullet>2. <Text style={{fontWeight:'bold'}}>Reporting Window:</Text> Issues must be reported within 48 Hours of delivery.</Bullet>
-          <Bullet>3. <Text style={{fontWeight:'bold'}}>Evidence:</Text> Photographic evidence of the product/packaging and a valid Lab Report proving the discrepancy is mandatory.</Bullet>
-        </Section>
-
-        <Section title="8. Governing Law">
-          These terms shall be governed by the laws of India. Any disputes arising out of or in connection with these terms shall be subject to the exclusive jurisdiction of the courts in <Text style={{fontWeight:'bold'}}>Ahmedabad, Gujarat</Text>.
+        <Section title="3. Data Retention & Account Deletion">
+          <Bullet>Your data is retained as long as your account is active to comply with Indian taxation and corporate laws.</Bullet>
+          <Bullet>You have the right to request account deletion directly from the App (Account {'>'} Delete Account) or by contacting our support team.</Bullet>
+          <Bullet>Upon deletion, non-transactional personal data is erased. Invoices and transaction records are securely retained as mandated by GST regulations.</Bullet>
         </Section>
 
         <View style={{height: 50}} />
@@ -97,5 +99,5 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', padding: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   content: { padding: 24 },
   mainTitle: { fontWeight: 'bold', marginBottom: 5, color: '#004AAD' },
-  lastUpdated: { color: '#94A3B8', marginBottom: 30, fontStyle: 'italic' }
+  lastUpdated: { color: '#94A3B8', marginBottom: 10, fontStyle: 'italic' }
 });

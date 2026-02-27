@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Modal, ActivityIndicator, Dimensions } from 'react-native';
+import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Modal, ActivityIndicator, Dimensions, Alert } from 'react-native';
 import { Text, Avatar, List, Divider, Button, Chip, useTheme, Card, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
-import { logoutUser } from '../services/authService';
+import { logoutUser, deleteUserAccount } from '../services/authService'; // ✅ Added deleteUserAccount
 
 const { width } = Dimensions.get('window');
 
@@ -14,8 +14,10 @@ export default function AccountScreen() {
   const theme = useTheme();
   
   const [showSwitchModal, setShowSwitchModal] = useState(false);
-  const [showSupportModal, setShowSupportModal] = useState(false); // ✅ New Support Modal State
+  const [showSupportModal, setShowSupportModal] = useState(false); 
+  const [showDeleteModal, setShowDeleteModal] = useState(false); // ✅ New Delete Modal State
   const [switching, setSwitching] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false); // ✅ New Delete Loading State
 
   // ✅ Open the Support Modal
   const handleSupport = () => {
@@ -46,6 +48,21 @@ export default function AccountScreen() {
       setViewMode(targetMode);
       setSwitching(false);
     }, 800);
+  };
+
+  // ✅ New Function to Handle Account Deletion
+  const handleDeleteAccount = async () => {
+    try {
+      setIsDeleting(true);
+      await deleteUserAccount();
+      setShowDeleteModal(false);
+      Alert.alert("Account Deleted", "Your account and data have been permanently removed.");
+    } catch (error: any) {
+      setShowDeleteModal(false);
+      Alert.alert("Deletion Failed", error.message);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -85,7 +102,7 @@ export default function AccountScreen() {
         </View>
       </Modal>
 
-      {/* 2. ✅ SUPPORT DETAILS MODAL */}
+      {/* 2. SUPPORT DETAILS MODAL */}
       <Modal transparent visible={showSupportModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -134,7 +151,39 @@ export default function AccountScreen() {
         </View>
       </Modal>
 
-      {/* 3. LOADING SPINNER OVERLAY */}
+      {/* 3. ✅ DELETE ACCOUNT CONFIRMATION MODAL */}
+      <Modal transparent visible={showDeleteModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+               <Avatar.Icon 
+                  size={50} 
+                  icon="alert" 
+                  style={{backgroundColor: '#FFEBEE', marginBottom: 15}} 
+                  color="#D32F2F"
+               />
+               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center', color: '#D32F2F'}}>
+                 Delete Account?
+               </Text>
+            </View>
+            
+            <Text style={styles.modalBody}>
+              Are you sure you want to permanently delete your account? This will erase all your business data, order history, and KYC details. This action cannot be undone.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <Button mode="outlined" onPress={() => setShowDeleteModal(false)} style={{flex:1, marginRight:10}} disabled={isDeleting}>
+                Cancel
+              </Button>
+              <Button mode="contained" buttonColor="#D32F2F" onPress={handleDeleteAccount} style={{flex:1}} loading={isDeleting} disabled={isDeleting}>
+                Delete
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 4. LOADING SPINNER OVERLAY */}
       <Modal transparent visible={switching}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {alignItems:'center', paddingVertical: 40}]}>
@@ -246,7 +295,6 @@ export default function AccountScreen() {
         <List.Section style={styles.listSection}>
           <List.Subheader style={styles.subheader}>SUPPORT & LEGAL</List.Subheader>
           
-          {/* ✅ UPDATED HELP CENTER ACTION */}
           <List.Item 
             title="Help Center" 
             left={() => <List.Icon icon="headset" color="#64748B" />} 
@@ -257,11 +305,22 @@ export default function AccountScreen() {
           <Divider style={{marginLeft: 60}} />
 
           <List.Item 
-            title="Terms of Service" 
+            title="Terms & Privacy Policy" 
             left={() => <List.Icon icon="file-sign" color="#64748B" />} 
             right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
             onPress={() => navigation.navigate('LegalPages')}
             style={styles.listItem}
+          />
+          <Divider style={{marginLeft: 60}} />
+          
+          {/* ✅ Added Delete Account Entry */}
+          <List.Item 
+            title="Delete Account" 
+            left={() => <List.Icon icon="delete-outline" color="#D32F2F" />} 
+            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => setShowDeleteModal(true)} 
+            titleStyle={{color: '#D32F2F', fontWeight: 'bold'}}
+            style={styles.listItem} 
           />
         </List.Section>
 

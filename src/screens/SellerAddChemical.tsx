@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
-import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu, Card, Divider } from 'react-native-paper'; // ✅ Added Card, Divider
+import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu, Card, Divider, Checkbox } from 'react-native-paper'; // ✅ Added Checkbox
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker'; 
 import { useAppStore } from '../store/appStore';
@@ -39,6 +39,9 @@ export default function SellerAddChemical() {
 
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState<any>(null);
+  
+  // ✅ NEW: Compliance Check State for Google Play Policy
+  const [isCompliant, setIsCompliant] = useState(false);
   
   // --- DROPDOWN STATES ---
   const [unitMenuVisible, setUnitMenuVisible] = useState(false);
@@ -100,6 +103,8 @@ export default function SellerAddChemical() {
         origin: editingProduct.origin || 'India',
         imageUrl: editingProduct.imageUrl || ''
       });
+      // ✅ If editing an existing product, we can assume it was previously checked
+      setIsCompliant(true);
       navigation.setOptions({ title: 'Edit Product' });
     }
   }, [editingProduct]);
@@ -166,6 +171,11 @@ export default function SellerAddChemical() {
     if (!form.category.trim()) return showAlert('Missing Field', 'Please select or enter a Category.');
     if (!form.pricePerUnit.trim()) return showAlert('Missing Field', 'Please enter Price.');
     if (!form.unit.trim()) return showAlert('Missing Field', 'Please specify a Unit.');
+
+    // ✅ Google Play Compliance Validation
+    if (!isCompliant) {
+        return showAlert('Compliance Required', 'You must verify that this chemical is legally permitted for sale under local regulations.');
+    }
 
     setLoading(true);
     try {
@@ -336,7 +346,7 @@ export default function SellerAddChemical() {
             </View>
           </View>
 
-          {/* ✅ NEW: ESTIMATED PAYOUT CARD */}
+          {/* ✅ ESTIMATED PAYOUT CARD */}
           {payoutStats.basePrice > 0 && (
             <Card style={styles.payoutCard}>
               <Card.Content>
@@ -418,6 +428,18 @@ export default function SellerAddChemical() {
             style={styles.input} 
           />
 
+          {/* ✅ NEW: Compliance Checkbox */}
+          <View style={styles.complianceContainer}>
+             <Checkbox
+                status={isCompliant ? 'checked' : 'unchecked'}
+                onPress={() => setIsCompliant(!isCompliant)}
+                color={theme.colors.primary}
+             />
+             <Text style={styles.complianceText}>
+               I declare that this product is not a banned substance and complies with all local regulations regarding the sale of chemicals.
+             </Text>
+          </View>
+
           <Button 
             mode="contained" 
             onPress={handleSubmit} 
@@ -470,5 +492,23 @@ const styles = StyleSheet.create({
   payoutCard: { marginBottom: 20, backgroundColor: '#F1F8E9', borderColor: '#C8E6C9', borderWidth: 1 },
   payoutRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   payoutLabel: { fontSize: 12, color: '#555' },
-  payoutValue: { fontSize: 12, fontWeight: 'bold', color: '#333' }
+  payoutValue: { fontSize: 12, fontWeight: 'bold', color: '#333' },
+
+  // Compliance Checkbox Styles
+  complianceContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    marginBottom: 20, 
+    backgroundColor: '#FFF3E0', 
+    padding: 10, 
+    borderRadius: 8, 
+    borderWidth: 1, 
+    borderColor: '#FFE0B2' 
+  },
+  complianceText: { 
+    flex: 1, 
+    fontSize: 12, 
+    color: '#E65100', 
+    marginTop: 8 
+  }
 });

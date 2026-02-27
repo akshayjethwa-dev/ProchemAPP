@@ -25,7 +25,9 @@ export default {
       predictiveBackGestureEnabled: false,
       package: "com.prochem.app",
       // ✅ UPDATED: Reads from EAS Secret if available, otherwise uses local file
-      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json"
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
+      compileSdkVersion: 34,
+      targetSdkVersion: 34,
     },
     web: {
       favicon: "./assets/favicon.png"
