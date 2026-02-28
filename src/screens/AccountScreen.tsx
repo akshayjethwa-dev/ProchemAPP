@@ -4,7 +4,7 @@ import { Text, Avatar, List, Divider, Button, Chip, useTheme, Card, IconButton }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
-import { logoutUser, deleteUserAccount } from '../services/authService'; // ✅ Added deleteUserAccount
+import { logoutUser, deleteUserAccount } from '../services/authService';
 
 const { width } = Dimensions.get('window');
 
@@ -15,16 +15,14 @@ export default function AccountScreen() {
   
   const [showSwitchModal, setShowSwitchModal] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false); 
-  const [showDeleteModal, setShowDeleteModal] = useState(false); // ✅ New Delete Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false); // ✅ New Delete Loading State
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // ✅ Open the Support Modal
   const handleSupport = () => {
     setShowSupportModal(true);
   };
 
-  // ✅ Actions
   const openDialer = () => {
     Linking.openURL('tel:+918460852903');
   };
@@ -50,13 +48,15 @@ export default function AccountScreen() {
     }, 800);
   };
 
-  // ✅ New Function to Handle Account Deletion
+  // Handles the account deletion process
   const handleDeleteAccount = async () => {
     try {
       setIsDeleting(true);
       await deleteUserAccount();
       setShowDeleteModal(false);
       Alert.alert("Account Deleted", "Your account and data have been permanently removed.");
+      // Note: Firebase's auth state listener in your RootNavigator/App.tsx 
+      // will automatically detect the null user and redirect to LoginScreen.
     } catch (error: any) {
       setShowDeleteModal(false);
       Alert.alert("Deletion Failed", error.message);
@@ -151,7 +151,7 @@ export default function AccountScreen() {
         </View>
       </Modal>
 
-      {/* 3. ✅ DELETE ACCOUNT CONFIRMATION MODAL */}
+      {/* 3. DELETE ACCOUNT CONFIRMATION MODAL */}
       <Modal transparent visible={showDeleteModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -313,7 +313,7 @@ export default function AccountScreen() {
           />
           <Divider style={{marginLeft: 60}} />
           
-          {/* ✅ Added Delete Account Entry */}
+          {/* Delete Account Entry */}
           <List.Item 
             title="Delete Account" 
             left={() => <List.Icon icon="delete-outline" color="#D32F2F" />} 

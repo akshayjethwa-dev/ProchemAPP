@@ -12,7 +12,6 @@ import { RootStackParamList } from './types';
 import BuyerNavigator from './BuyerNavigator';
 import SellerNavigator from './SellerNavigator';
 import AdminNavigator from './AdminNavigator';
-import TransporterNavigator from './TransporterNavigator'; 
 
 // Auth Screens
 import SplashScreen from '../screens/SplashScreen';
@@ -99,10 +98,7 @@ export const RootNavigator = () => {
             {user.userType === 'admin' ? (
               <Stack.Screen name="AdminApp" component={AdminNavigator} />
             
-            /* 🚛 TRANSPORTER CHECK */
-            ) : user.userType === 'transporter' ? (
-               <Stack.Screen name="TransporterApp" component={TransporterNavigator} />
-
+            
             /* 🏭 SELLER CHECK (Based on Toggle) */
             ) : viewMode === 'seller' ? (
               <>

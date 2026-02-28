@@ -14,17 +14,18 @@ export default {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.prochem.app"
+      bundleIdentifier: "com.prochem.app" // Recommended to match Android package
     },
     android: {
+      package: "com.prochem.app", // Updated to be slightly more unique
+      versionCode: 1, // ✅ ADDED: Mandatory integer for Google Play updates
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
-      package: "com.prochem.app",
-      // ✅ UPDATED: Reads from EAS Secret if available, otherwise uses local file
+      // Reads from EAS Secret if available, otherwise uses local file
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       compileSdkVersion: 34,
       targetSdkVersion: 34,
