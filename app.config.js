@@ -2,11 +2,21 @@ export default {
   expo: {
     name: "Prochem Marketplace",
     slug: "prochem-app",
-    version: "1.0.0",
-    orientation: "portrait",
+    version: "1.0.1",
+    orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     newArchEnabled: true,
+    
+    // 👇 ADDED FOR EAS UPDATE 👇
+    updates: {
+      url: "https://u.expo.dev/7a075ff7-f9b3-47cf-ab49-523d173d19ae"
+    },
+    runtimeVersion: {
+      policy: "appVersion"
+    },
+    // 👆 END EAS UPDATE CONFIG 👆
+
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",

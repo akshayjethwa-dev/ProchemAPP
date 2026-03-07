@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert, Platform, Linking, Modal } from 'react-native';
 import { Text, Button, IconButton, useTheme, Divider, Chip, Avatar } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
@@ -10,6 +10,9 @@ export default function ProductDetail() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const theme = useTheme();
+  
+  // 1. Initialize the safe area hook
+  const insets = useSafeAreaInsets();
   
   const { productId, product: paramProduct } = route.params || {};
   const { products, addToCart, addToCompare } = useAppStore();
@@ -147,13 +150,14 @@ export default function ProductDetail() {
       <ScrollView contentContainerStyle={{paddingBottom: 120}}>
         {/* Image Header */}
         <View style={styles.imageHeader}>
-          <SafeAreaView style={styles.safeHeader}>
+          {/* 2. ✅ FIXED: Replaced SafeAreaView with View and injected dynamic top padding */}
+          <View style={[styles.safeHeader, { paddingTop: Math.max(insets.top, 20) }]}>
             <IconButton icon="arrow-left" iconColor="black" containerColor="white" onPress={() => navigation.goBack()} />
             <View style={{flexDirection: 'row'}}>
               <IconButton icon="compare-horizontal" iconColor="black" containerColor="white" onPress={handleCompare} />
               <IconButton icon="share-variant" iconColor="black" containerColor="white" onPress={() => {}} />
             </View>
-          </SafeAreaView>
+          </View>
           <View style={styles.imagePlaceholder}>
              <Text style={{fontSize: 80}}>🧪</Text>
           </View>

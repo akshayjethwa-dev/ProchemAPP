@@ -4,13 +4,15 @@ import {
   signOut,
   sendPasswordResetEmail,
   updateProfile,
-  deleteUser // ✅ Added for Account Deletion
+  deleteUser
 } from 'firebase/auth';
 import { 
   doc, 
   getDoc, 
   setDoc, 
-  deleteDoc, // ✅ Added for Account Deletion
+  deleteDoc,
+  collection,   // ✅ Added for notifications
+  addDoc,       // ✅ Added for notifications
   serverTimestamp 
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -22,6 +24,9 @@ interface RegisterData {
   companyName: string;
   phoneNumber: string;
   userType: UserRole;
+  gstin: string;
+  gstVerified?: boolean;
+  verificationStatus?: string;
 }
 
 export const loginUser = async (email: string, password: string): Promise<any> => {
@@ -39,7 +44,7 @@ export const loginUser = async (email: string, password: string): Promise<any> =
   }
 };
 
-export const registerUser = async ({ email, password, companyName, phoneNumber, userType }: RegisterData): Promise<any> => {
+export const registerUser = async ({ email, password, companyName, phoneNumber, userType, gstin, verificationStatus }: RegisterData): Promise<any> => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
@@ -50,6 +55,7 @@ export const registerUser = async ({ email, password, companyName, phoneNumber, 
       userType: userType,
       companyName: companyName,
       phoneNumber: phoneNumber,
+      gstNumber: gstin,
       verified: false,
       kycStatus: 'pending',
       addresses: [], 
@@ -57,8 +63,33 @@ export const registerUser = async ({ email, password, companyName, phoneNumber, 
       createdAt: new Date().toISOString()
     };
 
+    // 1. Save User to Firestore
     await setDoc(doc(db, 'users', user.uid), userData);
     await updateProfile(user, { displayName: companyName });
+
+    // ✅ 2. NEW: Send Welcome Notification to the User
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: user.uid,
+        title: 'Welcome to Prochem! 🎉',
+        message: 'Your account has been created successfully. Our team will review your GST details shortly.',
+        type: 'system',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+      
+      // ✅ 3. NEW: Send Alert to Admins
+      await addDoc(collection(db, 'notifications'), {
+        userId: 'ALL_ADMINS',
+        title: 'New User Registration',
+        message: `${companyName} just registered as a new ${userType.toUpperCase()}.`,
+        type: 'admin_broadcast',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+    } catch (notifyError) {
+      console.warn("Failed to create signup notifications:", notifyError);
+    }
 
     return { ...user, ...userData };
   } catch (error: any) {
@@ -82,20 +113,15 @@ export const resetPassword = async (email: string): Promise<void> => {
   }
 };
 
-// ✅ NEW FUNCTION: Delete User Account
 export const deleteUserAccount = async (): Promise<void> => {
   try {
     const user = auth.currentUser;
     if (!user) throw new Error("No user is currently logged in.");
 
-    // 1. Delete user data from Firestore
     await deleteDoc(doc(db, 'users', user.uid));
-
-    // 2. Delete the user from Firebase Authentication
     await deleteUser(user);
   } catch (error: any) {
     console.error('Account deletion error:', error);
-    // Firebase requires a recent login to delete an account for security reasons
     if (error.code === 'auth/requires-recent-login') {
       throw new Error('For security reasons, please log out and log back in before deleting your account.');
     }
