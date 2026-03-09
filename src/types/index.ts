@@ -4,13 +4,19 @@
 export type UserRole = 'buyer' | 'seller' | 'transporter' | 'dual' | 'admin';
 export type VerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type OrderStatus = 
-  | 'PENDING_SELLER'   // Buyer placed order, waiting for Seller
-  | 'PENDING_ADMIN'    // Seller accepted, waiting for Admin verification
-  | 'ACCEPTED'         // Admin verified, Order is Live
-  | 'CANCELLED'        // Seller declined or Buyer cancelled
-  | 'REJECTED'         // Admin rejected docs
-  | 'shipped'          // Legacy/Future use
+  | 'PENDING_SELLER'   
+  | 'PENDING_ADMIN'    
+  | 'ACCEPTED'         
+  | 'CANCELLED'        
+  | 'REJECTED'         
+  | 'shipped'          
   | 'delivered';
+
+export interface TieredPrice {
+  minQty: number;
+  maxQty?: number; 
+  pricePerUnit: number;
+}
 
 export interface User {
   uid: string;
@@ -54,7 +60,7 @@ export interface UserProfile {
   updatedAt?: any;
 }
 
-// ✅ Product Types
+// ✅ Product Types (UPDATED WITH CHEMICAL-SPECIFIC DATA)
 export interface Product {
   id: string;
   name: string;
@@ -63,15 +69,37 @@ export interface Product {
   price: number;
   pricePerUnit?: number;
   quantity: number;
-  unit?: string; // 'kg' | 'litre' | 'tonne'
+  unit?: string; 
   sellerName?: string;
   grade?: string;
   origin?: string;
   purity?: number;
   casNumber?: string;
-  packagingType?: string;
-  gstPercent?: number;
+
+  tieredPricing?: TieredPrice[];
+  sampleAvailable?: boolean;
+  samplePrice?: number;
+  sampleSize?: string;
+  
+  // 🚀 NEW: Logistics & Packaging
+  packagingType?: string; // e.g., '200L Drum', '25kg Bag'
+  
+  // 🚀 NEW: Commercial & Tax
+  gstPercent?: number;    // e.g., 5, 12, 18
   moq?: number;
+  
+  // 🚀 NEW: Compliance & Safety
+  hazardClass?: string;   // e.g., 'Flammable', 'Corrosive', 'Non-Hazardous'
+  unNumber?: string;      // UN classification for transport
+  storageConditions?: string; // e.g., 'Store below 25°C in a dry place'
+  manufactureDate?: string;
+  expiryDate?: string;
+
+  // 🚀 NEW: Documentation (URLs)
+  msdsUrl?: string;       // Material Safety Data Sheet
+  tdsUrl?: string;        // Technical Data Sheet
+  coaUrl?: string;        // Certificate of Analysis (Sample)
+
   certifications?: string[];
   imageUrl?: string;
   image?: string;
@@ -81,6 +109,38 @@ export interface Product {
   inStock?: boolean;
   createdAt?: any;
   updatedAt?: any;
+}
+
+export interface RFQ {
+  id: string;
+  productId: string;
+  productName: string;
+  buyerId: string;
+  buyerName: string;
+  sellerId: string;
+  targetQuantity: number;
+  targetPrice: number;
+  unit: string;
+  deliveryPincode: string;
+  notes?: string;
+  status: 'PENDING' | 'NEGOTIATING' | 'ACCEPTED' | 'REJECTED' | 'CONVERTED';
+  agreedPrice?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 🚀 UPDATED: Negotiation Message Schema (for the chat room)
+export interface NegotiationMessage {
+  id: string;
+  rfqId: string; // Links back to the specific RFQ
+  text: string;
+  senderId: string;
+  timestamp: number;
+  isBuyer: boolean;
+  // B2B specific additions for counter-offers
+  isOffer?: boolean;
+  proposedPrice?: number;
+  proposedQty?: number;
 }
 
 // ✅ Cart Types
@@ -121,41 +181,34 @@ export interface Order {
   date: any;
   invoiceUrl?: string;
   sellerDocuments?: {
-    qualityReport?: string; // URL or Ref
+    qualityReport?: string; 
     purityCertificate?: string;
     gradeSheet?: string;
   };
-  subTotal: number;         // For the base price before taxes
-  
-  // ✅ Tax Breakdown
-  taxAmount: number;        // Total Tax
-  cgst?: number;            // Central GST (Same State)
-  sgst?: number;            // State GST (Same State)
-  igst?: number;            // Integrated GST (Different State)
-  
+  subTotal: number;         
+  taxAmount: number;        
+  cgst?: number;            
+  sgst?: number;            
+  igst?: number;            
   payoutAmount: number;       
-  
-  // ✅ Fees
   platformFeeBuyer?: number; 
   logisticFee?: number;      
-  
   platformFeeSeller: number; 
   safetyFee: number;         
   freightFee?: number;       
-
   paymentId?: string;
   sellerPayoutStatus?: 'PENDING' | 'COMPLETED' | 'FAILED';
   sellerPayoutTxId?: string;
   sellerPayoutDate?: any;
   paymentMode: 'BANK_TRANSFER';
-  paymentReference: string; // UTR Number
-  paymentScreenshot?: string; // URL
+  paymentReference: string; 
+  paymentScreenshot?: string; 
 }
 
 // ✅ Notification Types
 export interface Notification {
   id?: string;
-  userId: string; // 'ALL' or specific UserUID
+  userId: string; 
   title: string;
   message: string;
   type: 'order' | 'product' | 'promotion' | 'system' | 'admin_broadcast'; 
@@ -163,13 +216,6 @@ export interface Notification {
   imageUrl?: string; 
   createdAt?: any;
   data?: any; 
-}
-
-// ✅ Auth Response Types
-export interface AuthResponse {
-  success: boolean;
-  user?: User;
-  message: string;
 }
 
 // ✅ API Response Types
@@ -193,6 +239,7 @@ export interface TransportOrder {
   createdAt?: any;
   sellerId: string;
 }
+
 export interface NegotiationMessage {
   id: string;
   text: string;
@@ -203,7 +250,7 @@ export interface NegotiationMessage {
 
 export interface Address {
   id: string;
-  label: string; // e.g., "Main Warehouse", "Home"
+  label: string; 
   street: string;
   city: string;
   state: string;

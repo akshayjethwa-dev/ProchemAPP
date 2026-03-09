@@ -99,8 +99,7 @@ export default function CheckoutScreen() {
   };
 
   // --- FINANCIAL CALCULATIONS ---
-  const BUYER_PLATFORM_FEE_PERCENT = 0.01; 
-  const BUYER_LOGISTIC_FEE_PERCENT = 0.01; 
+  const BUYER_PLATFORM_FEE_PERCENT = 0.015; // ✅ Updated to 1.5%
 
   const SELLER_PLATFORM_FEE_PERCENT = 0.015; 
   const SELLER_SAFETY_FEE_PERCENT = 0.0025;  
@@ -131,8 +130,8 @@ export default function CheckoutScreen() {
   const productTotalWithTax = productTotal + totalGstAmount;
   
   const platformFeeBuyer = productTotalWithTax * BUYER_PLATFORM_FEE_PERCENT;
-  const logisticFee = productTotalWithTax * BUYER_LOGISTIC_FEE_PERCENT;
-  const finalPayableAmount = productTotalWithTax + platformFeeBuyer + logisticFee; 
+  // ✅ Removed logisticFee
+  const finalPayableAmount = productTotalWithTax + platformFeeBuyer; 
 
   const platformFeeSeller = productTotalWithTax * SELLER_PLATFORM_FEE_PERCENT;
   const safetyFee = productTotalWithTax * SELLER_SAFETY_FEE_PERCENT;
@@ -216,7 +215,7 @@ export default function CheckoutScreen() {
         igst: igst,
         
         platformFeeBuyer: platformFeeBuyer,
-        logisticFee: logisticFee,
+        // ✅ Removed logisticFee from payload
         
         platformFeeSeller: platformFeeSeller,
         safetyFee: safetyFee,
@@ -235,7 +234,7 @@ export default function CheckoutScreen() {
         date: new Date().toISOString(),
       } as any);
 
-      // ✅ 4. NOTIFICATIONS (Wrapped in try/catch to avoid false failures)
+      // 4. NOTIFICATIONS
       try {
         await addDoc(collection(db, 'notifications'), {
           userId: 'ALL_ADMINS',
@@ -253,7 +252,7 @@ export default function CheckoutScreen() {
       clearCart();
       setLoading(false);
       
-      // ✅ 5. REDIRECT LOGIC
+      // 5. REDIRECT LOGIC
       const resetAction = CommonActions.reset({
         index: 0,
         routes: [{
@@ -265,7 +264,6 @@ export default function CheckoutScreen() {
       });
 
       if (Platform.OS === 'web') {
-        // ✅ WEB FIX: Standard window.alert blocks until clicked, then navigates
         window.alert("Order Placed Successfully! Your order has been sent to the Seller.");
         navigation.dispatch(resetAction);
       } else {
@@ -344,14 +342,19 @@ export default function CheckoutScreen() {
 
            <Divider style={{marginVertical: 5}} />
            
-           <View style={styles.row}><Text>Platform Fee (1%)</Text><Text>₹{platformFeeBuyer.toFixed(2)}</Text></View>
-           <View style={styles.row}><Text>Logistic Fee (1%)</Text><Text>₹{logisticFee.toFixed(2)}</Text></View>
+           <View style={styles.row}><Text>Platform Fee (1.5%)</Text><Text>₹{platformFeeBuyer.toFixed(2)}</Text></View>
+           {/* ✅ Removed Logistic Fee UI */}
            
            <Divider style={{marginVertical: 10}} />
            <View style={styles.row}>
               <Text variant="titleMedium" style={{fontWeight:'bold'}}>Total Payable</Text>
               <Text variant="titleMedium" style={{fontWeight:'bold', color: theme.colors.primary}}>₹{finalPayableAmount.toFixed(2)}</Text>
            </View>
+           
+           {/* ✅ ADDED DELIVERY DISCLAIMER */}
+           <Text style={{fontSize: 12, color: '#D97706', marginTop: 10, fontStyle: 'italic', textAlign: 'center'}}>
+             * Delivery charges will apply. We will connect with you soon with the exact price.
+           </Text>
         </Card.Content>
       </Card>
 

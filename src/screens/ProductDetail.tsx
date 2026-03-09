@@ -1,70 +1,130 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Platform, Linking, Modal } from 'react-native';
-import { Text, Button, IconButton, useTheme, Divider, Chip, Avatar } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Alert, Platform, Linking, Modal, KeyboardAvoidingView, Keyboard } from 'react-native';
+import { Text, Button, IconButton, useTheme, Divider, Chip, Avatar, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { collection, addDoc, doc, setDoc, query, where, getDocs } from 'firebase/firestore'; 
+import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
-import { Product } from '../types';
+import { Product, TieredPrice } from '../types'; 
 
 export default function ProductDetail() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const theme = useTheme();
   
-  // 1. Initialize the safe area hook
   const insets = useSafeAreaInsets();
   
   const { productId, product: paramProduct } = route.params || {};
-  const { products, addToCart, addToCompare } = useAppStore();
+  const { products, addToCart, addToCompare, user } = useAppStore();
   
-  // Get initial product data
   const product = products.find(p => p.id === productId) || paramProduct || ({} as Product);
 
-  // Default Constants
   const minQty = product.moq || 10;
   const unit = product.unit || 'kg';
   const price = product.pricePerUnit || product.price || 0;
 
-  // State
-  const [qty, setQty] = useState(minQty);
-  const [showEnquireModal, setShowEnquireModal] = useState(false);
+  const [qty, setQty] = useState(String(minQty));
+  
+  const [showRfqModal, setShowRfqModal] = useState(false);
+  const [rfqLoading, setRfqLoading] = useState(false);
+  const [rfqForm, setRfqForm] = useState({ targetQty: '', targetPrice: '', pincode: '', notes: '' });
+
+  // 🚀 NEW STATE: Controls the Educational Success Modal
+  const [rfqSuccess, setRfqSuccess] = useState({ visible: false, rfqId: '' });
 
   useEffect(() => {
-    setQty(minQty);
+    setQty(String(minQty));
   }, [product]);
 
-  // --- Handlers ---
-  const increaseQty = () => setQty((prev: number) => prev + 10);
-  
-  const decreaseQty = () => {
-    if (qty > minQty) {
-      setQty((prev: number) => prev - 10);
-    } else {
-      Alert.alert('Minimum Order Limit', `You cannot order less than ${minQty} ${unit}.`);
+  const handleRequestSample = () => {
+    addToCart({
+      ...product,
+      id: `${product.id}_sample`, 
+      name: `${product.name} (Lab Sample)`,
+      quantity: 1,
+      pricePerUnit: product.samplePrice || 0,
+      unit: product.sampleSize || '100g',
+      sellerId: product.sellerId || 'unknown',
+      price: product.samplePrice || 0
+    });
+    Alert.alert('Sample Added', 'Lab sample added to cart for checkout.');
+  };
+
+  const submitRFQ = async () => {
+    Keyboard.dismiss();
+
+    if (!user) return Alert.alert('Error', 'Please log in to request a quote.');
+    if (!rfqForm.targetQty || !rfqForm.targetPrice || !rfqForm.pincode) {
+      return Alert.alert('Error', 'Please fill required RFQ fields.');
     }
-  };
 
-  // Open the Contact Popup
-  const handleEnquire = () => {
-    setShowEnquireModal(true);
-  };
-
-  // ✅ CALL SUPPORT
-  const handleCallSupport = () => {
-    Linking.openURL('tel:+918460852903');
-  };
-
-  // ✅ WHATSAPP SUPPORT (Includes Product ID)
-  const handleWhatsAppSupport = async () => {
-    // Added Product ID for Admin Identification
-    const text = `Hello Team,\nI am interested in purchasing:\n\n*Product:* ${product.name}\n*Product ID:* ${product.id}\n*Quantity:* ${qty} ${unit}\n\nPlease provide me with a quotation and availability.`;
-    
-    const url = `whatsapp://send?phone=918460852903&text=${encodeURIComponent(text)}`;
-    
+    setRfqLoading(true);
     try {
-      await Linking.openURL(url);
-    } catch (err) {
-      Alert.alert('Error', 'WhatsApp not found on this device.');
+      const q = query(
+        collection(db, 'rfqs'), 
+        where('productId', '==', product.id), 
+        where('buyerId', '==', user.uid),
+        where('status', 'in', ['PENDING', 'NEGOTIATING'])
+      );
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+         setRfqLoading(false);
+         setShowRfqModal(false);
+         const existingId = snapshot.docs[0].id;
+         setTimeout(() => {
+           Alert.alert('Duplicate Request', 'You already have an active negotiation for this product.', [
+             { text: 'Go to Chat', onPress: () => navigation.navigate('NegotiationRoom', { rfqId: existingId }) },
+             { text: 'Cancel', style: 'cancel' }
+           ]);
+         }, 400);
+         return;
+      }
+
+      const newRfqRef = doc(collection(db, 'rfqs')); 
+      const newRfqId = newRfqRef.id;
+
+      await setDoc(newRfqRef, {
+        id: newRfqId,
+        productId: product.id,
+        productName: product.name,
+        buyerId: user.uid,
+        buyerName: user.companyName || 'Buyer Company', 
+        sellerId: product.sellerId || 'unknown', 
+        targetQuantity: parseInt(rfqForm.targetQty),
+        targetPrice: parseFloat(rfqForm.targetPrice),
+        unit: unit,
+        deliveryPincode: rfqForm.pincode,
+        notes: rfqForm.notes || '',
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      await addDoc(collection(db, 'messages'), {
+        rfqId: newRfqId,
+        text: `System: Buyer requested ${rfqForm.targetQty}${unit} at ₹${rfqForm.targetPrice}/${unit}. Delivery to ${rfqForm.pincode}. Notes: ${rfqForm.notes || 'None'}`,
+        senderId: user.uid,
+        timestamp: Date.now(),
+        isBuyer: true,
+        isOffer: true,
+        proposedPrice: parseFloat(rfqForm.targetPrice),
+        proposedQty: parseInt(rfqForm.targetQty)
+      });
+
+      setRfqLoading(false);
+      setShowRfqModal(false);
+
+      // 🚀 FIXED: Trigger the Educational Success Modal instead of generic alert
+      setTimeout(() => {
+        setRfqSuccess({ visible: true, rfqId: newRfqId });
+      }, 500);
+      
+    } catch (e: any) {
+      console.error("RFQ Error:", e);
+      setRfqLoading(false);
+      Alert.alert('Error', e.message || 'Failed to submit quote request.');
     }
   };
 
@@ -74,14 +134,17 @@ export default function ProductDetail() {
   };
 
   const handleBuyNow = () => {
-    if (!product || !product.id) {
-      Alert.alert('Error', 'Product data is missing');
-      return;
+    if (!product || !product.id) return Alert.alert('Error', 'Product data is missing');
+
+    const orderQty = parseInt(qty) || minQty;
+    if (orderQty < minQty) {
+       return Alert.alert('Minimum Order Limit', `You cannot order less than ${minQty} ${unit}.`);
     }
+
     addToCart({
       ...product,
       id: product.id,
-      quantity: qty,
+      quantity: orderQty,
       pricePerUnit: price,
       unit: unit,
       sellerId: product.sellerId || 'unknown',
@@ -93,56 +156,87 @@ export default function ProductDetail() {
     navigation.navigate('BuyerTabs', { screen: 'Cart' });
   };
 
+  const openDocument = async (url: string | undefined, docName: string) => {
+    if (!url) return Alert.alert('Not Available', `The seller has not uploaded the ${docName} for this product.`);
+    try { await Linking.openURL(url); } catch (error) { Alert.alert('Error', `Could not open the ${docName} document.`); }
+  };
+
   if (!product.name) return null;
 
   return (
     <View style={styles.container}>
       
-      {/* ✅ ENQUIRY / QUOTE MODAL */}
-      <Modal transparent visible={showEnquireModal} animationType="fade" onRequestClose={() => setShowEnquireModal(false)}>
-        <View style={styles.modalOverlay}>
+      {/* IN-APP RFQ MODAL */}
+      <Modal transparent visible={showRfqModal} animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-               <Avatar.Icon 
-                  size={50} 
-                  icon="headset" 
-                  style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
-                  color="#004AAD"
-               />
-               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>
-                 Request Quotation
-               </Text>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
+              <Text variant="titleLarge" style={{fontWeight:'bold'}}>Request Custom Quote</Text>
+              <IconButton icon="close" onPress={() => { Keyboard.dismiss(); setShowRfqModal(false); }} />
             </View>
             
-            <Text style={[styles.modalBody, {marginBottom: 20}]}>
-              Contact our sales team directly to get the official quotation for this product.
+            <Text style={{color: '#666', marginBottom: 15, fontSize: 13}}>
+              Propose your desired quantity and target price directly to the supplier.
             </Text>
 
-            <View style={{width: '100%'}}>
-               <Button 
-                 mode="outlined" 
-                 icon="phone" 
-                 onPress={handleCallSupport} 
-                 style={{borderColor: '#004AAD', marginBottom: 10}}
-                 textColor="#004AAD"
-               >
-                 Call +91-84608 52903
-               </Button>
-               
-               <Button 
-                 mode="outlined" 
-                 icon="whatsapp" 
-                 onPress={handleWhatsAppSupport} 
-                 style={{borderColor: '#25D366', marginBottom: 15}} 
-                 textColor="#25D366"
-               >
-                 Chat on WhatsApp
-               </Button>
-               
-               <Button mode="contained" onPress={() => setShowEnquireModal(false)} style={{backgroundColor: '#64748B'}}>
-                 Close
-               </Button>
+            <TextInput label={`Target Quantity (${unit}) *`} keyboardType="numeric" value={rfqForm.targetQty} onChangeText={t => setRfqForm({...rfqForm, targetQty: t})} mode="outlined" style={styles.rfqInput} />
+            <TextInput label="Target Price per Unit (₹) *" keyboardType="numeric" value={rfqForm.targetPrice} onChangeText={t => setRfqForm({...rfqForm, targetPrice: t})} mode="outlined" style={styles.rfqInput} left={<TextInput.Affix text="₹ " />} />
+            <TextInput label="Delivery Pincode *" keyboardType="numeric" value={rfqForm.pincode} onChangeText={t => setRfqForm({...rfqForm, pincode: t})} mode="outlined" style={styles.rfqInput} maxLength={6} />
+            <TextInput label="Additional Notes (Optional)" multiline numberOfLines={3} value={rfqForm.notes} onChangeText={t => setRfqForm({...rfqForm, notes: t})} mode="outlined" style={styles.rfqInput} placeholder="e.g. Need immediate dispatch" />
+
+            <Button mode="contained" onPress={submitRFQ} loading={rfqLoading} style={{marginTop: 10, backgroundColor: '#004AAD'}} contentStyle={{height: 50}}>
+              Submit RFQ to Seller
+            </Button>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 🚀 NEW: EDUCATIONAL SUCCESS MODAL */}
+      <Modal transparent visible={rfqSuccess.visible} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, {alignItems: 'center'}]}>
+            <Avatar.Icon size={64} icon="check-decagram" style={{backgroundColor: '#DCFCE7', marginBottom: 15}} color="#166534" />
+            <Text variant="headlineSmall" style={{fontWeight:'bold', color: '#166534', marginBottom: 10}}>Quote Sent!</Text>
+
+            <Text style={{textAlign: 'center', color: '#475569', marginBottom: 20, lineHeight: 22}}>
+              Your request has been securely sent to the supplier. They will review it and reply shortly.
+            </Text>
+
+            {/* Educational Box */}
+            <View style={{backgroundColor: '#F8FAFC', padding: 15, borderRadius: 12, width: '100%', marginBottom: 25, borderWidth: 1, borderColor: '#E2E8F0'}}>
+              <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
+                 <Avatar.Icon size={24} icon="information-outline" style={{backgroundColor: 'transparent', margin: 0, padding: 0}} color="#004AAD" />
+                 <Text style={{fontWeight: 'bold', color: '#004AAD', marginLeft: 4}}>Where to find this later?</Text>
+              </View>
+              <Text style={{color: '#64748B', fontSize: 13}}>
+                You can track responses and continue negotiations by going to:
+              </Text>
+              <Text style={{fontWeight: 'bold', color: '#1E293B', marginTop: 8, fontSize: 14}}>
+                Account Tab  →  My Quotes & Negotiations
+              </Text>
             </View>
+
+            <Button
+              mode="contained"
+              style={{width: '100%', marginBottom: 12, backgroundColor: '#004AAD'}}
+              contentStyle={{height: 48}}
+              onPress={() => {
+                setRfqSuccess({ visible: false, rfqId: '' });
+                navigation.navigate('NegotiationRoom', { rfqId: rfqSuccess.rfqId });
+              }}
+            >
+              Go to Chat Room Now
+            </Button>
+
+            <Button
+              mode="outlined"
+              style={{width: '100%', borderColor: '#CBD5E1'}}
+              textColor="#64748B"
+              contentStyle={{height: 48}}
+              onPress={() => setRfqSuccess({ visible: false, rfqId: '' })}
+            >
+              Got it, continue browsing
+            </Button>
           </View>
         </View>
       </Modal>
@@ -150,7 +244,6 @@ export default function ProductDetail() {
       <ScrollView contentContainerStyle={{paddingBottom: 120}}>
         {/* Image Header */}
         <View style={styles.imageHeader}>
-          {/* 2. ✅ FIXED: Replaced SafeAreaView with View and injected dynamic top padding */}
           <View style={[styles.safeHeader, { paddingTop: Math.max(insets.top, 20) }]}>
             <IconButton icon="arrow-left" iconColor="black" containerColor="white" onPress={() => navigation.goBack()} />
             <View style={{flexDirection: 'row'}}>
@@ -159,7 +252,11 @@ export default function ProductDetail() {
             </View>
           </View>
           <View style={styles.imagePlaceholder}>
-             <Text style={{fontSize: 80}}>🧪</Text>
+             {product.imageUrl ? (
+                <Avatar.Image size={180} source={{ uri: product.imageUrl }} style={{backgroundColor: 'transparent'}} />
+             ) : (
+                <Text style={{fontSize: 80}}>🧪</Text>
+             )}
           </View>
         </View>
 
@@ -168,10 +265,15 @@ export default function ProductDetail() {
           <View style={styles.titleRow}>
             <View style={{flex: 1}}>
               <Text variant="headlineSmall" style={styles.title}>{product.name}</Text>
-              <View style={{flexDirection:'row', alignItems:'center', marginTop: 4}}>
+              <View style={{flexDirection:'row', alignItems:'center', marginTop: 4, flexWrap: 'wrap'}}>
                 <Text style={{color: '#666', fontWeight:'bold', marginRight: 8}}>{product.category}</Text>
                 {product.verified && (
-                  <Chip icon="check-decagram" textStyle={{fontSize:10, marginVertical:0}} style={{height:24, backgroundColor:'#DCFCE7'}}>Verified</Chip>
+                  <Chip icon="check-decagram" textStyle={{fontSize:10, marginVertical:0}} style={{height:24, backgroundColor:'#DCFCE7', marginRight: 8}}>Verified</Chip>
+                )}
+                {product.hazardClass && product.hazardClass !== 'Non-Hazardous' && (
+                  <Chip icon="alert" textStyle={{fontSize:10, marginVertical:0, color:'#D32F2F'}} style={{height:24, backgroundColor:'#FFEBEE'}}>
+                    {product.hazardClass}
+                  </Chip>
                 )}
               </View>
             </View>
@@ -179,9 +281,35 @@ export default function ProductDetail() {
               <Text variant="headlineSmall" style={{color: theme.colors.primary, fontWeight:'bold'}}>
                 ₹{price}
               </Text>
-              <Text variant="labelSmall">per {unit}</Text>
+              <Text variant="labelSmall">per {unit} <Text style={{fontSize: 8, color: '#999'}}>(+{product.gstPercent || 18}% GST)</Text></Text>
             </View>
           </View>
+
+          {/* TIERED PRICING DISPLAY */}
+          {product.tieredPricing && product.tieredPricing.length > 0 && (
+            <View style={{backgroundColor: '#F0FDF4', padding: 12, borderRadius: 12, marginVertical: 15, borderWidth: 1, borderColor: '#BBF7D0'}}>
+              <Text variant="titleMedium" style={{fontWeight:'bold', color: '#166534', marginBottom: 8}}>Volume Discounts</Text>
+              {product.tieredPricing.map((tier: any, idx: number) => (
+                <View key={idx} style={{flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: idx !== product.tieredPricing!.length - 1 ? 1 : 0, borderBottomColor: '#DCFCE7'}}>
+                  <Text style={{color: '#15803D'}}>Order ≥ {tier.minQty} {unit}</Text>
+                  <Text style={{fontWeight: 'bold', color: '#166534'}}>₹{tier.pricePerUnit} / {unit}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* SAMPLE ORDERING */}
+          {product.sampleAvailable && (
+             <View style={{backgroundColor: '#EFF6FF', padding: 16, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                <View>
+                  <Text style={{fontWeight: 'bold', color: '#1D4ED8'}}>Lab Sample Available</Text>
+                  <Text style={{color: '#3B82F6', fontSize: 12}}>{product.sampleSize} sample for ₹{product.samplePrice}</Text>
+                </View>
+                <Button mode="contained-tonal" compact onPress={handleRequestSample} buttonColor="#DBEAFE" textColor="#1D4ED8">
+                   Add Sample
+                </Button>
+             </View>
+          )}
 
           <Divider style={styles.divider} />
 
@@ -203,6 +331,7 @@ export default function ProductDetail() {
           </View>
 
           {/* Specs */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>Chemical Specifications</Text>
           <View style={styles.grid}>
             <View style={styles.gridItem}>
               <Text style={styles.label}>Grade</Text>
@@ -210,7 +339,7 @@ export default function ProductDetail() {
             </View>
             <View style={styles.gridItem}>
               <Text style={styles.label}>Purity</Text>
-              <Text style={styles.value}>{product.purity || 95}%</Text>
+              <Text style={styles.value}>{product.purity || 'N/A'}%</Text>
             </View>
             <View style={styles.gridItem}>
               <Text style={styles.label}>CAS No.</Text>
@@ -218,53 +347,65 @@ export default function ProductDetail() {
             </View>
           </View>
 
-          {/* ✅ UPDATED: "Request Quotation" button now opens the Enquiry Modal */}
-          <View style={{marginBottom: 20}}>
-            <Button 
-              mode="outlined" 
-              icon="file-document-outline" 
-              onPress={handleEnquire} 
-              style={{width: '100%', borderColor: '#004AAD'}}
-              textColor="#004AAD"
-              contentStyle={{height: 48}}
-            >
-              Request Quotation
+          {/* Logistics & Safety Specs */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>Logistics & Handling</Text>
+          <View style={styles.grid}>
+            <View style={styles.gridItem}>
+              <Text style={styles.label}>Packaging</Text>
+              <Text style={styles.value}>{product.packagingType || 'Standard'}</Text>
+            </View>
+            <View style={styles.gridItem}>
+              <Text style={styles.label}>UN Number</Text>
+              <Text style={styles.value}>{product.unNumber || 'N/A'}</Text>
+            </View>
+            <View style={styles.gridItem}>
+              <Text style={styles.label}>Storage</Text>
+              <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>{product.storageConditions || 'Room Temp'}</Text>
+            </View>
+          </View>
+
+          {/* Technical Documents Section */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>Technical Documents</Text>
+          <View style={styles.docRow}>
+            <Button mode="contained-tonal" icon="file-document-outline" onPress={() => openDocument(product.tdsUrl, 'TDS')} style={styles.docBtn} labelStyle={{fontSize: 12}} disabled={!product.tdsUrl}>
+              View TDS
+            </Button>
+            <Button mode="contained-tonal" icon="shield-alert-outline" onPress={() => openDocument(product.msdsUrl, 'MSDS')} style={styles.docBtn} labelStyle={{fontSize: 12}} disabled={!product.msdsUrl}>
+              View MSDS
+            </Button>
+            <Button mode="contained-tonal" icon="certificate-outline" onPress={() => openDocument(product.coaUrl, 'Certificate of Analysis')} style={styles.docBtn} labelStyle={{fontSize: 12}} disabled={!product.coaUrl}>
+              Sample CoA
             </Button>
           </View>
 
           <Divider style={styles.divider} />
 
           {/* Quantity Selector Section */}
-          <Text variant="titleMedium" style={styles.sectionTitle}>Select Quantity</Text>
+          <Text variant="titleMedium" style={styles.sectionTitle}>Select Bulk Quantity</Text>
           <View style={styles.qtyContainer}>
-             <View style={styles.counterRow}>
-                <IconButton 
-                  icon="minus" 
-                  mode="contained-tonal" 
-                  size={20}
-                  onPress={decreaseQty} 
-                />
-                <View style={styles.qtyDisplay}>
-                   <Text variant="titleLarge" style={{fontWeight:'bold'}}>{qty} {unit}</Text>
-                </View>
-                <IconButton 
-                  icon="plus" 
-                  mode="contained-tonal" 
-                  size={20}
-                  onPress={increaseQty} 
-                />
-             </View>
+             <TextInput 
+                mode="outlined" 
+                keyboardType="numeric" 
+                label={`Quantity (${unit})`}
+                value={qty} 
+                onChangeText={setQty} 
+                style={{backgroundColor: 'white', marginBottom: 10}}
+             />
              
              <Text style={styles.moqText}>
                 *Minimum Order Quantity: {minQty} {unit}
              </Text>
 
              <View style={styles.totalRow}>
-                <Text variant="bodyLarge">Estimated Total:</Text>
+                <Text variant="bodyLarge">Estimated Base Total:</Text>
                 <Text variant="titleMedium" style={{color: theme.colors.primary, fontWeight:'bold'}}>
-                   ₹{(price * qty).toLocaleString()}
+                   ₹{((parseFloat(qty) || 0) * price).toLocaleString()}
                 </Text>
              </View>
+             
+             <Text style={{fontSize: 11, color: '#D97706', marginTop: 8, fontStyle: 'italic', textAlign: 'center'}}>
+                * Delivery charges will apply. We will connect with you soon with the exact price.
+             </Text>
           </View>
 
           <Divider style={styles.divider} />
@@ -278,11 +419,11 @@ export default function ProductDetail() {
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
         <Button 
           mode="outlined" 
-          onPress={handleEnquire}
+          onPress={() => setShowRfqModal(true)}
           style={[styles.actionBtn, {borderColor: theme.colors.primary, borderWidth: 2}]}
           textColor={theme.colors.primary}
         >
-          Enquire
+          Negotiate / RFQ
         </Button>
         <View style={{width: 12}} />
         <Button 
@@ -305,10 +446,12 @@ const styles = StyleSheet.create({
   content: { padding: 24, backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
   title: { fontWeight: 'bold', maxWidth: '70%' },
-  grid: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  gridItem: { flex: 1, backgroundColor: '#F9FAFB', padding: 12, borderRadius: 12, alignItems:'center' },
-  label: { color: '#6B7280', fontSize: 10, textTransform: 'uppercase', marginBottom: 4 },
-  value: { fontWeight: 'bold', fontSize: 14, color: '#111827' },
+  grid: { flexDirection: 'row', gap: 8, marginBottom: 15 },
+  gridItem: { flex: 1, backgroundColor: '#F9FAFB', padding: 10, borderRadius: 12, alignItems:'center', justifyContent: 'center' },
+  label: { color: '#6B7280', fontSize: 10, textTransform: 'uppercase', marginBottom: 4, textAlign: 'center' },
+  value: { fontWeight: 'bold', fontSize: 13, color: '#111827', textAlign: 'center' },
+  docRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
+  docBtn: { flex: 1, borderRadius: 8 },
   divider: { marginVertical: 20 },
   sectionTitle: { fontWeight: 'bold', marginBottom: 12 },
   sellerCard: { backgroundColor: '#F0F9FF', padding: 16, borderRadius: 16, marginBottom: 20 },
@@ -318,13 +461,9 @@ const styles = StyleSheet.create({
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', elevation: 20 },
   actionBtn: { flex: 1, borderRadius: 12, paddingVertical: 4 },
   qtyContainer: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 12, marginBottom: 10 },
-  counterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  qtyDisplay: { flex: 1, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginHorizontal: 20 },
   moqText: { fontSize: 12, color: '#DC2626', marginTop: 10, textAlign: 'center', fontStyle: 'italic' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  // Modal Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 20, width: '100%', maxWidth: 360, elevation: 10 },
-  modalHeader: { alignItems: 'center', marginBottom: 10 },
-  modalBody: { textAlign: 'center', color: '#64748B', marginBottom: 25, lineHeight: 20 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: 'white', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400, elevation: 10 },
+  rfqInput: { marginBottom: 12, backgroundColor: 'white' }
 });

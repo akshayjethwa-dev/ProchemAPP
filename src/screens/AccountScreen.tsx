@@ -272,6 +272,21 @@ export default function AccountScreen() {
           />
           <Divider style={{marginLeft: 60}} />
 
+          {/* 🚀 FIXED: BUYER RFQ TRACKING LINK INJECTED HERE */}
+          {viewMode === 'buyer' && (
+            <>
+              <List.Item 
+                title="My Quotes & Negotiations"
+                description="Track your B2B custom price requests" 
+                left={() => <List.Icon icon="handshake-outline" color="#004AAD" />}
+                right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
+                onPress={() => navigation.navigate('NegotiationsList')}
+                style={styles.listItem}
+              />
+              <Divider style={{marginLeft: 60}} />
+            </>
+          )}
+
           <List.Item 
             title="Manage Address" 
             left={() => <List.Icon icon="map-marker-outline" color="#64748B" />} 

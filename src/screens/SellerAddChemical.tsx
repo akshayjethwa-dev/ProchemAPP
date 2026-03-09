@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
-import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu, Card, Divider, Checkbox } from 'react-native-paper'; // ✅ Added Checkbox
+import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu, Card, Divider, Checkbox, Switch } from 'react-native-paper'; 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker'; 
 import { useAppStore } from '../store/appStore';
@@ -8,22 +8,18 @@ import { addProduct, updateProduct } from '../services/productService';
 
 // --- CONSTANTS ---
 const UNIT_OPTIONS = [
-  'Kilogram (KGS)', 'Gram (GMS)', 'Quintal (QTL)', 'Metric Ton (MTQ)', 'Metric Ton (MTS)',
-  'Liter (LTR)', 'Milliliter (MLT)', 'Cubic Meter (MTQ)', 'Kiloliter (KLR)', 
-  'Piece (PCS)', 'Dozen (DOZ)', 'Number (NOS)', 'Bottle (BTL)', 'Pack (PAC)', 
-  'Unit (UNT)', 'Box (BOX)', 'Other'
+  'Kilogram (KGS)', 'Metric Ton (MTQ)', 'Liter (LTR)', 'Gram (GMS)', 'Piece (PCS)', 'Other'
 ];
 
 const CATEGORY_OPTIONS = [
-  'Industrial Chemicals',
-  'Pharma Chemicals',
-  'Agriculture',
-  'Food & Beverage',
-  'Lab Research',
-  'Other'
+  'Industrial Chemicals', 'Pharma Chemicals', 'Agriculture', 'Food & Beverage', 'Lab Research', 'Other'
 ];
 
-// ✅ FEE CONSTANTS (Matches Checkout Logic)
+// 🚀 NEW CONSTANTS FOR CHEMICAL DATA
+const GST_SLABS = ['5', '12', '18', '28'];
+const HAZARD_CLASSES = ['Non-Hazardous', 'Flammable', 'Corrosive', 'Toxic', 'Oxidizer', 'Explosive'];
+const PACKAGING_OPTIONS = ['200L Drum', '25kg Bag', '50kg Bag', 'IBC Tote', '1L Bottle', 'Tanker', 'Other'];
+
 const SELLER_PLATFORM_FEE = 0.015; // 1.5%
 const SELLER_SAFETY_FEE = 0.0025;  // 0.25%
 const SELLER_FREIGHT_FEE = 0.01;   // 1.0%
@@ -40,15 +36,19 @@ export default function SellerAddChemical() {
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState<any>(null);
   
-  // ✅ NEW: Compliance Check State for Google Play Policy
+  // 🚀 Document States
+  const [msdsFile, setMsdsFile] = useState<any>(null);
+  const [tdsFile, setTdsFile] = useState<any>(null);
+  const [coaFile, setCoaFile] = useState<any>(null);
+
   const [isCompliant, setIsCompliant] = useState(false);
   
   // --- DROPDOWN STATES ---
-  const [unitMenuVisible, setUnitMenuVisible] = useState(false);
-  const [unitDropdownValue, setUnitDropdownValue] = useState(UNIT_OPTIONS[0]);
-
-  const [categoryMenuVisible, setCategoryMenuVisible] = useState(false);
-  const [categoryDropdownValue, setCategoryDropdownValue] = useState(CATEGORY_OPTIONS[0]);
+  const [menus, setMenus] = useState({ unit: false, category: false, gst: false, hazard: false, packaging: false });
+  
+  // 🚀 NEW STATES: Tiered Pricing & Samples
+  const [tiers, setTiers] = useState([{ minQty: '', pricePerUnit: '' }]);
+  const [sample, setSample] = useState({ available: false, price: '', size: '100g' });
 
   const [form, setForm] = useState({
     name: '',
@@ -60,164 +60,178 @@ export default function SellerAddChemical() {
     purity: '',
     description: '',
     origin: 'India',
-    imageUrl: '' 
+    imageUrl: '',
+    gstPercent: GST_SLABS[2], // Default 18%
+    packagingType: PACKAGING_OPTIONS[0],
+    hazardClass: HAZARD_CLASSES[0],
+    unNumber: '',
+    storageConditions: '',
+    manufactureDate: '',
+    expiryDate: ''
   });
 
-  // ✅ Calculation State
-  const [payoutStats, setPayoutStats] = useState({
-    basePrice: 0,
-    platformFee: 0,
-    safetyFee: 0,
-    freightFee: 0,
-    netPayout: 0
-  });
+  const [payoutStats, setPayoutStats] = useState({ basePrice: 0, platformFee: 0, safetyFee: 0, freightFee: 0, netPayout: 0 });
 
-  // Helper: Cross-Platform Alert
   const showAlert = (title: string, message: string) => {
-    if (Platform.OS === 'web') {
-      window.alert(`${title}: ${message}`);
-    } else {
-      Alert.alert(title, message);
-    }
+    if (Platform.OS === 'web') window.alert(`${title}: ${message}`);
+    else Alert.alert(title, message);
   };
 
   useEffect(() => {
     if (isEditMode) {
-      const existingUnit = editingProduct.unit || 'kg';
-      const isStandardUnit = UNIT_OPTIONS.includes(existingUnit);
-      setUnitDropdownValue(isStandardUnit ? existingUnit : 'Other');
-
-      const existingCat = editingProduct.category || 'Industrial Chemicals';
-      const isStandardCat = CATEGORY_OPTIONS.includes(existingCat);
-      setCategoryDropdownValue(isStandardCat ? existingCat : 'Other');
-
       setForm({
         name: editingProduct.name || '',
-        category: existingCat,
+        category: editingProduct.category || CATEGORY_OPTIONS[0],
         casNumber: editingProduct.casNumber || '',
         pricePerUnit: String(editingProduct.pricePerUnit || ''),
-        unit: existingUnit,
+        unit: editingProduct.unit || UNIT_OPTIONS[0],
         moq: String(editingProduct.moq || '0'),
         purity: String(editingProduct.purity || ''),
         description: editingProduct.description || '',
         origin: editingProduct.origin || 'India',
-        imageUrl: editingProduct.imageUrl || ''
+        imageUrl: editingProduct.imageUrl || '',
+        gstPercent: String(editingProduct.gstPercent || '18'),
+        packagingType: editingProduct.packagingType || PACKAGING_OPTIONS[0],
+        hazardClass: editingProduct.hazardClass || HAZARD_CLASSES[0],
+        unNumber: editingProduct.unNumber || '',
+        storageConditions: editingProduct.storageConditions || '',
+        manufactureDate: editingProduct.manufactureDate || '',
+        expiryDate: editingProduct.expiryDate || ''
       });
-      // ✅ If editing an existing product, we can assume it was previously checked
+      
+      // Load existing Tiers and Sample data if available
+      if (editingProduct.tieredPricing) {
+        setTiers(editingProduct.tieredPricing.map((t:any) => ({ minQty: String(t.minQty), pricePerUnit: String(t.pricePerUnit) })));
+      }
+      if (editingProduct.sampleAvailable) {
+        setSample({ available: true, price: String(editingProduct.samplePrice || ''), size: editingProduct.sampleSize || '100g' });
+      }
+
       setIsCompliant(true);
       navigation.setOptions({ title: 'Edit Product' });
     }
   }, [editingProduct]);
 
-  // ✅ Update Calculations whenever Price changes
   useEffect(() => {
     const price = parseFloat(form.pricePerUnit) || 0;
-    const pFee = price * SELLER_PLATFORM_FEE;
-    const sFee = price * SELLER_SAFETY_FEE;
-    const fFee = price * SELLER_FREIGHT_FEE;
-    const net = price - pFee - sFee - fFee;
-
     setPayoutStats({
       basePrice: price,
-      platformFee: pFee,
-      safetyFee: sFee,
-      freightFee: fFee,
-      netPayout: net
+      platformFee: price * SELLER_PLATFORM_FEE,
+      safetyFee: price * SELLER_SAFETY_FEE,
+      freightFee: price * SELLER_FREIGHT_FEE,
+      netPayout: price - (price * SELLER_PLATFORM_FEE) - (price * SELLER_SAFETY_FEE) - (price * SELLER_FREIGHT_FEE)
     });
   }, [form.pricePerUnit]);
 
-  const handleChange = (key: string, value: string) => {
-    setForm(prev => ({ ...prev, [key]: value }));
+  const handleChange = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
+  const toggleMenu = (key: keyof typeof menus, show: boolean) => setMenus(prev => ({ ...prev, [key]: show }));
+
+  // 🚀 Manage Volume Pricing Tiers
+  const addTier = () => setTiers([...tiers, { minQty: '', pricePerUnit: '' }]);
+  const updateTier = (index: number, field: string, value: string) => {
+    const newTiers = [...tiers];
+    // @ts-ignore
+    newTiers[index][field] = value;
+    setTiers(newTiers);
   };
+  const removeTier = (index: number) => setTiers(tiers.filter((_, i) => i !== index));
 
   const pickImage = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/png', 'image/jpeg', 'image/jpg'],
-        copyToCacheDirectory: true,
-      });
-
-      if (result.assets && result.assets.length > 0) {
+      const result = await DocumentPicker.getDocumentAsync({ type: ['image/*'], copyToCacheDirectory: true });
+      if (result.assets?.length) {
         setImageFile(result.assets[0]);
         setForm(prev => ({ ...prev, imageUrl: result.assets[0].uri }));
       }
-    } catch (err) {
-      console.error("Image pick error:", err);
-    }
+    } catch (err) { console.error("Image pick error:", err); }
   };
 
-  const handleUnitSelect = (val: string) => {
-    setUnitMenuVisible(false);
-    setUnitDropdownValue(val);
-    if (val !== 'Other') {
-      setForm(prev => ({ ...prev, unit: val }));
-    } else {
-      setForm(prev => ({ ...prev, unit: '' }));
-    }
-  };
-
-  const handleCategorySelect = (val: string) => {
-    setCategoryMenuVisible(false);
-    setCategoryDropdownValue(val);
-    if (val !== 'Other') {
-      setForm(prev => ({ ...prev, category: val }));
-    } else {
-      setForm(prev => ({ ...prev, category: '' }));
-    }
+  const pickDocument = async (docType: 'msds' | 'tds' | 'coa') => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'], copyToCacheDirectory: true });
+      if (result.assets?.length) {
+        if (docType === 'msds') setMsdsFile(result.assets[0]);
+        if (docType === 'tds') setTdsFile(result.assets[0]);
+        if (docType === 'coa') setCoaFile(result.assets[0]);
+      }
+    } catch (err) { console.error("Doc pick error:", err); }
   };
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) return showAlert('Missing Field', 'Please enter Chemical Name.');
-    if (!form.category.trim()) return showAlert('Missing Field', 'Please select or enter a Category.');
-    if (!form.pricePerUnit.trim()) return showAlert('Missing Field', 'Please enter Price.');
-    if (!form.unit.trim()) return showAlert('Missing Field', 'Please specify a Unit.');
-
-    // ✅ Google Play Compliance Validation
-    if (!isCompliant) {
-        return showAlert('Compliance Required', 'You must verify that this chemical is legally permitted for sale under local regulations.');
-    }
+    if (!form.name.trim() || !form.pricePerUnit.trim()) return showAlert('Missing Field', 'Please enter Name and Base Price.');
+    if (!isCompliant) return showAlert('Compliance Required', 'You must verify that this chemical is legally permitted for sale.');
 
     setLoading(true);
     try {
-      let finalImageUrl = form.imageUrl;
-      if (imageFile) {
-        await new Promise(r => setTimeout(r, 1000));
-      }
+      // Clean up Tiers for Database
+      const validTiers = tiers
+        .filter(t => t.minQty && t.pricePerUnit)
+        .map(t => ({
+          minQty: parseInt(t.minQty),
+          pricePerUnit: parseFloat(t.pricePerUnit)
+        }))
+        .sort((a, b) => a.minQty - b.minQty); // Sort ascending by quantity
 
+      // Note: In production, upload files to Firebase Storage here and get URLs
       const productData = {
         ...form,
-        imageUrl: finalImageUrl,
         pricePerUnit: parseFloat(form.pricePerUnit) || 0,
         moq: parseInt(form.moq) || 0,
-        quantity: 1000, 
         purity: parseFloat(form.purity) || 0,
+        gstPercent: parseInt(form.gstPercent) || 18,
+        quantity: 1000, 
         sellerId: user?.uid,
         sellerName: user?.companyName || 'Unknown',
         active: isEditMode ? editingProduct.active : true,
+        msdsUrl: msdsFile?.uri || editingProduct?.msdsUrl || '', 
+        tdsUrl: tdsFile?.uri || editingProduct?.tdsUrl || '',
+        coaUrl: coaFile?.uri || editingProduct?.coaUrl || '',
+        
+        // 🚀 B2B Commerce Upgrades Data Attach
+        tieredPricing: validTiers,
+        sampleAvailable: sample.available,
+        samplePrice: parseFloat(sample.price) || 0,
+        sampleSize: sample.size,
+        
         updatedAt: new Date().toISOString()
       };
 
       if (!isEditMode) {
         // @ts-ignore
         productData.createdAt = new Date().toISOString();
-      }
-
-      if (isEditMode) {
-        await updateProduct(editingProduct.id, productData);
-        showAlert('Success', 'Product updated!');
-      } else {
         await addProduct(productData);
         showAlert('Success', 'Product listed!');
+      } else {
+        await updateProduct(editingProduct.id, productData);
+        showAlert('Success', 'Product updated!');
       }
-      
       navigation.goBack();
     } catch (error: any) {
-      console.error("Submission Error:", error);
       showAlert('Error', error.message || 'Failed to save product.');
     } finally {
       setLoading(false);
     }
   };
+
+  const renderDropdown = (label: string, value: string, options: string[], menuKey: keyof typeof menus) => (
+    <View style={{flex: 1, marginHorizontal: 4, marginBottom: 15}}>
+      <Menu
+        visible={menus[menuKey]}
+        onDismiss={() => toggleMenu(menuKey, false)}
+        anchor={
+          <TouchableOpacity onPress={() => toggleMenu(menuKey, true)}>
+            <TextInput label={label} value={value} mode="outlined" editable={false} style={{backgroundColor:'white'}} right={<TextInput.Icon icon="chevron-down" onPress={() => toggleMenu(menuKey, true)} />} />
+          </TouchableOpacity>
+        }
+      >
+        <ScrollView style={{maxHeight: 250}}>
+          {options.map(opt => (
+            <Menu.Item key={opt} onPress={() => { handleChange(menuKey === 'gst' ? 'gstPercent' : menuKey === 'packaging' ? 'packagingType' : menuKey === 'hazard' ? 'hazardClass' : menuKey, opt); toggleMenu(menuKey, false); }} title={opt + (menuKey === 'gst' ? '%' : '')} />
+          ))}
+        </ScrollView>
+      </Menu>
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1, backgroundColor: '#F8FAFC'}}>
@@ -230,223 +244,117 @@ export default function SellerAddChemical() {
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
-        {/* IMAGE UPLOAD SECTION */}
+        {/* IMAGE UPLOAD */}
         <View style={styles.imageSection}>
           <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
-            {form.imageUrl ? (
-              <Image source={{ uri: form.imageUrl }} style={styles.imagePreview} />
-            ) : (
-              <View style={{alignItems:'center'}}>
-                <Avatar.Icon size={50} icon="camera-plus" style={{backgroundColor:'#E3F2FD'}} color="#004AAD" />
-                <Text style={{marginTop: 8, color:'#004AAD', fontWeight:'bold'}}>Upload Image</Text>
-                <Text style={{fontSize: 10, color:'#999'}}>JPG or PNG</Text>
-              </View>
-            )}
+            {form.imageUrl ? <Image source={{ uri: form.imageUrl }} style={styles.imagePreview} /> : <View style={{alignItems:'center'}}><Avatar.Icon size={50} icon="camera-plus" style={{backgroundColor:'#E3F2FD'}} color="#004AAD" /><Text style={{color:'#004AAD', fontWeight:'bold'}}>Upload Image</Text></View>}
           </TouchableOpacity>
         </View>
 
         <View style={styles.form}>
-          
-          <TextInput 
-            label="Chemical Name *" 
-            value={form.name} 
-            onChangeText={t => handleChange('name', t)} 
-            mode="outlined" 
-            style={styles.input} 
-          />
+          <Text variant="titleMedium" style={styles.sectionTitle}>1. Basic Information</Text>
+          <TextInput label="Chemical Name *" value={form.name} onChangeText={t => handleChange('name', t)} mode="outlined" style={styles.input} />
           
           <View style={styles.row}>
-            <View style={{flex: 1, marginRight: 10}}>
-              <Menu
-                visible={categoryMenuVisible}
-                onDismiss={() => setCategoryMenuVisible(false)}
-                anchor={
-                  <TouchableOpacity onPress={() => setCategoryMenuVisible(true)}>
-                    <TextInput
-                      label="Category *"
-                      value={categoryDropdownValue}
-                      mode="outlined"
-                      editable={false}
-                      right={<TextInput.Icon icon="chevron-down" onPress={() => setCategoryMenuVisible(true)} />}
-                      style={{backgroundColor:'white', marginBottom: 15}}
-                    />
-                  </TouchableOpacity>
-                }
-              >
-                <ScrollView style={{maxHeight: 250}}>
-                  {CATEGORY_OPTIONS.map((opt) => (
-                    <Menu.Item 
-                      key={opt} 
-                      onPress={() => handleCategorySelect(opt)} 
-                      title={opt} 
-                    />
-                  ))}
-                </ScrollView>
-              </Menu>
-            </View>
-
-            <TextInput 
-              label="CAS Number" 
-              value={form.casNumber} 
-              onChangeText={t => handleChange('casNumber', t)} 
-              mode="outlined" 
-              style={[styles.input, {flex:1}]} 
-            />
+            {renderDropdown('Category *', form.category, CATEGORY_OPTIONS, 'category')}
+            <TextInput label="CAS Number" value={form.casNumber} onChangeText={t => handleChange('casNumber', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
           </View>
 
-          {categoryDropdownValue === 'Other' && (
-            <TextInput 
-              label="Specify Custom Category *" 
-              value={form.category} 
-              onChangeText={t => handleChange('category', t)} 
-              mode="outlined" 
-              placeholder="e.g. Polymers"
-              style={[styles.input, {marginTop: -10}]} 
-            />
-          )}
-
-          {/* ROW: PRICE & UNIT */}
           <View style={styles.row}>
-            <TextInput 
-              label="Price (₹) *" 
-              keyboardType="numeric" 
-              value={form.pricePerUnit} 
-              onChangeText={t => handleChange('pricePerUnit', t)} 
-              mode="outlined" 
-              style={[styles.input, {flex:1, marginRight:10}]} 
-            />
-            
-            <View style={{flex: 1}}>
-              <Menu
-                visible={unitMenuVisible}
-                onDismiss={() => setUnitMenuVisible(false)}
-                anchor={
-                  <TouchableOpacity onPress={() => setUnitMenuVisible(true)}>
-                    <TextInput
-                      label="Unit *"
-                      value={unitDropdownValue}
-                      mode="outlined"
-                      editable={false}
-                      right={<TextInput.Icon icon="chevron-down" onPress={() => setUnitMenuVisible(true)} />}
-                      style={{backgroundColor:'white', marginBottom: 15}}
-                    />
-                  </TouchableOpacity>
-                }
-              >
-                <ScrollView style={{maxHeight: 250}}>
-                  {UNIT_OPTIONS.map((opt) => (
-                    <Menu.Item 
-                      key={opt} 
-                      onPress={() => handleUnitSelect(opt)} 
-                      title={opt} 
-                    />
-                  ))}
-                </ScrollView>
-              </Menu>
-            </View>
+             <TextInput label="Purity (%)" keyboardType="numeric" value={form.purity} onChangeText={t => handleChange('purity', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
+             <TextInput label="Origin (Country)" value={form.origin} onChangeText={t => handleChange('origin', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
           </View>
 
-          {/* ✅ ESTIMATED PAYOUT CARD */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>2. Pricing & Commercials</Text>
+          <View style={styles.row}>
+            <TextInput label="Base Price (₹) *" keyboardType="numeric" value={form.pricePerUnit} onChangeText={t => handleChange('pricePerUnit', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
+            {renderDropdown('Unit *', form.unit, UNIT_OPTIONS, 'unit')}
+          </View>
+
+          <View style={styles.row}>
+             <TextInput label="Min Order (MOQ)" keyboardType="numeric" value={form.moq} onChangeText={t => handleChange('moq', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
+             {renderDropdown('GST Slab *', form.gstPercent, GST_SLABS, 'gst')}
+          </View>
+
+          {/* 🚀 PAYOUT CARD */}
           {payoutStats.basePrice > 0 && (
             <Card style={styles.payoutCard}>
               <Card.Content>
-                <Text variant="labelLarge" style={{color:'#666', fontWeight:'bold', marginBottom: 5}}>
-                  💰 Estimated Payout Calculation
-                </Text>
+                <Text variant="labelLarge" style={{color:'#666', fontWeight:'bold', marginBottom: 5}}>💰 Estimated Payout (on Base Price)</Text>
                 <Divider style={{marginBottom: 8}} />
-                
-                <View style={styles.payoutRow}>
-                  <Text style={styles.payoutLabel}>Base Price:</Text>
-                  <Text style={styles.payoutValue}>₹{payoutStats.basePrice.toFixed(2)}</Text>
-                </View>
-
-                <View style={styles.payoutRow}>
-                  <Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Platform Fee (1.5%):</Text>
-                  <Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{payoutStats.platformFee.toFixed(2)}</Text>
-                </View>
-
-                <View style={styles.payoutRow}>
-                  <Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Safety Fee (0.25%):</Text>
-                  <Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{payoutStats.safetyFee.toFixed(2)}</Text>
-                </View>
-
-                <View style={styles.payoutRow}>
-                  <Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Freight Fee (1.0%):</Text>
-                  <Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{payoutStats.freightFee.toFixed(2)}</Text>
-                </View>
-
+                <View style={styles.payoutRow}><Text style={styles.payoutLabel}>Base Price:</Text><Text style={styles.payoutValue}>₹{payoutStats.basePrice.toFixed(2)}</Text></View>
+                <View style={styles.payoutRow}><Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Platform + Safety + Freight Fees:</Text><Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{(payoutStats.platformFee + payoutStats.safetyFee + payoutStats.freightFee).toFixed(2)}</Text></View>
                 <Divider style={{marginVertical: 8}} />
-                
-                <View style={styles.payoutRow}>
-                  <Text style={{fontWeight:'bold', color: theme.colors.primary}}>Est. Net Payout (per unit):</Text>
-                  <Text style={{fontWeight:'bold', fontSize: 16, color: theme.colors.primary}}>
-                    ₹{payoutStats.netPayout.toFixed(2)}
-                  </Text>
-                </View>
+                <View style={styles.payoutRow}><Text style={{fontWeight:'bold', color: theme.colors.primary}}>Est. Net Payout:</Text><Text style={{fontWeight:'bold', fontSize: 16, color: theme.colors.primary}}>₹{payoutStats.netPayout.toFixed(2)}</Text></View>
               </Card.Content>
             </Card>
           )}
 
-          {unitDropdownValue === 'Other' && (
-            <TextInput 
-              label="Specify Custom Unit *" 
-              value={form.unit} 
-              onChangeText={t => handleChange('unit', t)} 
-              mode="outlined" 
-              placeholder="e.g. Gallon"
-              style={[styles.input, {marginTop: -10}]} 
-            />
-          )}
+           {/* 🚀 NEW: Tiered Pricing Section */}
+           <View style={{backgroundColor: '#F0FDF4', padding: 12, borderRadius: 12, marginBottom: 15, borderWidth: 1, borderColor: '#BBF7D0'}}>
+              <Text variant="titleMedium" style={{fontWeight:'bold', color: '#166534', marginBottom: 8}}>Volume Discounts (Tiered Pricing)</Text>
+              <Text style={{fontSize: 12, color: '#15803D', marginBottom: 10}}>Offer lower prices for larger bulk orders to attract big buyers.</Text>
+              
+              {tiers.map((tier, index) => (
+                <View key={index} style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
+                  <TextInput label={`Min Qty (${form.unit.split(' ')[0]})`} value={tier.minQty} onChangeText={t => updateTier(index, 'minQty', t)} keyboardType="numeric" mode="outlined" style={{flex:1, height: 45, backgroundColor:'white', marginRight: 5}} />
+                  <TextInput label="Price (₹)" value={tier.pricePerUnit} onChangeText={t => updateTier(index, 'pricePerUnit', t)} keyboardType="numeric" mode="outlined" style={{flex:1, height: 45, backgroundColor:'white'}} />
+                  {tiers.length > 1 && <IconButton icon="close-circle" iconColor="#DC2626" onPress={() => removeTier(index)} />}
+                </View>
+              ))}
+              <Button mode="text" icon="plus" onPress={addTier} textColor="#166534">Add Another Tier</Button>
+           </View>
 
-          {/* ROW: MOQ & PURITY */}
+           {/* 🚀 NEW: Sample Details Section */}
+           <View style={{backgroundColor: '#EFF6FF', padding: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#BFDBFE'}}>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                 <Text variant="titleMedium" style={{fontWeight:'bold', color: '#1D4ED8'}}>Offer Lab Samples?</Text>
+                 <Switch value={sample.available} onValueChange={v => setSample({...sample, available: v})} color="#2563EB" />
+              </View>
+              <Text style={{fontSize: 12, color: '#1E40AF', marginBottom: sample.available ? 10 : 0}}>Allow buyers to test small quantities before placing bulk orders.</Text>
+              
+              {sample.available && (
+                <View style={styles.row}>
+                  <TextInput label="Sample Size (e.g. 100g)" value={sample.size} onChangeText={t => setSample({...sample, size: t})} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
+                  <TextInput label="Sample Price (₹)" value={sample.price} onChangeText={t => setSample({...sample, price: t})} keyboardType="numeric" mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
+                </View>
+              )}
+           </View>
+
+          <Text variant="titleMedium" style={styles.sectionTitle}>3. Logistics & Packaging</Text>
           <View style={styles.row}>
-            <TextInput 
-              label="Min Order (MOQ)" 
-              keyboardType="numeric" 
-              value={form.moq} 
-              onChangeText={t => handleChange('moq', t)} 
-              mode="outlined" 
-              style={[styles.input, {flex:1, marginRight:10}]} 
-            />
-             <TextInput 
-              label="Purity (%)" 
-              keyboardType="numeric" 
-              value={form.purity} 
-              onChangeText={t => handleChange('purity', t)} 
-              mode="outlined" 
-              style={[styles.input, {flex:1}]} 
-            />
+             {renderDropdown('Packaging Type', form.packagingType, PACKAGING_OPTIONS, 'packaging')}
+             <TextInput label="Storage Conditions" placeholder="e.g. Store below 25°C" value={form.storageConditions} onChangeText={t => handleChange('storageConditions', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
           </View>
-          
-          <TextInput 
-            label="Description / Specs" 
-            multiline 
-            numberOfLines={4} 
-            value={form.description} 
-            onChangeText={t => handleChange('description', t)} 
-            mode="outlined" 
-            style={styles.input} 
-          />
 
-          {/* ✅ NEW: Compliance Checkbox */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>4. Safety & Compliance</Text>
+          <View style={styles.row}>
+             {renderDropdown('Hazard Class', form.hazardClass, HAZARD_CLASSES, 'hazard')}
+             <TextInput label="UN Number (if Hazmat)" value={form.unNumber} onChangeText={t => handleChange('unNumber', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
+          </View>
+
+          <Text variant="titleMedium" style={styles.sectionTitle}>5. Technical Documents (PDFs)</Text>
+          <View style={styles.docUploadContainer}>
+             <Button icon="file-pdf-box" mode={msdsFile ? "contained" : "outlined"} onPress={() => pickDocument('msds')} style={styles.docBtn} buttonColor={msdsFile ? '#4CAF50' : undefined}>
+                {msdsFile ? 'MSDS Uploaded' : 'Upload MSDS'}
+             </Button>
+             <Button icon="file-document-outline" mode={tdsFile ? "contained" : "outlined"} onPress={() => pickDocument('tds')} style={styles.docBtn} buttonColor={tdsFile ? '#4CAF50' : undefined}>
+                {tdsFile ? 'TDS Uploaded' : 'Upload TDS'}
+             </Button>
+             <Button icon="certificate-outline" mode={coaFile ? "contained" : "outlined"} onPress={() => pickDocument('coa')} style={styles.docBtn} buttonColor={coaFile ? '#4CAF50' : undefined}>
+                {coaFile ? 'CoA Uploaded' : 'Upload Sample CoA'}
+             </Button>
+          </View>
+
+          <TextInput label="Product Description" multiline numberOfLines={4} value={form.description} onChangeText={t => handleChange('description', t)} mode="outlined" style={styles.input} />
+
+          {/* COMPLIANCE CHECKBOX */}
           <View style={styles.complianceContainer}>
-             <Checkbox
-                status={isCompliant ? 'checked' : 'unchecked'}
-                onPress={() => setIsCompliant(!isCompliant)}
-                color={theme.colors.primary}
-             />
-             <Text style={styles.complianceText}>
-               I declare that this product is not a banned substance and complies with all local regulations regarding the sale of chemicals.
-             </Text>
+             <Checkbox status={isCompliant ? 'checked' : 'unchecked'} onPress={() => setIsCompliant(!isCompliant)} color={theme.colors.primary} />
+             <Text style={styles.complianceText}>I declare that this product is not a banned substance and complies with all safety and transport regulations.</Text>
           </View>
 
-          <Button 
-            mode="contained" 
-            onPress={handleSubmit} 
-            loading={loading} 
-            style={styles.btn}
-            contentStyle={{height: 50}}
-          >
+          <Button mode="contained" onPress={handleSubmit} loading={loading} style={styles.btn} contentStyle={{height: 50}}>
             {isEditMode ? 'Save Changes' : 'List Product'}
           </Button>
           
@@ -459,56 +367,21 @@ export default function SellerAddChemical() {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingBottom: 40 },
-  header: { 
-    flexDirection:'row', 
-    alignItems:'center', 
-    padding: 10, 
-    backgroundColor:'white', 
-    elevation: 2 
-  },
-  
-  // Image Picker Styles
+  header: { flexDirection:'row', alignItems:'center', padding: 10, backgroundColor:'white', elevation: 2 },
+  sectionTitle: { fontWeight: 'bold', marginTop: 20, marginBottom: 10, color: '#334155' },
   imageSection: { alignItems: 'center', marginTop: 20 },
-  imagePicker: { 
-    width: 150, 
-    height: 150, 
-    borderRadius: 12, 
-    backgroundColor: 'white', 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0', 
-    borderStyle: 'dashed',
-    justifyContent: 'center', 
-    alignItems: 'center',
-    overflow: 'hidden'
-  },
+  imagePicker: { width: 120, height: 120, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   imagePreview: { width: '100%', height: '100%' },
-
-  form: { padding: 20 },
+  form: { padding: 16 },
   input: { marginBottom: 15, backgroundColor: 'white' },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  btn: { marginTop: 10, borderRadius: 8, backgroundColor: '#004AAD' },
-
-  // Payout Card Styles
-  payoutCard: { marginBottom: 20, backgroundColor: '#F1F8E9', borderColor: '#C8E6C9', borderWidth: 1 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: -4 },
+  btn: { marginTop: 20, borderRadius: 8, backgroundColor: '#004AAD' },
+  payoutCard: { marginBottom: 15, backgroundColor: '#F1F8E9', borderColor: '#C8E6C9', borderWidth: 1 },
   payoutRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   payoutLabel: { fontSize: 12, color: '#555' },
   payoutValue: { fontSize: 12, fontWeight: 'bold', color: '#333' },
-
-  // Compliance Checkbox Styles
-  complianceContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'flex-start', 
-    marginBottom: 20, 
-    backgroundColor: '#FFF3E0', 
-    padding: 10, 
-    borderRadius: 8, 
-    borderWidth: 1, 
-    borderColor: '#FFE0B2' 
-  },
-  complianceText: { 
-    flex: 1, 
-    fontSize: 12, 
-    color: '#E65100', 
-    marginTop: 8 
-  }
+  docUploadContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15 },
+  docBtn: { flexGrow: 1, borderColor: '#CBD5E1' },
+  complianceContainer: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0B2' },
+  complianceText: { flex: 1, fontSize: 12, color: '#E65100', marginTop: 8 }
 });

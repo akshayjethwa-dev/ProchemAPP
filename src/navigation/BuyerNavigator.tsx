@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, Badge, useTheme } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; // 🚀 Added Firebase for real-time badge
+import { db } from '../config/firebase'; // 🚀 Added Firebase
 import { useAppStore } from '../store/appStore';
 
 import BuyerHome from '../screens/BuyerHome';
@@ -16,16 +19,19 @@ import AddAddressScreen from '../screens/AddAddressScreen';
 import ProductDetail from '../screens/ProductDetail';
 import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
 import OrderTracking from '../screens/OrderTracking';
+import NegotiationsListScreen from '../screens/NegotiationsListScreen';
+import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
 
-// ✅ FIXED: Added InvoiceViewer to the param list
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
   ProductDetail: { product: any };
   Checkout: undefined;
   AddressList: undefined;
   AddAddress: undefined;
-  InvoiceViewer: { order: any }; // <--- Added this line
+  InvoiceViewer: { order: any };
   OrderTracking: { orderId: string };
+  NegotiationsList: undefined;
+  NegotiationRoom: { rfqId?: string };
 };
 
 const Tab = createBottomTabNavigator();
@@ -34,6 +40,28 @@ const Stack = createNativeStackNavigator<BuyerStackParamList>();
 function BuyerTabs() {
   const theme = useTheme();
   const cartCount = useAppStore(state => state.cart.length);
+  const { user } = useAppStore(); // 🚀 Get user to listen for their quotes
+  const insets = useSafeAreaInsets();
+
+  // 🚀 NEW: State to track active negotiations for the notification badge
+  const [activeNegotiations, setActiveNegotiations] = useState(0);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    // Listen for quotes belonging to this buyer where the supplier has replied (NEGOTIATING)
+    const q = query(
+      collection(db, 'rfqs'),
+      where('buyerId', '==', user.uid),
+      where('status', '==', 'NEGOTIATING') 
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setActiveNegotiations(snapshot.docs.length);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   return (
     <Tab.Navigator
@@ -41,7 +69,12 @@ function BuyerTabs() {
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: '#64748B',
-        tabBarStyle: { height: 65, paddingBottom: 10, paddingTop: 10, backgroundColor: 'white' },
+        tabBarStyle: { 
+          height: 65 + insets.bottom, 
+          paddingBottom: 10 + insets.bottom, 
+          paddingTop: 10, 
+          backgroundColor: 'white' 
+        },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700' }
       }}
     >
@@ -89,7 +122,18 @@ function BuyerTabs() {
         component={AccountScreen} 
         options={{
           tabBarLabel: 'Account',
-          tabBarIcon: ({ color }) => <IconButton icon="account" iconColor={color} size={24} />
+          tabBarIcon: ({ color }) => (
+            <View>
+              <IconButton icon="account" iconColor={color} size={24} />
+              {/* 🚀 RED DOT NOTIFICATION: Shows if there are active negotiations */}
+              {activeNegotiations > 0 && (
+                <Badge 
+                  style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#EF4444' }} 
+                  size={10} 
+                />
+              )}
+            </View>
+          )
         }}
       />
     </Tab.Navigator>
@@ -123,13 +167,14 @@ export default function BuyerNavigator() {
         options={{ headerShown: true, title: 'Add New Address' }} 
       />
       
-      {/* This screen caused the error because it was missing in the type def above */}
       <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} />
       <Stack.Screen 
         name="OrderTracking" 
         component={OrderTracking} 
         options={{ title: 'Order Details' }} 
       />
+      <Stack.Screen name="NegotiationsList" component={NegotiationsListScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

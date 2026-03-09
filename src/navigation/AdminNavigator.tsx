@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Screens
 import AdminDashboard from '../screens/admin/AdminDashboard';
@@ -11,7 +12,6 @@ import AdminProductsScreen from '../screens/admin/AdminProductsScreen';
 import AdminOrderVerification from '../screens/admin/AdminOrderVerification';
 import AdminPaymentsScreen from '../screens/admin/AdminPaymentsScreen';
 import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
-// ✅ IMPORT NEW SCREEN
 import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationScreen';
 import AdminPayment from '../screens/admin/AdminPayment';
 
@@ -20,13 +20,12 @@ export type AdminStackParamList = {
   AdminUserDetails: { user: any };
   InvoiceViewer: { order: any }; 
   AdminDashboard: undefined;
-  SendNotification: undefined; // ✅ Add Type
+  SendNotification: undefined;
 };
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 
-// 1. User Stack
 function UserStackNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -37,7 +36,6 @@ function UserStackNavigator() {
   );
 }
 
-// ✅ 2. Dashboard Stack (Wrap Dashboard to allow navigation to SendNotification)
 function DashboardStackNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -47,16 +45,17 @@ function DashboardStackNavigator() {
   );
 }
 
-// 3. Main Admin Tabs
 export default function AdminNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: { 
           backgroundColor: '#1E293B',
-          height: 60,
-          paddingBottom: 8,
+          height: 60 + insets.bottom,
+          paddingBottom: 8 + insets.bottom,
           paddingTop: 8
         }, 
         tabBarActiveTintColor: '#4FC3F7',
@@ -66,7 +65,7 @@ export default function AdminNavigator() {
     >
       <Tab.Screen 
         name="DashboardTab" 
-        component={DashboardStackNavigator} // ✅ Use the Stack instead of direct screen
+        component={DashboardStackNavigator} 
         options={{ 
           tabBarLabel: 'Dashboard',
           tabBarIcon: ({color}) => <IconButton icon="view-dashboard" iconColor={color} size={24} /> 
@@ -107,13 +106,13 @@ export default function AdminNavigator() {
         }} 
       />
       <Tab.Screen 
-  name="Payments"
-  component={AdminPayment} 
-  options={{
-    tabBarLabel: 'Finance',
-    tabBarIcon: ({ color }) => <IconButton icon="cash-multiple" iconColor={color} size={24} />
-  }} 
-/>
+        name="Payments"
+        component={AdminPayment} 
+        options={{
+          tabBarLabel: 'Finance',
+          tabBarIcon: ({ color }) => <IconButton icon="cash-multiple" iconColor={color} size={24} />
+        }} 
+      />
     </Tab.Navigator>
   );
 }

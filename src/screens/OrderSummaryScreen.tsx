@@ -23,12 +23,11 @@ const OrderSummaryScreen: React.FC<Props> = ({ cart, onBack, onProceed }) => {
   const gstAmount = subtotal * (gstPercent / 100);
   const totalWithTax = subtotal + gstAmount;
 
-  // ✅ NEW FEES
-  const platformFee = totalWithTax * 0.01; // 1%
-  const logisticFee = totalWithTax * 0.01; // 1%
+  // ✅ UPDATED FEES: 1.5% Platform fee, removed logistic fee
+  const platformFee = totalWithTax * 0.015; // 1.5%
 
   // ✅ FINAL TOTAL
-  const total = totalWithTax + platformFee + logisticFee;
+  const total = totalWithTax + platformFee;
 
   return (
     <div className="flex-1 bg-gray-50 flex flex-col pt-12">
@@ -146,27 +145,29 @@ const OrderSummaryScreen: React.FC<Props> = ({ cart, onBack, onProceed }) => {
           
           {/* ✅ UPDATED FEES */}
           <div className="flex justify-between text-blue-100 text-sm font-medium">
-            <span>Platform Fee (1%)</span>
+            <span>Platform Fee (1.5%)</span>
             <span className="text-white font-bold">
               ₹{platformFee.toLocaleString()}
             </span>
           </div>
-           <div className="flex justify-between text-blue-100 text-sm font-medium">
-            <span>Logistic Fee (1%)</span>
-             <span className="text-white font-bold">
-              ₹{logisticFee.toLocaleString()}
-            </span>
-          </div>
+          {/* Removed Logistic Fee UI */}
 
           <div className="h-px bg-white/10 my-4" />
-          <div className="flex justify-between items-end">
-            <div>
-              <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest mb-1">
-                Total Payable
-              </p>
-              <p className="text-3xl font-bold">₹{total.toLocaleString()}</p>
+          <div className="flex flex-col">
+            <div className="flex justify-between items-end mb-2">
+              <div>
+                <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest mb-1">
+                  Total Payable
+                </p>
+                <p className="text-3xl font-bold">₹{total.toLocaleString()}</p>
+              </div>
+              <p className="text-[10px] italic text-blue-300">Inclusive of Taxes</p>
             </div>
-            <p className="text-[10px] italic text-blue-300">Inclusive of Taxes</p>
+            
+            {/* ✅ ADDED DELIVERY DISCLAIMER */}
+            <p className="text-xs italic text-orange-300 mt-2">
+              * Delivery charges will apply. We will connect with you soon with the exact price.
+            </p>
           </div>
         </div>
       </div>

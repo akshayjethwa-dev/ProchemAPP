@@ -63,6 +63,11 @@ export default function CartScreen() {
              <Text variant="titleLarge" style={{fontWeight:'bold'}}>Total</Text>
              <Text variant="titleLarge" style={{fontWeight:'bold', color:'#004AAD'}}>₹{totalAmount.toFixed(2)}</Text>
           </View>
+          
+          {/* ✅ ADDED DELIVERY DISCLAIMER */}
+          <Text style={{fontSize: 12, color: '#D97706', marginTop: 10, textAlign: 'center', fontStyle: 'italic'}}>
+             * Delivery charges will apply. We will connect with you soon with the exact price.
+          </Text>
         </View>
       </ScrollView>
 

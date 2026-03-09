@@ -1,7 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { IconButton, useTheme } from 'react-native-paper';
+import { IconButton, useTheme, Badge } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View } from 'react-native';
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; // 🚀 Added Real-time Fetch
+import { db } from '../config/firebase'; // 🚀 Added Firebase
+import { useAppStore } from '../store/appStore';
 
 // Screens
 import SellerDashboard from '../screens/SellerDashboard';
@@ -11,12 +16,37 @@ import SellerAddChemical from '../screens/SellerAddChemical';
 import AccountScreen from '../screens/AccountScreen';
 import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
 
+// 🚀 IMPORT NEW NEGOTIATION SCREENS
+import NegotiationsListScreen from '../screens/NegotiationsListScreen';
+import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
+
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-// ✅ 1. Define Tabs separately
 function SellerTabs() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const { user } = useAppStore();
+  
+  // 🚀 FIXED: Global Badge state fetching directly from Firebase in real-time
+  const [pendingQuotesCount, setPendingQuotesCount] = useState(0);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    
+    // Listen for PENDING quotes directed at this seller
+    const q = query(
+      collection(db, 'rfqs'),
+      where('sellerId', '==', user.uid),
+      where('status', '==', 'PENDING')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingQuotesCount(snapshot.docs.length);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   return (
     <Tab.Navigator
@@ -24,12 +54,17 @@ function SellerTabs() {
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: '#64748B',
-        tabBarStyle: { height: 65, paddingBottom: 10, paddingTop: 10, backgroundColor: 'white' },
+        tabBarStyle: { 
+          height: 65 + insets.bottom, 
+          paddingBottom: 10 + insets.bottom, 
+          paddingTop: 10, 
+          backgroundColor: 'white' 
+        },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700' }
       }}
     >
       <Tab.Screen 
-        name="Dashboard" // Changed from "Home" to match Dashboard logic usually
+        name="Dashboard" 
         component={SellerDashboard} 
         options={{
           tabBarLabel: 'Dashboard',
@@ -44,8 +79,26 @@ function SellerTabs() {
           tabBarIcon: ({ color }) => <IconButton icon="clipboard-list" iconColor={color} size={24} />
         }}
       />
+      
+      {/* 🚀 NEW QUOTES/INBOX TAB FOR SELLERS */}
       <Tab.Screen 
-        name="MyListings" // Renamed to match the navigation calls from Dashboard
+        name="Quotes" 
+        component={NegotiationsListScreen}
+        options={{
+          tabBarLabel: 'Quotes',
+          tabBarIcon: ({ color }) => (
+            <View>
+              <IconButton icon="message-text" iconColor={color} size={24} />
+              {pendingQuotesCount > 0 && (
+                <Badge style={{ position: 'absolute', top: 4, right: 4 }} size={16}>{pendingQuotesCount}</Badge>
+              )}
+            </View>
+          )
+        }}
+      />
+
+      <Tab.Screen 
+        name="MyListings" 
         component={SellerManageChemicals} 
         options={{
           tabBarLabel: 'My Listings',
@@ -64,14 +117,11 @@ function SellerTabs() {
   );
 }
 
-// ✅ 2. Export the Stack (Tabs + Add Chemical Screen)
 export default function SellerNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {/* The Main Tabs */}
       <Stack.Screen name="SellerHome" component={SellerTabs} />
       
-      {/* ✅ The Standalone "Add Chemical" Screen */}
       <Stack.Screen 
         name="AddChemical" 
         component={SellerAddChemical} 
@@ -82,6 +132,9 @@ export default function SellerNavigator() {
         }} 
       />
       <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} options={{ headerShown: false }} />
+      
+      {/* 🚀 NEGOTIATION ROOM STACK */}
+      <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

@@ -1,12 +1,16 @@
+// src/store/appStore.ts
 import { create } from 'zustand';
-import { User, Product, CartItem } from '../types';
+import { User, Product, CartItem, RFQ, NegotiationMessage } from '../types';
 
 interface AppState {
   user: User | null;
   products: Product[];
   cart: CartItem[];
-  // ✅ NEW: Tracks which dashboard is active
   viewMode: 'buyer' | 'seller'; 
+  
+  // 🚀 NEW: RFQ & Negotiation State
+  rfqs: RFQ[];
+  messages: NegotiationMessage[];
   
   setUser: (user: User | null) => void;
   setProducts: (products: Product[]) => void;
@@ -14,18 +18,27 @@ interface AppState {
   removeFromCart: (id: string) => void;
   clearCart: () => void;
   addToCompare: (product: Product) => void;
-  // ✅ NEW: Action to toggle mode
   setViewMode: (mode: 'buyer' | 'seller') => void; 
+  
+  // 🚀 NEW: Actions for RFQ & Negotiations
+  addRfq: (rfq: RFQ) => void;
+  updateRfqStatus: (id: string, status: RFQ['status'], agreedPrice?: number) => void;
+  addMessage: (message: NegotiationMessage) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
   user: null,
   products: [],
   cart: [],
-  viewMode: 'buyer', // Default to Buyer view on login
+  viewMode: 'buyer', 
+  
+  // Initialize with empty arrays
+  rfqs: [],
+  messages: [],
 
   setUser: (user) => set({ user }),
   setProducts: (products) => set({ products }),
+  
   addToCart: (item) => set((state) => {
     const existing = state.cart.find((i) => i.id === item.id);
     if (existing) {
@@ -37,12 +50,20 @@ export const useAppStore = create<AppState>((set) => ({
     }
     return { cart: [...state.cart, item] };
   }),
+  
   removeFromCart: (id) => set((state) => ({
     cart: state.cart.filter((i) => i.id !== id),
   })),
   clearCart: () => set({ cart: [] }),
   addToCompare: (product) => console.log('Added to compare:', product.name),
-  
-  // ✅ Implementation
   setViewMode: (mode) => set({ viewMode: mode }),
+
+  // 🚀 NEW: RFQ Implementation
+  addRfq: (rfq) => set((state) => ({ rfqs: [rfq, ...state.rfqs] })),
+  
+  updateRfqStatus: (id, status, agreedPrice) => set((state) => ({
+    rfqs: state.rfqs.map(r => r.id === id ? { ...r, status, agreedPrice: agreedPrice || r.agreedPrice } : r)
+  })),
+  
+  addMessage: (message) => set((state) => ({ messages: [...state.messages, message] }))
 }));
