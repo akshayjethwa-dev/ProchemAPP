@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
 import { Text, TextInput, IconButton, Avatar, Button, Card, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -12,17 +12,20 @@ export default function NegotiationRoomScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   
-  // 🚀 FIXED: Extracted viewMode from store to handle dual-role accounts correctly
   const { user, viewMode, addToCart } = useAppStore();
   
   const rfqId = route.params?.rfqId;
-  const isBuyerMode = viewMode === 'buyer'; // 🚀 FIXED: Relying on viewMode
+  const isBuyerMode = viewMode === 'buyer'; 
 
   // REAL-TIME STATES
   const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
   const [roomMessages, setRoomMessages] = useState<NegotiationMessage[]>([]);
-  const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // INPUT STATES
+  const [messageText, setMessageText] = useState('');
+  const [offerPrice, setOfferPrice] = useState('');
+  const [offerModalVisible, setOfferModalVisible] = useState(false);
 
   // FIREBASE LISTENERS
   useEffect(() => {
@@ -67,40 +70,56 @@ export default function NegotiationRoomScreen() {
     );
   }
 
-  // WRITE TO FIREBASE (Send Message)
-  const sendMessage = async () => {
+  // 🛡️ SECURITY FILTER: Function to hide contact info
+  const maskSensitiveInfo = (text: string) => {
+    let filteredText = text;
+
+    // 1. Mask Phone Numbers (Catches 8 to 12 digit numbers, even with spaces or dashes)
+    const phoneRegex = /(\d[\s\-\.]?){8,12}/g;
+    filteredText = filteredText.replace(phoneRegex, ' [PHONE NUMBER HIDDEN] ');
+
+    // 2. Mask Email Addresses
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    filteredText = filteredText.replace(emailRegex, ' [EMAIL HIDDEN] ');
+
+    // 3. Mask sneaky keywords
+    const sneakyWordsRegex = /\b(whatsapp|wa\.me|call me|contact me|insta|instagram)\b/gi;
+    filteredText = filteredText.replace(sneakyWordsRegex, ' [RESTRICTED] ');
+
+    return filteredText;
+  };
+
+  // 💬 SEND NORMAL CHAT MESSAGE (Updated with Security Filter)
+  const sendChatMessage = async () => {
     if (!messageText.trim() || !user) return;
     
-    const isOffer = messageText.toLowerCase().startsWith('offer:');
-    let proposedPrice = undefined;
-    if (isOffer) {
-       const numbers = messageText.match(/\d+/g);
-       if (numbers) proposedPrice = parseFloat(numbers[0]);
+    // Apply the filter before doing anything else
+    const safeTextToSend = maskSensitiveInfo(messageText);
+    
+    // Show a warning if they tried to send contact info
+    if (messageText !== safeTextToSend) {
+       Alert.alert(
+         "Security Warning", 
+         "Sharing contact information like phone numbers or emails is strictly against platform policy. Your message has been masked."
+       );
     }
-
-    const msgPayload = {
-      rfqId: activeRfq.id,
-      text: messageText,
-      senderId: user.uid,
-      timestamp: Date.now(),
-      isBuyer: isBuyerMode,
-      isOffer: isOffer,
-      proposedPrice: proposedPrice
-    };
-
+    
     setMessageText(''); // Clear instantly for good UX
     
     try {
-      await addDoc(collection(db, 'messages'), msgPayload);
+      await addDoc(collection(db, 'messages'), {
+        rfqId: activeRfq.id,
+        text: safeTextToSend, // Send the masked text to the database
+        senderId: user.uid,
+        timestamp: Date.now(),
+        isBuyer: isBuyerMode,
+        isOffer: false
+      });
       
       // Update RFQ Status if it was pending
       if (activeRfq.status === 'PENDING') {
          await updateDoc(doc(db, 'rfqs', activeRfq.id), {
             status: 'NEGOTIATING',
-            updatedAt: new Date().toISOString()
-         });
-      } else {
-         await updateDoc(doc(db, 'rfqs', activeRfq.id), {
             updatedAt: new Date().toISOString()
          });
       }
@@ -110,7 +129,39 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // WRITE TO FIREBASE (Accept Offer)
+  // 💰 SEND COUNTER OFFER (From Modal)
+  const sendOffer = async () => {
+    const price = parseFloat(offerPrice);
+    if (isNaN(price) || price <= 0 || !user) {
+        Alert.alert("Invalid Price", "Please enter a valid amount.");
+        return;
+    }
+
+    setOfferPrice('');
+    setOfferModalVisible(false); // Close Modal
+    
+    try {
+      await addDoc(collection(db, 'messages'), {
+        rfqId: activeRfq.id,
+        text: `Proposed a new offer: ₹${price} / ${activeRfq.unit}`,
+        senderId: user.uid,
+        timestamp: Date.now(),
+        isBuyer: isBuyerMode,
+        isOffer: true,
+        proposedPrice: price
+      });
+      
+      await updateDoc(doc(db, 'rfqs', activeRfq.id), {
+        status: 'NEGOTIATING',
+        updatedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error("Error sending offer: ", e);
+      Alert.alert("Error", "Offer could not be sent.");
+    }
+  };
+
+  // WRITE TO FIREBASE (Accept Offer) - KEPT EXACTLY AS YOU REQUESTED
   const acceptOffer = (price: number) => {
     Alert.alert('Confirm Acceptance', `Do you agree to transact at ₹${price} / ${activeRfq.unit}?`, [
        { text: 'Cancel', style: 'cancel' },
@@ -198,21 +249,71 @@ export default function NegotiationRoomScreen() {
         contentContainerStyle={{padding: 16, flexGrow: 1}}
       />
 
+      {/* CHAT INPUT AREA */}
       {activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.inputArea}>
+            {/* 🏷️ Make Offer Icon */}
+            <IconButton 
+               icon="tag-plus" 
+               iconColor="#10B981" 
+               size={24} 
+               onPress={() => setOfferModalVisible(true)} 
+            />
+            
+            {/* Standard Text Chat */}
             <TextInput
               mode="outlined"
-              placeholder='Type msg or "Offer: 90" to bid...'
+              placeholder="Type a message..."
               value={messageText}
               onChangeText={setMessageText}
               style={styles.input}
               outlineStyle={{borderRadius: 24, borderColor: '#E2E8F0'}}
             />
-            <IconButton icon="send" mode="contained" containerColor="#004AAD" iconColor="white" onPress={sendMessage} style={{marginTop: 8}} />
+            
+            <IconButton 
+              icon="send" 
+              mode="contained" 
+              containerColor="#004AAD" 
+              iconColor="white" 
+              onPress={sendChatMessage} 
+              style={{marginTop: 8}} 
+            />
           </View>
         </KeyboardAvoidingView>
       )}
+
+      {/* 🔥 POP-UP MODAL FOR BIDS/OFFERS */}
+      <Modal visible={offerModalVisible} transparent animationType="fade">
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalContent}>
+             <Text variant="titleLarge" style={{fontWeight: 'bold', marginBottom: 15, color: '#0F172A'}}>
+                Make a Counter Offer
+             </Text>
+             
+             <TextInput
+                mode="outlined"
+                keyboardType="numeric"
+                label={`Price in ₹ / ${activeRfq.unit}`}
+                value={offerPrice}
+                onChangeText={setOfferPrice}
+                style={{backgroundColor: 'white', marginBottom: 20}}
+                activeOutlineColor="#10B981"
+                autoFocus
+             />
+
+             <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 10}}>
+                <Button mode="text" onPress={() => setOfferModalVisible(false)} textColor="#64748B">
+                   Cancel
+                </Button>
+                <Button mode="contained" onPress={sendOffer} buttonColor="#10B981">
+                   Submit Bid
+                </Button>
+             </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -226,6 +327,10 @@ const styles = StyleSheet.create({
   msgBubble: { maxWidth: '80%', padding: 12, borderRadius: 16 },
   msgBubbleMe: { backgroundColor: '#004AAD', borderBottomRightRadius: 4 },
   msgBubbleThem: { backgroundColor: 'white', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#E2E8F0' },
-  inputArea: { flexDirection: 'row', padding: 10, backgroundColor: 'white', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
-  input: { flex: 1, backgroundColor: '#F1F5F9', marginRight: 10 }
+  inputArea: { flexDirection: 'row', padding: 5, backgroundColor: 'white', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  input: { flex: 1, backgroundColor: '#F1F5F9', marginRight: 5, height: 48, justifyContent: 'center' },
+  
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: 'white', width: '100%', borderRadius: 16, padding: 24, elevation: 5, shadowColor: '#000' }
 });
