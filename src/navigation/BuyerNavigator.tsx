@@ -21,6 +21,7 @@ import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
 import OrderTracking from '../screens/OrderTracking';
 import NegotiationsListScreen from '../screens/NegotiationsListScreen';
 import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
+import PostRequirementScreen from '../screens/PostRequirementScreen';
 
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
@@ -32,6 +33,7 @@ export type BuyerStackParamList = {
   OrderTracking: { orderId: string };
   NegotiationsList: undefined;
   NegotiationRoom: { rfqId?: string };
+  PostRequirement: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -175,6 +177,7 @@ export default function BuyerNavigator() {
       />
       <Stack.Screen name="NegotiationsList" component={NegotiationsListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="PostRequirement" component={PostRequirementScreen} options={{ headerShown: true, title: 'Post Custom Requirement' }} />
     </Stack.Navigator>
   );
 }

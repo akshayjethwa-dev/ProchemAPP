@@ -12,15 +12,15 @@ export default function NegotiationRoomScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   
-  const { user, viewMode, addToCart } = useAppStore();
+  const { user, viewMode } = useAppStore();
   
   const rfqId = route.params?.rfqId;
-  const isBuyerMode = viewMode === 'buyer'; 
 
   // REAL-TIME STATES
   const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
   const [roomMessages, setRoomMessages] = useState<NegotiationMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // INPUT STATES
   const [messageText, setMessageText] = useState('');
@@ -31,18 +31,15 @@ export default function NegotiationRoomScreen() {
   useEffect(() => {
     if (!rfqId) return;
 
-    // 1. Listen to RFQ Details
     const unsubRfq = onSnapshot(doc(db, 'rfqs', rfqId), (docSnap) => {
       if (docSnap.exists()) {
         setActiveRfq(docSnap.data() as RFQ);
       }
     });
 
-    // 2. Listen to Chat Messages
     const q = query(collection(db, 'messages'), where('rfqId', '==', rfqId));
     const unsubMessages = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as NegotiationMessage));
-      // Sort messages in memory by timestamp
       setRoomMessages(msgs.sort((a, b) => a.timestamp - b.timestamp));
       setLoading(false);
     });
@@ -70,33 +67,24 @@ export default function NegotiationRoomScreen() {
     );
   }
 
-  // 🛡️ SECURITY FILTER: Function to hide contact info
+  // 🛡️ SECURITY FILTER
   const maskSensitiveInfo = (text: string) => {
     let filteredText = text;
-
-    // 1. Mask Phone Numbers (Catches 8 to 12 digit numbers, even with spaces or dashes)
     const phoneRegex = /(\d[\s\-\.]?){8,12}/g;
     filteredText = filteredText.replace(phoneRegex, ' [PHONE NUMBER HIDDEN] ');
-
-    // 2. Mask Email Addresses
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
     filteredText = filteredText.replace(emailRegex, ' [EMAIL HIDDEN] ');
-
-    // 3. Mask sneaky keywords
     const sneakyWordsRegex = /\b(whatsapp|wa\.me|call me|contact me|insta|instagram)\b/gi;
     filteredText = filteredText.replace(sneakyWordsRegex, ' [RESTRICTED] ');
-
     return filteredText;
   };
 
-  // 💬 SEND NORMAL CHAT MESSAGE (Updated with Security Filter)
+  // 💬 SEND NORMAL CHAT MESSAGE
   const sendChatMessage = async () => {
     if (!messageText.trim() || !user) return;
     
-    // Apply the filter before doing anything else
     const safeTextToSend = maskSensitiveInfo(messageText);
     
-    // Show a warning if they tried to send contact info
     if (messageText !== safeTextToSend) {
        Alert.alert(
          "Security Warning", 
@@ -104,19 +92,18 @@ export default function NegotiationRoomScreen() {
        );
     }
     
-    setMessageText(''); // Clear instantly for good UX
+    setMessageText(''); 
     
     try {
       await addDoc(collection(db, 'messages'), {
         rfqId: activeRfq.id,
-        text: safeTextToSend, // Send the masked text to the database
+        text: safeTextToSend,
         senderId: user.uid,
         timestamp: Date.now(),
-        isBuyer: isBuyerMode,
+        isBuyer: viewMode === 'buyer',
         isOffer: false
       });
       
-      // Update RFQ Status if it was pending
       if (activeRfq.status === 'PENDING') {
          await updateDoc(doc(db, 'rfqs', activeRfq.id), {
             status: 'NEGOTIATING',
@@ -129,7 +116,7 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // 💰 SEND COUNTER OFFER (From Modal)
+  // 💰 SEND CUSTOM OFFER (Seller Only)
   const sendOffer = async () => {
     const price = parseFloat(offerPrice);
     if (isNaN(price) || price <= 0 || !user) {
@@ -138,15 +125,15 @@ export default function NegotiationRoomScreen() {
     }
 
     setOfferPrice('');
-    setOfferModalVisible(false); // Close Modal
+    setOfferModalVisible(false); 
     
     try {
       await addDoc(collection(db, 'messages'), {
         rfqId: activeRfq.id,
-        text: `Proposed a new offer: ₹${price} / ${activeRfq.unit}`,
+        text: `Sent a Custom Offer: ₹${price} / ${activeRfq.unit}`,
         senderId: user.uid,
         timestamp: Date.now(),
-        isBuyer: isBuyerMode,
+        isBuyer: false,
         isOffer: true,
         proposedPrice: price
       });
@@ -161,44 +148,60 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // WRITE TO FIREBASE (Accept Offer) - KEPT EXACTLY AS YOU REQUESTED
-  const acceptOffer = (price: number) => {
-    Alert.alert('Confirm Acceptance', `Do you agree to transact at ₹${price} / ${activeRfq.unit}?`, [
-       { text: 'Cancel', style: 'cancel' },
-       { 
-         text: isBuyerMode ? 'Agree & Checkout' : 'Confirm Deal', 
-         onPress: async () => {
-           try {
-             await updateDoc(doc(db, 'rfqs', activeRfq.id), {
-               status: 'CONVERTED',
-               agreedPrice: price,
-               updatedAt: new Date().toISOString()
-             });
+  // 🚀 EXTRACTED CHECKOUT LOGIC 
+  const proceedToCheckout = async (price: number) => {
+    setIsProcessing(true);
+    try {
+      // 1. Update RFQ status to CONVERTED
+      await updateDoc(doc(db, 'rfqs', activeRfq.id), {
+        status: 'CONVERTED',
+        agreedPrice: price,
+        updatedAt: new Date().toISOString()
+      });
 
-             if (isBuyerMode) {
-               addToCart({
-                 id: `${activeRfq.productId}_rfq`,
-                 name: `${activeRfq.productName} (Custom Quote)`,
-                 quantity: activeRfq.targetQuantity,
-                 pricePerUnit: price,
-                 unit: activeRfq.unit,
-                 sellerId: activeRfq.sellerId
-               });
-               navigation.navigate('BuyerTabs', { screen: 'Cart' });
-             } else {
-               Alert.alert("Success", "The buyer has been notified to proceed to checkout.");
-               navigation.goBack();
-             }
-           } catch (e) {
-             Alert.alert("Error", "Could not complete acceptance.");
-           }
-         }
-       }
-    ]);
+      // 2. Build the exact Cart Item payload needed for checkout
+      const negotiatedItem = {
+        id: `${activeRfq.productId}_rfq`,
+        productId: activeRfq.productId,
+        name: `${activeRfq.productName} (Custom Quote)`,
+        quantity: activeRfq.targetQuantity,
+        pricePerUnit: price,
+        unit: activeRfq.unit || 'unit',
+        sellerId: activeRfq.sellerId,
+        gstPercent: 18 // Defaulting to 18 if missing
+      };
+
+      // 3. Navigate directly to checkout and pass the item!
+      setIsProcessing(false);
+      navigation.navigate('Checkout', { negotiatedItem });
+
+    } catch (error) {
+      console.error("Checkout Navigation Error: ", error);
+      setIsProcessing(false);
+      Alert.alert("Error", "Could not complete the checkout process. Please check your connection.");
+    }
+  };
+
+  // ✅ ACCEPT OFFER (With Web Fallback)
+  const acceptOffer = (price: number) => {
+    if (Platform.OS === 'web') {
+      const isConfirmed = window.confirm(`Do you agree to transact at ₹${price} / ${activeRfq.unit}?`);
+      if (isConfirmed) {
+        proceedToCheckout(price);
+      }
+    } else {
+      Alert.alert('Confirm Custom Offer', `Do you agree to transact at ₹${price} / ${activeRfq.unit}?`, [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Agree & Checkout', 
+          onPress: () => proceedToCheckout(price) 
+        }
+      ]);
+    }
   };
 
   const renderMessage = ({ item }: { item: NegotiationMessage }) => {
-    const isMe = item.isBuyer === isBuyerMode;
+    const isMe = item.isBuyer === (viewMode === 'buyer');
     
     return (
       <View style={[styles.msgWrapper, isMe ? styles.msgRight : styles.msgLeft]}>
@@ -210,11 +213,22 @@ export default function NegotiationRoomScreen() {
           {item.isOffer && item.proposedPrice && (
              <Card style={{marginTop: 10, backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
                <Card.Content style={{padding: 10}}>
-                 <Text style={{fontWeight: 'bold', color: isMe ? 'white' : '#0F172A'}}>Proposed: ₹{item.proposedPrice} / {activeRfq.unit}</Text>
+                 <Text style={{fontWeight: 'bold', color: isMe ? 'white' : '#0F172A'}}>
+                   {isMe ? 'You Offered:' : 'Custom Offer:'} ₹{item.proposedPrice} / {activeRfq.unit}
+                 </Text>
                  
-                 {!isMe && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
-                    <Button mode="contained" compact style={{marginTop: 8, backgroundColor: '#10B981'}} onPress={() => acceptOffer(item.proposedPrice!)}>
-                      {isBuyerMode ? 'Accept & Checkout' : 'Accept Quote'}
+                 {/* Only Buyer sees Accept Button on Open Orders */}
+                 {!isMe && viewMode === 'buyer' && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
+                    <Button 
+                      mode="contained" 
+                      compact 
+                      icon="check-circle"
+                      loading={isProcessing}
+                      disabled={isProcessing}
+                      style={{marginTop: 8, backgroundColor: '#10B981'}} 
+                      onPress={() => acceptOffer(item.proposedPrice!)}
+                    >
+                      {isProcessing ? 'Processing...' : 'Accept & Checkout'}
                     </Button>
                  )}
                </Card.Content>
@@ -232,7 +246,7 @@ export default function NegotiationRoomScreen() {
         <View style={{flex: 1}}>
            <Text variant="titleMedium" style={{fontWeight: 'bold'}}>{activeRfq.productName}</Text>
            <Text style={{fontSize: 12, color: '#666'}}>
-             Chat with {isBuyerMode ? 'Prochem Supplier' : 'Verified Buyer'}
+             Chat with {viewMode === 'buyer' ? 'Prochem Supplier' : 'Verified Buyer'}
            </Text>
         </View>
         <Chip style={{backgroundColor: activeRfq.status === 'CONVERTED' ? '#DCFCE7' : '#FEF9C3'}}>
@@ -249,19 +263,19 @@ export default function NegotiationRoomScreen() {
         contentContainerStyle={{padding: 16, flexGrow: 1}}
       />
 
-      {/* CHAT INPUT AREA */}
       {activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.inputArea}>
-            {/* 🏷️ Make Offer Icon */}
-            <IconButton 
-               icon="tag-plus" 
-               iconColor="#10B981" 
-               size={24} 
-               onPress={() => setOfferModalVisible(true)} 
-            />
             
-            {/* Standard Text Chat */}
+            {viewMode === 'seller' && (
+              <IconButton 
+                 icon="file-document-edit-outline" 
+                 iconColor="#10B981" 
+                 size={24} 
+                 onPress={() => setOfferModalVisible(true)} 
+              />
+            )}
+            
             <TextInput
               mode="outlined"
               placeholder="Type a message..."
@@ -283,18 +297,17 @@ export default function NegotiationRoomScreen() {
         </KeyboardAvoidingView>
       )}
 
-      {/* 🔥 POP-UP MODAL FOR BIDS/OFFERS */}
       <Modal visible={offerModalVisible} transparent animationType="fade">
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalContent}>
              <Text variant="titleLarge" style={{fontWeight: 'bold', marginBottom: 15, color: '#0F172A'}}>
-                Make a Counter Offer
+                Send Custom Offer
              </Text>
              
              <TextInput
                 mode="outlined"
                 keyboardType="numeric"
-                label={`Price in ₹ / ${activeRfq.unit}`}
+                label={`Final Agreed Price (₹ / ${activeRfq.unit})`}
                 value={offerPrice}
                 onChangeText={setOfferPrice}
                 style={{backgroundColor: 'white', marginBottom: 20}}
@@ -307,7 +320,7 @@ export default function NegotiationRoomScreen() {
                    Cancel
                 </Button>
                 <Button mode="contained" onPress={sendOffer} buttonColor="#10B981">
-                   Submit Bid
+                   Send Offer
                 </Button>
              </View>
           </View>
@@ -329,8 +342,6 @@ const styles = StyleSheet.create({
   msgBubbleThem: { backgroundColor: 'white', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#E2E8F0' },
   inputArea: { flexDirection: 'row', padding: 5, backgroundColor: 'white', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
   input: { flex: 1, backgroundColor: '#F1F5F9', marginRight: 5, height: 48, justifyContent: 'center' },
-  
-  // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', width: '100%', borderRadius: 16, padding: 24, elevation: 5, shadowColor: '#000' }
 });

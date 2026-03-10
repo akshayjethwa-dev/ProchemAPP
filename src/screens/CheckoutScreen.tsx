@@ -25,6 +25,10 @@ export default function CheckoutScreen() {
   const theme = useTheme();
   const { cart, user, clearCart } = useAppStore();
   
+  // ✅ DYNAMIC CART (Check if we came from a Custom Offer)
+  const negotiatedItem = route.params?.negotiatedItem;
+  const activeCart = negotiatedItem ? [negotiatedItem] : cart;
+  
   // State
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -77,9 +81,13 @@ export default function CheckoutScreen() {
   }, [user, route.params]);
 
   const fetchSellerDetails = async () => {
-    if (cart.length === 0) return;
+    if (activeCart.length === 0) {
+      setCalculatingTax(false);
+      return;
+    }
+    
     try {
-      const sellerId = cart[0].sellerId;
+      const sellerId = activeCart[0].sellerId;
       const sellerRef = doc(db, 'users', sellerId);
       const sellerSnap = await getDoc(sellerRef);
       
@@ -105,9 +113,10 @@ export default function CheckoutScreen() {
   const SELLER_SAFETY_FEE_PERCENT = 0.0025;  
   const SELLER_FREIGHT_FEE_PERCENT = 0.01;   
 
-  const productTotal = cart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
+  // ✅ Used activeCart instead of cart
+  const productTotal = activeCart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
   
-  const totalGstAmount = cart.reduce((sum, item) => sum + ((item.pricePerUnit * item.quantity) * ((item.gstPercent || 18) / 100)), 0);
+  const totalGstAmount = activeCart.reduce((sum, item) => sum + ((item.pricePerUnit * item.quantity) * ((item.gstPercent || 18) / 100)), 0);
   
   let cgst = 0;
   let sgst = 0;
@@ -203,8 +212,8 @@ export default function CheckoutScreen() {
       // 3. Place Order
       const orderId = await placeOrder({
         buyerId: user!.uid,
-        sellerId: cart[0].sellerId, 
-        items: cart,
+        sellerId: activeCart[0].sellerId, 
+        items: activeCart,
         shippingAddress: JSON.stringify(selectedAddress),
         
         // Financials
@@ -249,7 +258,11 @@ export default function CheckoutScreen() {
         console.warn("Notification skipped due to permissions/error:", notifyError);
       }
       
-      clearCart();
+      // ✅ Only clear the global cart if we were checking out from the normal cart
+      if (!negotiatedItem) {
+        clearCart();
+      }
+      
       setLoading(false);
       
       // 5. REDIRECT LOGIC
@@ -289,7 +302,7 @@ export default function CheckoutScreen() {
     Clipboard.setString(text);
   };
 
-  if (calculatingTax) {
+  if (calculatingTax || activeCart.length === 0) {
     return <View style={{flex:1, justifyContent:'center'}}><ActivityIndicator /></View>;
   }
 
@@ -318,7 +331,7 @@ export default function CheckoutScreen() {
 
       {/* 2. Bill Details */}
       <Card style={styles.card}>
-        <Card.Title title="Order Summary" />
+        <Card.Title title={negotiatedItem ? "Custom Order Summary" : "Order Summary"} />
         <Card.Content>
            <View style={styles.row}><Text>Item Total</Text><Text>₹{productTotal.toFixed(2)}</Text></View>
            
