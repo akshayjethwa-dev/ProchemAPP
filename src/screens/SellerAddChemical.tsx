@@ -158,7 +158,10 @@ export default function SellerAddChemical() {
   };
 
   const handleSubmit = async () => {
-    if (!form.name.trim() || !form.pricePerUnit.trim()) return showAlert('Missing Field', 'Please enter Name and Base Price.');
+    // ✅ ADDED VALIDATION FOR DESCRIPTION
+    if (!form.name.trim() || !form.pricePerUnit.trim() || !form.description.trim()) {
+      return showAlert('Missing Field', 'Please enter Name, Base Price, and Description.');
+    }
     if (!isCompliant) return showAlert('Compliance Required', 'You must verify that this chemical is legally permitted for sale.');
 
     setLoading(true);
@@ -290,7 +293,7 @@ export default function SellerAddChemical() {
             </Card>
           )}
 
-           {/* 🚀 NEW: Tiered Pricing Section */}
+           {/* 🚀 HIDDEN FOR NOW: Tiered Pricing Section
            <View style={{backgroundColor: '#F0FDF4', padding: 12, borderRadius: 12, marginBottom: 15, borderWidth: 1, borderColor: '#BBF7D0'}}>
               <Text variant="titleMedium" style={{fontWeight:'bold', color: '#166534', marginBottom: 8}}>Volume Discounts (Tiered Pricing)</Text>
               <Text style={{fontSize: 12, color: '#15803D', marginBottom: 10}}>Offer lower prices for larger bulk orders to attract big buyers.</Text>
@@ -304,8 +307,9 @@ export default function SellerAddChemical() {
               ))}
               <Button mode="text" icon="plus" onPress={addTier} textColor="#166534">Add Another Tier</Button>
            </View>
+           */}
 
-           {/* 🚀 NEW: Sample Details Section */}
+           {/* 🚀 HIDDEN FOR NOW: Sample Details Section
            <View style={{backgroundColor: '#EFF6FF', padding: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#BFDBFE'}}>
               <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
                  <Text variant="titleMedium" style={{fontWeight:'bold', color: '#1D4ED8'}}>Offer Lab Samples?</Text>
@@ -320,6 +324,7 @@ export default function SellerAddChemical() {
                 </View>
               )}
            </View>
+           */}
 
           <Text variant="titleMedium" style={styles.sectionTitle}>3. Logistics & Packaging</Text>
           <View style={styles.row}>
@@ -346,7 +351,8 @@ export default function SellerAddChemical() {
              </Button>
           </View>
 
-          <TextInput label="Product Description" multiline numberOfLines={4} value={form.description} onChangeText={t => handleChange('description', t)} mode="outlined" style={styles.input} />
+          {/* ✅ UPDATED LABEL & MADE MANDATORY IN VALIDATION ABOVE */}
+          <TextInput label="Description and usage of the product *" multiline numberOfLines={4} value={form.description} onChangeText={t => handleChange('description', t)} mode="outlined" style={styles.input} />
 
           {/* COMPLIANCE CHECKBOX */}
           <View style={styles.complianceContainer}>
