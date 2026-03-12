@@ -20,12 +20,10 @@ export default function PostRequirementScreen() {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ✅ NEW: States for the Toast (Snackbar) Notification
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   const handleSubmit = async () => {
-    // 1. Validation Check
     if (!productName.trim() || !quantity.trim()) {
       setToastMessage('Please provide the Product Name and Estimated Quantity.');
       setToastVisible(true);
@@ -34,7 +32,6 @@ export default function PostRequirementScreen() {
 
     setLoading(true);
     try {
-      // 2. Push to Firestore
       await addDoc(collection(db, 'custom_requirements'), {
         buyerId: user?.uid || 'UNKNOWN',
         buyerName: user?.companyName || user?.businessName || 'Unknown Company',
@@ -48,18 +45,15 @@ export default function PostRequirementScreen() {
         createdAt: new Date().toISOString()
       });
 
-      // 3. Show Success Toast
       setToastMessage('Requirement Submitted! Redirecting...');
       setToastVisible(true);
       
-      // 4. Wait 1.5 seconds so they can read the Toast, then send them to Home
       setTimeout(() => {
         navigation.navigate('BuyerTabs', { screen: 'HomeTab' });
       }, 1500);
 
     } catch (error: any) {
       console.error('Error posting requirement:', error);
-      // 5. If it fails (e.g., Firebase rules blocked it), show the EXACT error in the toast
       setToastMessage(error.message || 'Failed to submit requirement. Please try again.');
       setToastVisible(true);
     } finally {
@@ -71,9 +65,14 @@ export default function PostRequirementScreen() {
     <View style={{ flex: 1, backgroundColor: 'white' }}>
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 20}
       >
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView 
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled" // Allows clicking submit without dismissing keyboard first
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.headerArea}>
             <Text variant="headlineSmall" style={styles.title}>What are you looking for?</Text>
             <Text variant="bodyMedium" style={styles.subtitle}>
@@ -127,7 +126,7 @@ export default function PostRequirementScreen() {
             mode="outlined"
             multiline
             numberOfLines={4}
-            style={styles.input}
+            style={[styles.input, { minHeight: 100 }]}
             placeholder="Mention any specific grade, purity, packaging size, or delivery timeline required..."
           />
 
@@ -144,7 +143,6 @@ export default function PostRequirementScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ✅ NEW: Toast / Snackbar Component injected at the bottom of the screen */}
       <Snackbar
         visible={toastVisible}
         onDismiss={() => setToastVisible(false)}
@@ -166,6 +164,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     flexGrow: 1,
+    paddingBottom: 100, // Extra padding at the bottom to scroll past keyboard
   },
   headerArea: {
     marginBottom: 24,

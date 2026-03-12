@@ -14,6 +14,8 @@ import AdminPaymentsScreen from '../screens/admin/AdminPaymentsScreen';
 import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
 import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationScreen';
 import AdminPayment from '../screens/admin/AdminPayment';
+// ✅ NEW: Import Custom Requirements Screen
+import AdminCustomRequirementsScreen from '../screens/admin/AdminCustomRequirementsScreen';
 
 export type AdminStackParamList = {
   UsersList: undefined;
@@ -21,6 +23,7 @@ export type AdminStackParamList = {
   InvoiceViewer: { order: any }; 
   AdminDashboard: undefined;
   SendNotification: undefined;
+  AdminCustomRequirements: undefined; // ✅ ADDED
 };
 
 const Tab = createBottomTabNavigator();
@@ -41,6 +44,8 @@ function DashboardStackNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
       <Stack.Screen name="SendNotification" component={AdminSendNotificationScreen} />
+      {/* ✅ ADDED: Admin Custom Requirements Screen */}
+      <Stack.Screen name="AdminCustomRequirements" component={AdminCustomRequirementsScreen} />
     </Stack.Navigator>
   );
 }

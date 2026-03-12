@@ -1,3 +1,5 @@
+// src/navigation/RootNavigator.tsx
+
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -19,6 +21,8 @@ import LoginScreen from '../screens/LoginScreen';
 import RegistrationScreen from '../screens/RegistrationScreen';
 import OTPVerificationScreen from '../screens/OTPVerificationScreen';
 import LegalPagesScreen from '../screens/LegalPagesScreen';
+// ✅ ADDED: Import About Prochem Screen
+import AboutProchemScreen from '../screens/AboutProchemScreen';
 
 // Feature Screens
 import ProductDetail from '../screens/ProductDetail';
@@ -89,6 +93,8 @@ export const RootNavigator = () => {
             <Stack.Screen name="Registration" component={RegistrationScreen} />
             <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
             <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
+            {/* ✅ ADDED: About Prochem Screen in public stack */}
+            <Stack.Screen name="AboutProchem" component={AboutProchemScreen} /> 
           </Stack.Group>
         ) : (
           // 2. Authenticated Stack
@@ -121,6 +127,8 @@ export const RootNavigator = () => {
             <Stack.Screen name="Notifications" component={NotificationScreen} />
             <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
             <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
+            {/* ✅ ADDED: About Prochem Screen in authenticated shared stack */}
+            <Stack.Screen name="AboutProchem" component={AboutProchemScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

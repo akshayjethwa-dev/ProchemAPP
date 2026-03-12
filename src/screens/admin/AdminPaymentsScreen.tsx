@@ -36,7 +36,7 @@ export default function AdminPaymentsScreen() {
           netRevenue += fees;
         } else {
           // Legacy calculation for old orders (approx 4.75%)
-          netRevenue += (orderVal * 0.0475);
+          netRevenue += (orderVal * 0.03);
         }
       });
 
@@ -62,7 +62,7 @@ export default function AdminPaymentsScreen() {
           keyExtractor={i => i.id}
           renderItem={({ item }) => {
             const fees = (item.platformFeeBuyer || 0) + (item.logisticFee || 0) + (item.platformFeeSeller || 0) + (item.safetyFee || 0) + (item.freightFee || 0);
-            const revenueDisplay = fees > 0 ? fees : (item.totalAmount! * 0.0475);
+            const revenueDisplay = fees > 0 ? fees : (item.totalAmount! * 0.03);
 
             return (
               <Card style={styles.card}>

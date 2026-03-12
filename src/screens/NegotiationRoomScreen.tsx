@@ -16,18 +16,15 @@ export default function NegotiationRoomScreen() {
   
   const rfqId = route.params?.rfqId;
 
-  // REAL-TIME STATES
   const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
   const [roomMessages, setRoomMessages] = useState<NegotiationMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // INPUT STATES
   const [messageText, setMessageText] = useState('');
   const [offerPrice, setOfferPrice] = useState('');
   const [offerModalVisible, setOfferModalVisible] = useState(false);
 
-  // FIREBASE LISTENERS
   useEffect(() => {
     if (!rfqId) return;
 
@@ -67,7 +64,6 @@ export default function NegotiationRoomScreen() {
     );
   }
 
-  // 🛡️ SECURITY FILTER
   const maskSensitiveInfo = (text: string) => {
     let filteredText = text;
     const phoneRegex = /(\d[\s\-\.]?){8,12}/g;
@@ -79,7 +75,6 @@ export default function NegotiationRoomScreen() {
     return filteredText;
   };
 
-  // 💬 SEND NORMAL CHAT MESSAGE
   const sendChatMessage = async () => {
     if (!messageText.trim() || !user) return;
     
@@ -116,7 +111,6 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // 💰 SEND CUSTOM OFFER (Seller Only)
   const sendOffer = async () => {
     const price = parseFloat(offerPrice);
     if (isNaN(price) || price <= 0 || !user) {
@@ -148,18 +142,15 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // 🚀 EXTRACTED CHECKOUT LOGIC 
   const proceedToCheckout = async (price: number) => {
     setIsProcessing(true);
     try {
-      // 1. Update RFQ status to CONVERTED
       await updateDoc(doc(db, 'rfqs', activeRfq.id), {
         status: 'CONVERTED',
         agreedPrice: price,
         updatedAt: new Date().toISOString()
       });
 
-      // 2. Build the exact Cart Item payload needed for checkout
       const negotiatedItem = {
         id: `${activeRfq.productId}_rfq`,
         productId: activeRfq.productId,
@@ -168,10 +159,9 @@ export default function NegotiationRoomScreen() {
         pricePerUnit: price,
         unit: activeRfq.unit || 'unit',
         sellerId: activeRfq.sellerId,
-        gstPercent: 18 // Defaulting to 18 if missing
+        gstPercent: 18
       };
 
-      // 3. Navigate directly to checkout and pass the item!
       setIsProcessing(false);
       navigation.navigate('Checkout', { negotiatedItem });
 
@@ -182,7 +172,6 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // ✅ ACCEPT OFFER (With Web Fallback)
   const acceptOffer = (price: number) => {
     if (Platform.OS === 'web') {
       const isConfirmed = window.confirm(`Do you agree to transact at ₹${price} / ${activeRfq.unit}?`);
@@ -217,7 +206,6 @@ export default function NegotiationRoomScreen() {
                    {isMe ? 'You Offered:' : 'Custom Offer:'} ₹{item.proposedPrice} / {activeRfq.unit}
                  </Text>
                  
-                 {/* Only Buyer sees Accept Button on Open Orders */}
                  {!isMe && viewMode === 'buyer' && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
                     <Button 
                       mode="contained" 
@@ -256,17 +244,21 @@ export default function NegotiationRoomScreen() {
         </Chip>
       </View>
 
-      <FlatList
-        data={roomMessages}
-        keyExtractor={item => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={{padding: 16, flexGrow: 1}}
-      />
+      {/* Wrapper ensures FlatList shrinks and Input pushes up seamlessly */}
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <FlatList
+          data={roomMessages}
+          keyExtractor={item => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={{padding: 16, flexGrow: 1}}
+          keyboardShouldPersistTaps="handled"
+        />
 
-      {activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
           <View style={styles.inputArea}>
-            
             {viewMode === 'seller' && (
               <IconButton 
                  icon="file-document-edit-outline" 
@@ -294,11 +286,14 @@ export default function NegotiationRoomScreen() {
               style={{marginTop: 8}} 
             />
           </View>
-        </KeyboardAvoidingView>
-      )}
+        )}
+      </KeyboardAvoidingView>
 
       <Modal visible={offerModalVisible} transparent animationType="fade">
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalContent}>
              <Text variant="titleLarge" style={{fontWeight: 'bold', marginBottom: 15, color: '#0F172A'}}>
                 Send Custom Offer

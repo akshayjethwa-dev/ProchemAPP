@@ -1,19 +1,34 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, } from 'react-native';
-import { Text, Card, ActivityIndicator, Button, useTheme, IconButton } from 'react-native-paper';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { Text, Card, ActivityIndicator, Button, useTheme, IconButton, Badge } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native'; // ✅ Import Navigation
+import { useNavigation } from '@react-navigation/native';
 import { getAdminStats } from '../../services/adminService';
 import { logoutUser } from '../../services/authService';
+import { collection, query, onSnapshot, where } from 'firebase/firestore'; 
+import { db } from '../../config/firebase';
 
 export default function AdminDashboard() {
   const theme = useTheme();
-  const navigation = useNavigation<any>(); // ✅ Initialize Navigation
+  const navigation = useNavigation<any>(); 
   const [stats, setStats] = useState({ totalUsers: 0, totalProducts: 0, totalOrders: 0 });
   const [loading, setLoading] = useState(true);
+  
+  // State for unread custom requirements
+  const [pendingLeads, setPendingLeads] = useState(0); 
 
   useEffect(() => {
     loadStats();
+
+    // Real-time listener for pending custom requirements
+    const qLeads = query(collection(db, 'custom_requirements'), where('status', '==', 'PENDING'));
+    const unsubLeads = onSnapshot(qLeads, (snap) => {
+      setPendingLeads(snap.size);
+    });
+
+    return () => {
+      unsubLeads(); // Cleanup listener on unmount
+    };
   }, []);
 
   const loadStats = async () => {
@@ -41,7 +56,7 @@ export default function AdminDashboard() {
         </Button>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold'}}>Platform Overview</Text>
         
         {loading ? <ActivityIndicator size="large" color={theme.colors.primary} /> : (
@@ -66,12 +81,38 @@ export default function AdminDashboard() {
             </Card>
           </View>
         )}
-        {/* ✅ NEW: Finance & Actions Section */}
+
+        {/* Lead Management Section */}
+        <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Lead Management</Text>
+        
+        <Card 
+          style={{marginBottom: 12, backgroundColor: 'white'}} 
+          onPress={() => navigation.navigate('AdminCustomRequirements')}
+        >
+          <Card.Title 
+            title={
+               <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                 <Text style={{fontSize: 16, fontWeight: 'bold'}}>Custom Requirements</Text>
+                 {pendingLeads > 0 && (
+                    <Badge style={{backgroundColor: '#EF4444', marginLeft: 8}} size={22}>
+                      {/* ✅ FIXED: Passed as a single template literal string */}
+                      {`${pendingLeads} New`}
+                    </Badge>
+                 )}
+               </View>
+            }
+            subtitle="View chemicals requested by buyers" 
+            left={(props) => <IconButton icon="clipboard-text-search-outline" iconColor="#EA580C" size={28} />}
+            right={(props) => <IconButton icon="chevron-right" {...props} />}
+          />
+        </Card>
+
+        {/* Finance & Actions Section */}
         <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Finance & Actions</Text>
         
         <Card 
           style={{marginBottom: 12, backgroundColor: 'white'}} 
-          onPress={() => navigation.navigate('Payments')} // ✅ Navigates to Payment Tab
+          onPress={() => navigation.navigate('Payments')} 
         >
           <Card.Title 
             title="Seller Payouts" 
@@ -81,7 +122,7 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        {/* ✅ NEW: Send Notification Button */}
+        {/* Quick Actions */}
         <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Quick Actions</Text>
         <Card style={{marginBottom: 20}} onPress={() => navigation.navigate('SendNotification')}>
           <Card.Title 

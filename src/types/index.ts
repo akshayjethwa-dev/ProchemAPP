@@ -60,6 +60,20 @@ export interface UserProfile {
   updatedAt?: any;
 }
 
+export interface CustomRequirement {
+  id?: string;
+  buyerId: string;
+  buyerName?: string;
+  buyerPhone?: string;
+  productName: string;
+  quantity: string;
+  unit: string;
+  description?: string;
+  targetPrice?: string;
+  status: 'PENDING' | 'REVIEWING' | 'FULFILLED' | 'REJECTED';
+  createdAt: string;
+}
+
 // ✅ Product Types (UPDATED WITH CHEMICAL-SPECIFIC DATA)
 export interface Product {
   id: string;

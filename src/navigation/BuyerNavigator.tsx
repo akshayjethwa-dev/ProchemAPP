@@ -22,6 +22,7 @@ import OrderTracking from '../screens/OrderTracking';
 import NegotiationsListScreen from '../screens/NegotiationsListScreen';
 import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
 import PostRequirementScreen from '../screens/PostRequirementScreen';
+import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
 
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
@@ -34,6 +35,7 @@ export type BuyerStackParamList = {
   NegotiationsList: undefined;
   NegotiationRoom: { rfqId?: string };
   PostRequirement: undefined;
+  PaymentSuccess: any; // ✅ FIXED: Added PaymentSuccess to the param list
 };
 
 const Tab = createBottomTabNavigator();
@@ -174,6 +176,11 @@ export default function BuyerNavigator() {
         name="OrderTracking" 
         component={OrderTracking} 
         options={{ title: 'Order Details' }} 
+      />
+      <Stack.Screen 
+        name="PaymentSuccess" 
+        component={PaymentSuccessScreen} 
+        options={{ headerShown: false, gestureEnabled: false }} // Prevent swiping back to checkout
       />
       <Stack.Screen name="NegotiationsList" component={NegotiationsListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />

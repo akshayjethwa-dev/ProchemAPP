@@ -33,13 +33,13 @@ export default function LegalPagesScreen() {
           Prochem operates as a marketplace facilitator. The following fee structure applies to all transactions:
           {'\n'}
           <Text style={{fontWeight:'bold', color:'#004AAD'}}>For Buyers:</Text>
-          <Bullet>Platform Fee: 1% of Order Value</Bullet>
-          <Bullet>Logistic Fee: 1% of Order Value</Bullet>
+          <Bullet>Platform Fee: 1.5% of Order Value</Bullet>
+          
           {'\n'}
           <Text style={{fontWeight:'bold', color:'#004AAD'}}>For Sellers:</Text>
-          <Bullet>Platform Fee: 1.5% of Order Value</Bullet>
+          <Bullet>Platform Fee: 1% of Order Value</Bullet>
           <Bullet>Safety Fee: 0.25% of Order Value</Bullet>
-          <Bullet>Freight Fee: 1% of Order Value</Bullet>
+          <Bullet>Freight Fee: 0.25% of Order Value</Bullet>
         </Section>
 
         <Section title="4. Cancellation & Returns">

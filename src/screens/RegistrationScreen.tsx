@@ -26,6 +26,7 @@ type RootStackParamList = {
   Login: undefined;
   Registration: { role?: string } | undefined;
   LegalPages: undefined; // ✅ Added LegalPages to type definition
+  AboutProchem: undefined; // ✅ ADDED: About Prochem to type definition
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -301,6 +302,17 @@ export default function RegistrationScreen() {
               contentStyle={{ paddingVertical: 8 }}
             >
               Create Account
+            </Button>
+
+            {/* ✅ ADDED: What is Prochem button */}
+            <Button 
+              mode="outlined" 
+              icon="information-outline" 
+              onPress={() => navigation.navigate('AboutProchem')} 
+              style={{ marginTop: 15, borderRadius: 8, borderColor: '#004AAD' }}
+              textColor="#004AAD"
+            >
+              What is Prochem?
             </Button>
 
             {/* Footer */}

@@ -1,3 +1,5 @@
+// src/screens/CheckoutScreen.tsx
+
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert, BackHandler, Image, Clipboard, Platform } from 'react-native'; 
 import { Text, Card, Button, Divider, IconButton, TextInput, HelperText, useTheme, ActivityIndicator } from 'react-native-paper';
@@ -109,9 +111,9 @@ export default function CheckoutScreen() {
   // --- FINANCIAL CALCULATIONS ---
   const BUYER_PLATFORM_FEE_PERCENT = 0.015; // ✅ Updated to 1.5%
 
-  const SELLER_PLATFORM_FEE_PERCENT = 0.015; 
+  const SELLER_PLATFORM_FEE_PERCENT = 0.01; 
   const SELLER_SAFETY_FEE_PERCENT = 0.0025;  
-  const SELLER_FREIGHT_FEE_PERCENT = 0.01;   
+  const SELLER_FREIGHT_FEE_PERCENT = 0.0025;   
 
   // ✅ Used activeCart instead of cart
   const productTotal = activeCart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
@@ -139,7 +141,6 @@ export default function CheckoutScreen() {
   const productTotalWithTax = productTotal + totalGstAmount;
   
   const platformFeeBuyer = productTotalWithTax * BUYER_PLATFORM_FEE_PERCENT;
-  // ✅ Removed logisticFee
   const finalPayableAmount = productTotalWithTax + platformFeeBuyer; 
 
   const platformFeeSeller = productTotalWithTax * SELLER_PLATFORM_FEE_PERCENT;
@@ -224,8 +225,6 @@ export default function CheckoutScreen() {
         igst: igst,
         
         platformFeeBuyer: platformFeeBuyer,
-        // ✅ Removed logisticFee from payload
-        
         platformFeeSeller: platformFeeSeller,
         safetyFee: safetyFee,
         freightFee: freightFee,
@@ -265,30 +264,17 @@ export default function CheckoutScreen() {
       
       setLoading(false);
       
-      // 5. REDIRECT LOGIC
-      const resetAction = CommonActions.reset({
-        index: 0,
-        routes: [{
-          name: 'BuyerTabs',
-          state: {
-            routes: [{ name: 'Orders' }], 
-          },
-        }],
+      // 🚀 5. REDIRECT LOGIC TO PAYMENT SUCCESS SCREEN
+      navigation.navigate('PaymentSuccess', {
+        orderId: orderId.slice(0, 10).toUpperCase(),
+        totalAmount: finalPayableAmount.toFixed(2),
+        productName: activeCart.length > 1 ? 'Multiple Products' : activeCart[0]?.name,
+        quantity: activeCart[0]?.quantity,
+        unit: activeCart[0]?.unit || 'kg',
+        utr: utrNumber,
+        buyerName: user?.companyName || user?.businessName || 'Prochem Buyer',
+        date: new Date().toLocaleDateString()
       });
-
-      if (Platform.OS === 'web') {
-        window.alert("Order Placed Successfully! Your order has been sent to the Seller.");
-        navigation.dispatch(resetAction);
-      } else {
-        Alert.alert(
-          "Order Placed Successfully!", 
-          "Your order has been sent to the Seller. You can track its status in the Orders tab.",
-          [{ 
-            text: "Go to Orders", 
-            onPress: () => navigation.dispatch(resetAction)
-          }]
-        );
-      }
 
     } catch (error) {
       console.error("Order Failure:", error);
@@ -356,7 +342,6 @@ export default function CheckoutScreen() {
            <Divider style={{marginVertical: 5}} />
            
            <View style={styles.row}><Text>Platform Fee (1.5%)</Text><Text>₹{platformFeeBuyer.toFixed(2)}</Text></View>
-           {/* ✅ Removed Logistic Fee UI */}
            
            <Divider style={{marginVertical: 10}} />
            <View style={styles.row}>
@@ -364,7 +349,6 @@ export default function CheckoutScreen() {
               <Text variant="titleMedium" style={{fontWeight:'bold', color: theme.colors.primary}}>₹{finalPayableAmount.toFixed(2)}</Text>
            </View>
            
-           {/* ✅ ADDED DELIVERY DISCLAIMER */}
            <Text style={{fontSize: 12, color: '#D97706', marginTop: 10, fontStyle: 'italic', textAlign: 'center'}}>
              * Delivery charges will apply. We will connect with you soon with the exact price.
            </Text>

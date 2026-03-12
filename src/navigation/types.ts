@@ -10,6 +10,7 @@ export type RootStackParamList = {
   LegalPages: undefined;
   AdminApp: undefined;
   TransporterApp: undefined;
+  AboutProchem: undefined;
 
   // Navigation Stacks
   BuyerApp: undefined;  

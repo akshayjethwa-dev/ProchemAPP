@@ -74,10 +74,10 @@ export default function AccountScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
                <Avatar.Icon 
-                  size={50} 
-                  icon="swap-horizontal" 
-                  style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
-                  color="#004AAD"
+                 size={50} 
+                 icon="swap-horizontal" 
+                 style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
+                 color="#004AAD"
                />
                <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>
                  Switch to {viewMode === 'buyer' ? 'Selling' : 'Buying'}?
@@ -108,10 +108,10 @@ export default function AccountScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
                <Avatar.Icon 
-                  size={50} 
-                  icon="headset" 
-                  style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
-                  color="#004AAD"
+                 size={50} 
+                 icon="headset" 
+                 style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
+                 color="#004AAD"
                />
                <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>
                  Promact Support
@@ -157,10 +157,10 @@ export default function AccountScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
                <Avatar.Icon 
-                  size={50} 
-                  icon="alert" 
-                  style={{backgroundColor: '#FFEBEE', marginBottom: 15}} 
-                  color="#D32F2F"
+                 size={50} 
+                 icon="alert" 
+                 style={{backgroundColor: '#FFEBEE', marginBottom: 15}} 
+                 color="#D32F2F"
                />
                <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center', color: '#D32F2F'}}>
                  Delete Account?
@@ -272,7 +272,7 @@ export default function AccountScreen() {
           />
           <Divider style={{marginLeft: 60}} />
 
-          {/* 🚀 FIXED: BUYER RFQ TRACKING LINK INJECTED HERE */}
+          {/* 🚀 BUYER RFQ TRACKING LINK INJECTED HERE */}
           {viewMode === 'buyer' && (
             <>
               <List.Item 
@@ -319,6 +319,16 @@ export default function AccountScreen() {
           />
           <Divider style={{marginLeft: 60}} />
 
+          {/* ✅ ADDED: About Prochem Link */}
+          <List.Item 
+            title="About Prochem" 
+            left={() => <List.Icon icon="information-outline" color="#004AAD" />} 
+            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => navigation.navigate('AboutProchem')}
+            style={styles.listItem}
+          />
+          <Divider style={{marginLeft: 60}} />
+
           <List.Item 
             title="Terms & Privacy Policy" 
             left={() => <List.Icon icon="file-sign" color="#64748B" />} 
@@ -352,7 +362,7 @@ export default function AccountScreen() {
             Sign Out
           </Button>
           <Text style={{textAlign:'center', color:'#94A3B8', marginTop: 15, fontSize: 12}}>
-            App Version 1.0.0
+            App Version 2.1.1
           </Text>
         </View>
 

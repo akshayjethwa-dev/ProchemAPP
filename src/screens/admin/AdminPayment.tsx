@@ -121,7 +121,7 @@ export default function AdminPaymentsScreen() {
           
           {/* ✅ UPDATED SELLER FEES BREAKDOWN */}
           <View style={styles.statRow}>
-             <Text style={styles.label}>- Seller Fee (1.5%)</Text>
+             <Text style={styles.label}>- Seller Fee (1%)</Text>
              <Text style={[styles.value, {color:'#D32F2F'}]}>- ₹{(item.platformFeeSeller || 0).toFixed(2)}</Text>
           </View>
           <View style={styles.statRow}>
@@ -129,7 +129,7 @@ export default function AdminPaymentsScreen() {
              <Text style={[styles.value, {color:'#D32F2F'}]}>- ₹{(item.safetyFee || 0).toFixed(2)}</Text>
           </View>
            <View style={styles.statRow}>
-             <Text style={styles.label}>- Freight Fee (1%)</Text>
+             <Text style={styles.label}>- Freight Fee (0.25%)</Text>
              <Text style={[styles.value, {color:'#D32F2F'}]}>- ₹{(item.freightFee || 0).toFixed(2)}</Text>
           </View>
           

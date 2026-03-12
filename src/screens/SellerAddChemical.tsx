@@ -20,10 +20,9 @@ const GST_SLABS = ['5', '12', '18', '28'];
 const HAZARD_CLASSES = ['Non-Hazardous', 'Flammable', 'Corrosive', 'Toxic', 'Oxidizer', 'Explosive'];
 const PACKAGING_OPTIONS = ['200L Drum', '25kg Bag', '50kg Bag', 'IBC Tote', '1L Bottle', 'Tanker', 'Other'];
 
-const SELLER_PLATFORM_FEE = 0.015; // 1.5%
-const SELLER_SAFETY_FEE = 0.0025;  // 0.25%
-const SELLER_FREIGHT_FEE = 0.01;   // 1.0%
-
+const SELLER_PLATFORM_FEE = 0.01;
+const SELLER_SAFETY_FEE = 0.0025;  
+const SELLER_FREIGHT_FEE = 0.0025;
 export default function SellerAddChemical() {
   const navigation = useNavigation();
   const theme = useTheme();
