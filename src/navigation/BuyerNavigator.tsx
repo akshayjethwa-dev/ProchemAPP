@@ -23,6 +23,7 @@ import NegotiationsListScreen from '../screens/NegotiationsListScreen';
 import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
 import PostRequirementScreen from '../screens/PostRequirementScreen';
 import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
+import CompareScreen from '../screens/CompareScreen';
 
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
@@ -36,6 +37,7 @@ export type BuyerStackParamList = {
   NegotiationRoom: { rfqId?: string };
   PostRequirement: undefined;
   PaymentSuccess: any; // ✅ FIXED: Added PaymentSuccess to the param list
+  Compare: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -185,6 +187,12 @@ export default function BuyerNavigator() {
       <Stack.Screen name="NegotiationsList" component={NegotiationsListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />
       <Stack.Screen name="PostRequirement" component={PostRequirementScreen} options={{ headerShown: true, title: 'Post Custom Requirement' }} />
+      {/* 🚀 NEW COMPARE SCREEN */}
+      <Stack.Screen 
+        name="Compare" 
+        component={CompareScreen} 
+        options={{ headerShown: true, title: 'Compare Products' }} 
+      />
     </Stack.Navigator>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert, Platform, Linking, Modal, KeyboardAvoidingView, Keyboard } from 'react-native';
-import { Text, Button, IconButton, useTheme, Divider, Chip, Avatar, TextInput } from 'react-native-paper';
+import { Text, Button, IconButton, useTheme, Divider, Chip, Avatar, TextInput, Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { collection, addDoc, doc, setDoc, query, where, getDocs } from 'firebase/firestore'; 
@@ -16,7 +16,8 @@ export default function ProductDetail() {
   const insets = useSafeAreaInsets();
   
   const { productId, product: paramProduct } = route.params || {};
-  const { products, addToCart, addToCompare, user } = useAppStore();
+  // 🚀 Added compareList
+  const { products, addToCart, addToCompare, compareList, user } = useAppStore();
   
   const product = products.find(p => p.id === productId) || paramProduct || ({} as Product);
 
@@ -30,8 +31,11 @@ export default function ProductDetail() {
   const [rfqLoading, setRfqLoading] = useState(false);
   const [rfqForm, setRfqForm] = useState({ targetQty: '', targetPrice: '', pincode: '', notes: '' });
 
-  // 🚀 NEW STATE: Controls the Educational Success Modal
+  // Educational Success Modal
   const [rfqSuccess, setRfqSuccess] = useState({ visible: false, rfqId: '' });
+  
+  // 🚀 NEW STATE: Controls the Compare Snackbar
+  const [compareVisible, setCompareVisible] = useState(false);
 
   useEffect(() => {
     setQty(String(minQty));
@@ -116,7 +120,6 @@ export default function ProductDetail() {
       setRfqLoading(false);
       setShowRfqModal(false);
 
-      // 🚀 FIXED: Trigger the Educational Success Modal instead of generic alert
       setTimeout(() => {
         setRfqSuccess({ visible: true, rfqId: newRfqId });
       }, 500);
@@ -128,9 +131,10 @@ export default function ProductDetail() {
     }
   };
 
+  // 🚀 UPDATED: Uses Snackbar instead of Alert
   const handleCompare = () => {
     addToCompare(product);
-    Alert.alert('Added to Compare', 'You can view this in the Comparison Table.');
+    setCompareVisible(true);
   };
 
   const handleBuyNow = () => {
@@ -163,6 +167,9 @@ export default function ProductDetail() {
 
   if (!product.name) return null;
 
+  // 🚀 Check if the item is already compared to dynamically update the UI buttons
+  const isAlreadyInCompare = compareList.some(p => p.id === product.id);
+
   return (
     <View style={styles.container}>
       
@@ -191,7 +198,7 @@ export default function ProductDetail() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 🚀 NEW: EDUCATIONAL SUCCESS MODAL */}
+      {/* EDUCATIONAL SUCCESS MODAL */}
       <Modal transparent visible={rfqSuccess.visible} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {alignItems: 'center'}]}>
@@ -247,7 +254,13 @@ export default function ProductDetail() {
           <View style={[styles.safeHeader, { paddingTop: Math.max(insets.top, 20) }]}>
             <IconButton icon="arrow-left" iconColor="black" containerColor="white" onPress={() => navigation.goBack()} />
             <View style={{flexDirection: 'row'}}>
-              <IconButton icon="compare-horizontal" iconColor="black" containerColor="white" onPress={handleCompare} />
+              {/* 🚀 Dynamic Icon Color for Compare */}
+              <IconButton 
+                icon="compare-horizontal" 
+                iconColor={isAlreadyInCompare ? theme.colors.primary : "black"} 
+                containerColor="white" 
+                onPress={handleCompare} 
+              />
               <IconButton icon="share-variant" iconColor="black" containerColor="white" onPress={() => {}} />
             </View>
           </View>
@@ -285,6 +298,17 @@ export default function ProductDetail() {
             </View>
           </View>
 
+          {/* 🚀 NEW: Explicit Compare Button for clear visibility */}
+          <Button 
+            mode={isAlreadyInCompare ? "contained-tonal" : "outlined"} 
+            icon="scale-balance" 
+            onPress={handleCompare}
+            style={{marginBottom: 15, borderRadius: 8, borderColor: theme.colors.primary}}
+            labelStyle={{fontWeight: 'bold'}}
+          >
+            {isAlreadyInCompare ? 'Added to Compare' : 'Add to Compare'}
+          </Button>
+
           {/* TIERED PRICING DISPLAY */}
           {product.tieredPricing && product.tieredPricing.length > 0 && (
             <View style={{backgroundColor: '#F0FDF4', padding: 12, borderRadius: 12, marginVertical: 15, borderWidth: 1, borderColor: '#BBF7D0'}}>
@@ -319,6 +343,7 @@ export default function ProductDetail() {
             <View style={styles.sellerRow}>
               <View style={styles.sellerIcon}><Text>🛡️</Text></View>
               <View>
+                {/* 🚀 HIDDEN EXPLICIT SELLER IDENTITY */}
                 <Text variant="titleMedium" style={{fontWeight:'bold'}}>Prochem Verified Supplier</Text>
                 <Text variant="bodySmall" style={{color:'#666'}}>
                   Origin: {product.origin || 'India'}
@@ -434,6 +459,17 @@ export default function ProductDetail() {
           Buy Now
         </Button>
       </View>
+
+      {/* 🚀 LONG DURATION COMPARE SNACKBAR */}
+      <Snackbar
+        visible={compareVisible}
+        onDismiss={() => setCompareVisible(false)}
+        duration={5000} // Lasts for 5 seconds
+        style={{marginBottom: Platform.OS === 'ios' ? 90 : 80}}
+        action={{ label: 'View List', onPress: () => navigation.navigate('Compare') }}
+      >
+        Added to comparison.
+      </Snackbar>
     </View>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, Alert, StyleSheet } from 'react-native';
-import { Text, IconButton, FAB, Card, Switch, ActivityIndicator, Chip } from 'react-native-paper';
+import { Text, IconButton, FAB, Card, Switch, ActivityIndicator, Chip, Searchbar } from 'react-native-paper';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
 import { getSellerProducts, deleteProduct, toggleProductStatus } from '../services/productService';
@@ -12,6 +12,7 @@ export default function SellerManageChemicals() {
   const { user } = useAppStore();
   
   const [products, setProducts] = useState<Product[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,21 +35,17 @@ export default function SellerManageChemicals() {
 
   const handleToggle = async (id: string, currentStatus: boolean) => {
     if (!id) return;
-
-    // Optimistic Update
     setProducts(prev => prev.map(p => p.id === id ? { ...p, active: !currentStatus } : p));
-    
     try {
       await toggleProductStatus(id, currentStatus);
     } catch (error) {
       Alert.alert('Error', 'Failed to update status');
-      loadData(); // Revert on error
+      loadData(); 
     }
   };
 
   const handleDelete = (id: string) => {
     if (!id) return;
-
     Alert.alert('Delete Product', 'Are you sure?', [
       { text: 'Cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
@@ -58,8 +55,18 @@ export default function SellerManageChemicals() {
     ]);
   };
 
+  // Advanced Seller Search Filter
+  const filteredProducts = products.filter(p => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      p.name?.toLowerCase().includes(query) ||
+      p.category?.toLowerCase().includes(query) ||
+      p.pricePerUnit?.toString().includes(query)
+    );
+  });
+
   const renderItem = ({ item }: { item: Product }) => {
-    // ✅ KEY FIX: Treat undefined as TRUE. Only explicit 'false' is inactive.
     const isActive = item.active !== false; 
 
     return (
@@ -93,7 +100,6 @@ export default function SellerManageChemicals() {
             <View style={{flexDirection:'row', alignItems:'center'}}>
                <Switch 
                  value={isActive} 
-                 // ✅ FIX: Pass the safe ID and safe status
                  onValueChange={() => handleToggle(item.id!, isActive)} 
                  color="#2E7D32"
                />
@@ -121,18 +127,27 @@ export default function SellerManageChemicals() {
         <Text variant="headlineSmall" style={{fontWeight:'bold'}}>My Listings</Text>
       </View>
 
+      <View style={styles.searchContainer}>
+        <Searchbar
+          placeholder="Search your stock..."
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={styles.searchbar}
+          inputStyle={{minHeight: 0}}
+        />
+      </View>
+
       {loading ? (
         <ActivityIndicator style={{marginTop: 50}} size="large" />
       ) : (
         <FlatList 
-          data={products} 
+          data={filteredProducts} 
           renderItem={renderItem} 
-          // ✅ FIX: Safe Key Extractor
           keyExtractor={(item) => item.id || Math.random().toString()} 
           contentContainerStyle={{padding: 16}}
           ListEmptyComponent={
             <Text style={{textAlign:'center', marginTop: 20, color:'#888'}}>
-              No products listed yet.
+              {searchQuery ? "No matching stock found." : "No products listed yet."}
             </Text>
           }
         />
@@ -150,7 +165,9 @@ export default function SellerManageChemicals() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection:'row', alignItems:'center', padding: 8, backgroundColor:'white', elevation: 2 },
+  header: { flexDirection:'row', alignItems:'center', padding: 8, backgroundColor:'white' },
+  searchContainer: { paddingHorizontal: 16, paddingBottom: 10, backgroundColor: 'white', elevation: 2 },
+  searchbar: { backgroundColor: '#F1F5F9', borderRadius: 10, height: 45, elevation: 0 },
   card: { marginBottom: 12, backgroundColor: 'white' },
   cardRow: { flexDirection: 'row', alignItems: 'center' },
   iconBox: { width: 50, height: 50, backgroundColor: '#F1F5F9', borderRadius: 8, alignItems: 'center', justifyContent: 'center' },

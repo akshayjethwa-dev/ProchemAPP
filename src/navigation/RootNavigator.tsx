@@ -21,8 +21,10 @@ import LoginScreen from '../screens/LoginScreen';
 import RegistrationScreen from '../screens/RegistrationScreen';
 import OTPVerificationScreen from '../screens/OTPVerificationScreen';
 import LegalPagesScreen from '../screens/LegalPagesScreen';
-// ✅ ADDED: Import About Prochem Screen
 import AboutProchemScreen from '../screens/AboutProchemScreen';
+
+// 🚀 ADDED: Import Onboarding Screen
+import OnboardingScreen from '../screens/OnboardingScreen';
 
 // Feature Screens
 import ProductDetail from '../screens/ProductDetail';
@@ -36,7 +38,7 @@ import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
-  const { user, setUser, viewMode } = useAppStore();
+  const { user, setUser, viewMode, hasSeenOnboarding } = useAppStore();
   const [initializing, setInitializing] = useState(true);
 
   // Debugging: Check your logs to see if the user type is updating!
@@ -95,6 +97,11 @@ export const RootNavigator = () => {
             <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
             {/* ✅ ADDED: About Prochem Screen in public stack */}
             <Stack.Screen name="AboutProchem" component={AboutProchemScreen} /> 
+          </Stack.Group>
+        ) : !hasSeenOnboarding ? (
+          // 🚀 2. ONBOARDING STACK (Logged In, but hasn't seen intro)
+          <Stack.Group>
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           </Stack.Group>
         ) : (
           // 2. Authenticated Stack

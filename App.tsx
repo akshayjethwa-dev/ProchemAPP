@@ -17,8 +17,6 @@ import { db } from './src/config/firebase';
 
 import { RootNavigator } from './src/navigation/RootNavigator';
 
-// 🚀 FIXED TYPESCRIPT ERROR: 
-// Added `shouldShowBanner` and `shouldShowList` for newer Expo SDK compatibility
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true, 

@@ -61,8 +61,9 @@ export default function Marketplace() {
     if (searchTerm.trim()) {
       const lowerTerm = searchTerm.toLowerCase();
       const filtered = products.filter(p => 
-        p.name.toLowerCase().includes(lowerTerm) ||
-        p.category.toLowerCase().includes(lowerTerm)
+        p.name?.toLowerCase().includes(lowerTerm) ||
+        p.category?.toLowerCase().includes(lowerTerm) ||
+        p.sellerName?.toLowerCase().includes(lowerTerm)
       );
       setFilteredProducts(filtered);
     } else {

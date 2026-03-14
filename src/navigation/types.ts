@@ -23,6 +23,8 @@ export type RootStackParamList = {
   EditProfile: undefined; 
   Notifications: undefined;
   NotificationDetail: { notification: any }; 
+  Compare: undefined;
+  Onboarding: undefined;
 
   // Seller specific
   SellerDashboard: undefined;
