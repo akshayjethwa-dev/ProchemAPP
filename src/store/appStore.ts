@@ -12,9 +12,11 @@ interface AppState {
   
   rfqs: RFQ[];
   messages: NegotiationMessage[];
-
-  // 🚀 NEW: Compare State
   compareList: Product[];
+
+  // Admin Impersonation States
+  adminImpersonating: boolean;
+  originalAdminUser: User | null;
 
   setUser: (user: User | null) => void;
   setProducts: (products: Product[]) => void;
@@ -30,10 +32,13 @@ interface AppState {
   hasSeenOnboarding: boolean;
   completeOnboarding: () => void;
 
-  // 🚀 NEW: Compare Actions
   addToCompare: (product: Product) => void;
   removeFromCompare: (id: string) => void;
   clearCompare: () => void;
+
+  // Admin Impersonation Actions
+  impersonateUser: (targetUser: User, currentAdmin: User) => void;
+  stopImpersonating: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -45,9 +50,10 @@ export const useAppStore = create<AppState>()(
       viewMode: 'buyer', 
       rfqs: [],
       messages: [],
-      compareList: [], // Initialize empty
+      compareList: [], 
       
-      // Only defined once here:
+      adminImpersonating: false,
+      originalAdminUser: null,
       hasSeenOnboarding: false,
 
       setUser: (user) => set({ user }),
@@ -65,9 +71,7 @@ export const useAppStore = create<AppState>()(
         return { cart: [...state.cart, item] };
       }),
       
-      removeFromCart: (id) => set((state) => ({
-        cart: state.cart.filter((i) => i.id !== id),
-      })),
+      removeFromCart: (id) => set((state) => ({ cart: state.cart.filter((i) => i.id !== id) })),
       clearCart: () => set({ cart: [] }),
       setViewMode: (mode) => set({ viewMode: mode }),
 
@@ -77,25 +81,38 @@ export const useAppStore = create<AppState>()(
       })),
       addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
 
-      // 🚀 NEW: Actual Compare Logic (Max 3 items)
       addToCompare: (product) => set((state) => {
-        if (state.compareList.find((p) => p.id === product.id)) return state; // Prevent duplicates
+        if (state.compareList.find((p) => p.id === product.id)) return state; 
         const newList = [...state.compareList, product];
-        if (newList.length > 3) newList.shift(); // Keep only the latest 3 for mobile layout limits
+        if (newList.length > 3) newList.shift(); 
         return { compareList: newList };
       }),
-      removeFromCompare: (id) => set((state) => ({
-        compareList: state.compareList.filter((p) => p.id !== id),
-      })),
+      removeFromCompare: (id) => set((state) => ({ compareList: state.compareList.filter((p) => p.id !== id) })),
       clearCompare: () => set({ compareList: [] }),
-
-      // 🚀 Flip this to true when slider finishes (Only defined once here)
       completeOnboarding: () => set({ hasSeenOnboarding: true }),
+
+      // 🚀 UPDATED: Impersonation Logic
+      impersonateUser: (targetUser, currentAdmin) => {
+        // Automatically set the view mode so they don't land on a blank screen
+        const newViewMode = (targetUser.userType === 'seller' || targetUser.userType === 'dual') ? 'seller' : 'buyer';
+        set({
+          user: targetUser,
+          originalAdminUser: currentAdmin,
+          adminImpersonating: true,
+          viewMode: newViewMode
+        });
+      },
+
+      stopImpersonating: () => set((state) => ({
+        user: state.originalAdminUser,
+        originalAdminUser: null,
+        adminImpersonating: false,
+        viewMode: 'buyer'
+      })),
     }),
     {
-      name: 'prochem-app-storage', // The name of the storage container on the device
+      name: 'prochem-app-storage', 
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist these specific fields to avoid overwriting auth/cart states unintentionally
       partialize: (state) => ({
         hasSeenOnboarding: state.hasSeenOnboarding,
         viewMode: state.viewMode,

@@ -1,9 +1,15 @@
 module.exports = function(api) {
   api.cache(true);
   return {
-    presets: ['babel-preset-expo'],
+    presets: [
+      [
+        'babel-preset-expo',
+        {
+          unstable_transformImportMeta: true, // <-- Add this inside the preset
+        }
+      ]
+    ],
     plugins: [
-      'babel-plugin-transform-import-meta', // <-- Add this right here
       [
         'module:react-native-dotenv',
         {
@@ -14,8 +20,7 @@ module.exports = function(api) {
           safe: false,
           allowUndefined: true,
         }
-      ],
-      // ... keep any other plugins
+      ]
     ],
   };
 };

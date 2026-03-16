@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Prochem Marketplace",
     slug: "prochem-app",
-    version: "2.1.1",
+    version: "2.1.2",
     orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",

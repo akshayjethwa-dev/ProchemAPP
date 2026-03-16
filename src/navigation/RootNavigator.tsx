@@ -1,7 +1,7 @@
 // src/navigation/RootNavigator.tsx
 
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, SafeAreaView, TouchableOpacity, Text, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -10,23 +10,19 @@ import { auth, db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { RootStackParamList } from './types';
 
-// 1. Import All Navigators
+// Navigators
 import BuyerNavigator from './BuyerNavigator';
 import SellerNavigator from './SellerNavigator';
 import AdminNavigator from './AdminNavigator';
 
-// Auth Screens
+// Screens
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegistrationScreen from '../screens/RegistrationScreen';
 import OTPVerificationScreen from '../screens/OTPVerificationScreen';
 import LegalPagesScreen from '../screens/LegalPagesScreen';
 import AboutProchemScreen from '../screens/AboutProchemScreen';
-
-// 🚀 ADDED: Import Onboarding Screen
 import OnboardingScreen from '../screens/OnboardingScreen';
-
-// Feature Screens
 import ProductDetail from '../screens/ProductDetail';
 import NegotiationScreen from '../screens/NegotiationScreen';
 import OrderTracking from '../screens/OrderTracking';
@@ -38,18 +34,19 @@ import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
-  const { user, setUser, viewMode, hasSeenOnboarding } = useAppStore();
+  const { user, setUser, viewMode, hasSeenOnboarding, adminImpersonating, stopImpersonating } = useAppStore();
   const [initializing, setInitializing] = useState(true);
-
-  // Debugging: Check your logs to see if the user type is updating!
-  console.log("Logged In User Type:", user?.userType); 
-  console.log("Current View Mode:", viewMode);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u: FirebaseUser | null) => {
+      // 🚀 IF IMPERSONATING: Ignore Firebase Auth state changes
+      if (useAppStore.getState().adminImpersonating) {
+        if (initializing) setInitializing(false);
+        return;
+      }
+
       if (u) {
         try {
-          // Fetch fresh data from Firestore to get the 'userType'
           const userDoc = await getDoc(doc(db, 'users', u.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
@@ -78,67 +75,74 @@ export const RootNavigator = () => {
   }
 
   return (
-    <NavigationContainer>
-      {/* ✅ KEY UPDATE: 
-         We include `user.userType` in the key. 
-         This forces the Navigator to DESTROY and REBUILD if the user role changes.
-      */}
-      <Stack.Navigator 
-        key={user ? `auth-${user.userType}-${viewMode}` : 'public'} 
-        screenOptions={{ headerShown: false }}
-      >
-        {!user ? (
-          // 1. Public Stack (Not Logged In)
-          <Stack.Group>
-            <Stack.Screen name="Splash" component={SplashScreen} />
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Registration" component={RegistrationScreen} />
-            <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-            <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
-            {/* ✅ ADDED: About Prochem Screen in public stack */}
-            <Stack.Screen name="AboutProchem" component={AboutProchemScreen} /> 
-          </Stack.Group>
-        ) : !hasSeenOnboarding ? (
-          // 🚀 2. ONBOARDING STACK (Logged In, but hasn't seen intro)
-          <Stack.Group>
-            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-          </Stack.Group>
-        ) : (
-          // 2. Authenticated Stack
-          <Stack.Group>
-            
-            {/* 🛡️ ADMIN CHECK */}
-            {user.userType === 'admin' ? (
-              <Stack.Screen name="AdminApp" component={AdminNavigator} />
-            
-            
-            /* 🏭 SELLER CHECK (Based on Toggle) */
-            ) : viewMode === 'seller' ? (
-              <>
-                <Stack.Screen name="SellerApp" component={SellerNavigator} />
-                <Stack.Screen name="AddChemical" component={SellerAddChemical} />
-              </>
+    <View style={{ flex: 1 }}>
+      {/* 🚀 ADMIN IMPERSONATION BANNER */}
+      {adminImpersonating && (
+        <SafeAreaView style={{ backgroundColor: '#D32F2F' }}>
+          <View style={{ padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Platform.OS === 'android' ? 25 : 0 }}>
+            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13, flex: 1 }}>
+              👀 Viewing as: {user?.companyName || user?.email}
+            </Text>
+            <TouchableOpacity onPress={stopImpersonating} style={{ backgroundColor: 'white', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}>
+              <Text style={{ color: '#D32F2F', fontWeight: 'bold', fontSize: 12 }}>Exit</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      )}
 
-            /* 🛒 BUYER CHECK (Default) */
-            ) : (
-              <>
-                <Stack.Screen name="BuyerApp" component={BuyerNavigator} />
-              </>
-            )}
-            
-            {/* Shared Screens (Accessible by everyone) */}
-            <Stack.Screen name="ProductDetail" component={ProductDetail} />
-            <Stack.Screen name="Negotiation" component={NegotiationScreen} />
-            <Stack.Screen name="OrderTracking" component={OrderTracking} />
-            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-            <Stack.Screen name="Notifications" component={NotificationScreen} />
-            <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
-            <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
-            {/* ✅ ADDED: About Prochem Screen in authenticated shared stack */}
-            <Stack.Screen name="AboutProchem" component={AboutProchemScreen} />
-          </Stack.Group>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+      <NavigationContainer>
+        {/* 🚀 KEY FIX: Added user.uid and adminImpersonating to force React Navigation to rebuild the stack */}
+        <Stack.Navigator 
+          key={user ? `auth-${user.uid}-${viewMode}-${adminImpersonating}` : 'public'} 
+          screenOptions={{ headerShown: false }}
+        >
+          {!user ? (
+            <Stack.Group>
+              <Stack.Screen name="Splash" component={SplashScreen} />
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Registration" component={RegistrationScreen} />
+              <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+              <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
+              <Stack.Screen name="AboutProchem" component={AboutProchemScreen} /> 
+            </Stack.Group>
+          ) : !hasSeenOnboarding ? (
+            <Stack.Group>
+              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            </Stack.Group>
+          ) : (
+            <Stack.Group>
+              
+              {/* 🛡️ ADMIN CHECK: Only show AdminApp if NOT impersonating */}
+              {(user.userType === 'admin' && !adminImpersonating) ? (
+                <Stack.Screen name="AdminApp" component={AdminNavigator} />
+              
+              /* 🏭 SELLER CHECK */
+              ) : viewMode === 'seller' ? (
+                <>
+                  <Stack.Screen name="SellerApp" component={SellerNavigator} />
+                  <Stack.Screen name="AddChemical" component={SellerAddChemical} />
+                </>
+
+              /* 🛒 BUYER CHECK (Default) */
+              ) : (
+                <>
+                  <Stack.Screen name="BuyerApp" component={BuyerNavigator} />
+                </>
+              )}
+              
+              {/* Shared Screens */}
+              <Stack.Screen name="ProductDetail" component={ProductDetail} />
+              <Stack.Screen name="Negotiation" component={NegotiationScreen} />
+              <Stack.Screen name="OrderTracking" component={OrderTracking} />
+              <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+              <Stack.Screen name="Notifications" component={NotificationScreen} />
+              <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
+              <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
+              <Stack.Screen name="AboutProchem" component={AboutProchemScreen} />
+            </Stack.Group>
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+    </View>
   );
 };

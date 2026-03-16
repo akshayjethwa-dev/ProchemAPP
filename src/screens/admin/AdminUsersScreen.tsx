@@ -4,29 +4,29 @@ import { Text, Card, Button, Chip, ActivityIndicator, IconButton, SegmentedButto
 import { useNavigation } from '@react-navigation/native';
 import { getAllUsers, verifyUserKYC } from '../../services/adminService';
 import { User } from '../../types';
+import { useAppStore } from '../../store/appStore';
 
 export default function AdminUsersScreen() {
   const navigation = useNavigation<any>();
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // 'all' | 'pending' | 'verified'
+  const [filter, setFilter] = useState('all'); 
   const [searchQuery, setSearchQuery] = useState('');
+
+  // 🚀 Get state variables for Impersonation
+  const { user: currentAdmin, impersonateUser } = useAppStore();
 
   useEffect(() => { loadData(); }, []);
 
   // Filter & Search Logic
   useEffect(() => {
     let result = users;
-
-    // 1. Status Filter
     if (filter === 'pending') {
       result = result.filter(u => !u.verified);
     } else if (filter === 'verified') {
       result = result.filter(u => u.verified);
     }
-
-    // 2. Search Filter
     if (searchQuery) {
       const lower = searchQuery.toLowerCase();
       result = result.filter(u => 
@@ -35,7 +35,6 @@ export default function AdminUsersScreen() {
         (u.gstNumber || '').includes(searchQuery)
       );
     }
-
     setFilteredUsers(result);
   }, [filter, searchQuery, users]);
 
@@ -62,14 +61,28 @@ export default function AdminUsersScreen() {
     else Alert.alert("No contact info available");
   };
 
+  // 🚀 NEW: Handle Login As User
+  const handleLoginAs = (targetUser: User) => {
+    if (!currentAdmin) return;
+    Alert.alert(
+      'Login As User',
+      `Are you sure you want to view the app as ${targetUser.companyName || targetUser.email}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Proceed', 
+          onPress: () => impersonateUser(targetUser, currentAdmin) 
+        }
+      ]
+    );
+  };
+
   const renderItem = ({ item }: { item: User }) => (
     <Card 
       style={styles.card}
-      // ✅ NAVIGATE to the Details Screen on Press
       onPress={() => navigation.navigate('AdminUserDetails', { user: item })}
     >
       <Card.Content>
-        {/* Visual Arrow for clickability (Top Right) */}
         <View style={{position:'absolute', top: 5, right: 5}}>
            <IconButton icon="chevron-right" size={20} iconColor="#94A3B8" />
         </View>
@@ -98,31 +111,20 @@ export default function AdminUsersScreen() {
         {/* Action Row */}
         <View style={styles.actionRow}>
            {!item.verified ? (
-             // IF PENDING: Show Verify Button
-             <Button 
-               mode="contained" 
-               compact 
-               buttonColor="#2E7D32" 
-               icon="shield-check"
-               style={{flex:1, marginRight:8}} 
-               onPress={() => handleVerify(item.uid, item.companyName || 'User')}
-             >
-               Verify KYC
+             <Button mode="contained" compact buttonColor="#2E7D32" icon="shield-check" style={{flex:1, marginRight:8}} onPress={() => handleVerify(item.uid, item.companyName || 'User')}>
+               Verify
              </Button>
            ) : (
-             // IF VERIFIED: Show Badge
-             <Chip icon="check-decagram" style={{backgroundColor:'#DCFCE7', flex:1, marginRight:8}} textStyle={{color:'green', fontSize:10, fontWeight:'bold'}}>Verified Business</Chip>
+             <Chip icon="check-decagram" style={{backgroundColor:'#DCFCE7', flex:1, marginRight:8}} textStyle={{color:'green', fontSize:10, fontWeight:'bold'}}>Verified</Chip>
            )}
            
-           {/* Contact Button (Always Visible) */}
-           <Button 
-             mode="outlined" 
-             compact 
-             textColor="#004AAD"
-             style={{flex:1, borderColor:'#004AAD'}} 
-             onPress={() => handleContact(item.phoneNumber, item.email)}
-           >
+           <Button mode="outlined" compact textColor="#004AAD" style={{flex:1, borderColor:'#004AAD', marginRight: 8}} onPress={() => handleContact(item.phoneNumber, item.email)}>
              Contact
+           </Button>
+
+           {/* 🚀 NEW: Login As Button */}
+           <Button mode="outlined" compact textColor="#D32F2F" style={{flex:1, borderColor:'#D32F2F'}} onPress={() => handleLoginAs(item)}>
+             Login As
            </Button>
         </View>
       </Card.Content>

@@ -23,6 +23,7 @@ const PACKAGING_OPTIONS = ['200L Drum', '25kg Bag', '50kg Bag', 'IBC Tote', '1L 
 const SELLER_PLATFORM_FEE = 0.01;
 const SELLER_SAFETY_FEE = 0.0025;  
 const SELLER_FREIGHT_FEE = 0.0025;
+
 export default function SellerAddChemical() {
   const navigation = useNavigation();
   const theme = useTheme();
@@ -62,6 +63,7 @@ export default function SellerAddChemical() {
     imageUrl: '',
     gstPercent: GST_SLABS[2], // Default 18%
     packagingType: PACKAGING_OPTIONS[0],
+    customPackagingType: '', // ✅ NEW: State for custom packaging
     hazardClass: HAZARD_CLASSES[0],
     unNumber: '',
     storageConditions: '',
@@ -78,6 +80,9 @@ export default function SellerAddChemical() {
 
   useEffect(() => {
     if (isEditMode) {
+      // ✅ Handle case where edited product has a custom packaging type not in the default dropdown
+      const isStandardPackaging = PACKAGING_OPTIONS.includes(editingProduct.packagingType);
+      
       setForm({
         name: editingProduct.name || '',
         category: editingProduct.category || CATEGORY_OPTIONS[0],
@@ -90,7 +95,8 @@ export default function SellerAddChemical() {
         origin: editingProduct.origin || 'India',
         imageUrl: editingProduct.imageUrl || '',
         gstPercent: String(editingProduct.gstPercent || '18'),
-        packagingType: editingProduct.packagingType || PACKAGING_OPTIONS[0],
+        packagingType: isStandardPackaging ? (editingProduct.packagingType || PACKAGING_OPTIONS[0]) : 'Other',
+        customPackagingType: !isStandardPackaging && editingProduct.packagingType ? editingProduct.packagingType : '',
         hazardClass: editingProduct.hazardClass || HAZARD_CLASSES[0],
         unNumber: editingProduct.unNumber || '',
         storageConditions: editingProduct.storageConditions || '',
@@ -157,9 +163,12 @@ export default function SellerAddChemical() {
   };
 
   const handleSubmit = async () => {
-    // ✅ ADDED VALIDATION FOR DESCRIPTION
+    // ✅ ADDED VALIDATION FOR DESCRIPTION AND CUSTOM PACKAGING
     if (!form.name.trim() || !form.pricePerUnit.trim() || !form.description.trim()) {
       return showAlert('Missing Field', 'Please enter Name, Base Price, and Description.');
+    }
+    if (form.packagingType === 'Other' && !form.customPackagingType.trim()) {
+      return showAlert('Missing Field', 'Please specify the custom packaging type.');
     }
     if (!isCompliant) return showAlert('Compliance Required', 'You must verify that this chemical is legally permitted for sale.');
 
@@ -181,6 +190,10 @@ export default function SellerAddChemical() {
         moq: parseInt(form.moq) || 0,
         purity: parseFloat(form.purity) || 0,
         gstPercent: parseInt(form.gstPercent) || 18,
+        
+        // ✅ Decide which packaging type to save
+        packagingType: form.packagingType === 'Other' ? form.customPackagingType.trim() : form.packagingType,
+        
         quantity: 1000, 
         sellerId: user?.uid,
         sellerName: user?.companyName || 'Unknown',
@@ -197,6 +210,10 @@ export default function SellerAddChemical() {
         
         updatedAt: new Date().toISOString()
       };
+
+      // Clean up local-only state before saving
+      // @ts-ignore
+      delete productData.customPackagingType; 
 
       if (!isEditMode) {
         // @ts-ignore
@@ -292,44 +309,23 @@ export default function SellerAddChemical() {
             </Card>
           )}
 
-           {/* 🚀 HIDDEN FOR NOW: Tiered Pricing Section
-           <View style={{backgroundColor: '#F0FDF4', padding: 12, borderRadius: 12, marginBottom: 15, borderWidth: 1, borderColor: '#BBF7D0'}}>
-              <Text variant="titleMedium" style={{fontWeight:'bold', color: '#166534', marginBottom: 8}}>Volume Discounts (Tiered Pricing)</Text>
-              <Text style={{fontSize: 12, color: '#15803D', marginBottom: 10}}>Offer lower prices for larger bulk orders to attract big buyers.</Text>
-              
-              {tiers.map((tier, index) => (
-                <View key={index} style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
-                  <TextInput label={`Min Qty (${form.unit.split(' ')[0]})`} value={tier.minQty} onChangeText={t => updateTier(index, 'minQty', t)} keyboardType="numeric" mode="outlined" style={{flex:1, height: 45, backgroundColor:'white', marginRight: 5}} />
-                  <TextInput label="Price (₹)" value={tier.pricePerUnit} onChangeText={t => updateTier(index, 'pricePerUnit', t)} keyboardType="numeric" mode="outlined" style={{flex:1, height: 45, backgroundColor:'white'}} />
-                  {tiers.length > 1 && <IconButton icon="close-circle" iconColor="#DC2626" onPress={() => removeTier(index)} />}
-                </View>
-              ))}
-              <Button mode="text" icon="plus" onPress={addTier} textColor="#166534">Add Another Tier</Button>
-           </View>
-           */}
-
-           {/* 🚀 HIDDEN FOR NOW: Sample Details Section
-           <View style={{backgroundColor: '#EFF6FF', padding: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#BFDBFE'}}>
-              <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                 <Text variant="titleMedium" style={{fontWeight:'bold', color: '#1D4ED8'}}>Offer Lab Samples?</Text>
-                 <Switch value={sample.available} onValueChange={v => setSample({...sample, available: v})} color="#2563EB" />
-              </View>
-              <Text style={{fontSize: 12, color: '#1E40AF', marginBottom: sample.available ? 10 : 0}}>Allow buyers to test small quantities before placing bulk orders.</Text>
-              
-              {sample.available && (
-                <View style={styles.row}>
-                  <TextInput label="Sample Size (e.g. 100g)" value={sample.size} onChangeText={t => setSample({...sample, size: t})} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-                  <TextInput label="Sample Price (₹)" value={sample.price} onChangeText={t => setSample({...sample, price: t})} keyboardType="numeric" mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-                </View>
-              )}
-           </View>
-           */}
-
           <Text variant="titleMedium" style={styles.sectionTitle}>3. Logistics & Packaging</Text>
           <View style={styles.row}>
              {renderDropdown('Packaging Type', form.packagingType, PACKAGING_OPTIONS, 'packaging')}
              <TextInput label="Storage Conditions" placeholder="e.g. Store below 25°C" value={form.storageConditions} onChangeText={t => handleChange('storageConditions', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
           </View>
+          
+          {/* ✅ CONDITIONAL TEXT INPUT FOR CUSTOM PACKAGING */}
+          {form.packagingType === 'Other' && (
+            <TextInput 
+              label="Specify Packaging Type *" 
+              placeholder="e.g. 100 ml Bottle, 5kg Tin" 
+              value={form.customPackagingType} 
+              onChangeText={t => handleChange('customPackagingType', t)} 
+              mode="outlined" 
+              style={styles.input} 
+            />
+          )}
 
           <Text variant="titleMedium" style={styles.sectionTitle}>4. Safety & Compliance</Text>
           <View style={styles.row}>
@@ -350,7 +346,6 @@ export default function SellerAddChemical() {
              </Button>
           </View>
 
-          {/* ✅ UPDATED LABEL & MADE MANDATORY IN VALIDATION ABOVE */}
           <TextInput label="Description and usage of the product *" multiline numberOfLines={4} value={form.description} onChangeText={t => handleChange('description', t)} mode="outlined" style={styles.input} />
 
           {/* COMPLIANCE CHECKBOX */}
