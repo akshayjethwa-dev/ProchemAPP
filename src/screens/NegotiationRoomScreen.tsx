@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import { Text, TextInput, IconButton, Avatar, Button, Card, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -22,7 +22,10 @@ export default function NegotiationRoomScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [messageText, setMessageText] = useState('');
+  
+  // 🚀 Added Quantity State for the Offer
   const [offerPrice, setOfferPrice] = useState('');
+  const [offerQuantity, setOfferQuantity] = useState('');
   const [offerModalVisible, setOfferModalVisible] = useState(false);
 
   useEffect(() => {
@@ -111,25 +114,30 @@ export default function NegotiationRoomScreen() {
     }
   };
 
+  // 🚀 Updated to handle both Quantity and Price
   const sendOffer = async () => {
     const price = parseFloat(offerPrice);
-    if (isNaN(price) || price <= 0 || !user) {
-        Alert.alert("Invalid Price", "Please enter a valid amount.");
+    const qty = parseInt(offerQuantity, 10);
+
+    if (isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0 || !user) {
+        Alert.alert("Invalid Input", "Please enter a valid price and quantity.");
         return;
     }
 
     setOfferPrice('');
+    setOfferQuantity('');
     setOfferModalVisible(false); 
     
     try {
       await addDoc(collection(db, 'messages'), {
         rfqId: activeRfq.id,
-        text: `Sent a Custom Offer: ₹${price} / ${activeRfq.unit}`,
+        text: `Sent a Custom Offer: ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}`,
         senderId: user.uid,
         timestamp: Date.now(),
         isBuyer: false,
         isOffer: true,
-        proposedPrice: price
+        proposedPrice: price,
+        proposedQty: qty // Saving the new negotiated quantity
       });
       
       await updateDoc(doc(db, 'rfqs', activeRfq.id), {
@@ -142,12 +150,14 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  const proceedToCheckout = async (price: number) => {
+  // 🚀 Pass quantity through to checkout
+  const proceedToCheckout = async (price: number, qty: number) => {
     setIsProcessing(true);
     try {
       await updateDoc(doc(db, 'rfqs', activeRfq.id), {
         status: 'CONVERTED',
         agreedPrice: price,
+        agreedQuantity: qty, // Log the updated quantity
         updatedAt: new Date().toISOString()
       });
 
@@ -155,7 +165,7 @@ export default function NegotiationRoomScreen() {
         id: `${activeRfq.productId}_rfq`,
         productId: activeRfq.productId,
         name: `${activeRfq.productName} (Custom Quote)`,
-        quantity: activeRfq.targetQuantity,
+        quantity: qty, // Inject the specific offered quantity into cart
         pricePerUnit: price,
         unit: activeRfq.unit || 'unit',
         sellerId: activeRfq.sellerId,
@@ -172,18 +182,19 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  const acceptOffer = (price: number) => {
+  // 🚀 Updated acceptOffer to take the agreed quantity
+  const acceptOffer = (price: number, qty: number) => {
     if (Platform.OS === 'web') {
-      const isConfirmed = window.confirm(`Do you agree to transact at ₹${price} / ${activeRfq.unit}?`);
+      const isConfirmed = window.confirm(`Do you agree to transact ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}?`);
       if (isConfirmed) {
-        proceedToCheckout(price);
+        proceedToCheckout(price, qty);
       }
     } else {
-      Alert.alert('Confirm Custom Offer', `Do you agree to transact at ₹${price} / ${activeRfq.unit}?`, [
+      Alert.alert('Confirm Custom Offer', `Do you agree to transact ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}?`, [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Agree & Checkout', 
-          onPress: () => proceedToCheckout(price) 
+          onPress: () => proceedToCheckout(price, qty) 
         }
       ]);
     }
@@ -199,11 +210,12 @@ export default function NegotiationRoomScreen() {
         <View style={[styles.msgBubble, isMe ? styles.msgBubbleMe : styles.msgBubbleThem]}>
           <Text style={{color: isMe ? 'white' : '#1E293B'}}>{item.text}</Text>
           
-          {item.isOffer && item.proposedPrice && (
+          {item.isOffer && (item.proposedPrice || item.proposedQty) && (
              <Card style={{marginTop: 10, backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
                <Card.Content style={{padding: 10}}>
                  <Text style={{fontWeight: 'bold', color: isMe ? 'white' : '#0F172A'}}>
-                   {isMe ? 'You Offered:' : 'Custom Offer:'} ₹{item.proposedPrice} / {activeRfq.unit}
+                   {isMe ? 'You Offered:' : 'Custom Offer:'} 
+                   {'\n'}{item.proposedQty || activeRfq.targetQuantity} {activeRfq.unit} at ₹{item.proposedPrice} / {activeRfq.unit}
                  </Text>
                  
                  {!isMe && viewMode === 'buyer' && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
@@ -214,7 +226,7 @@ export default function NegotiationRoomScreen() {
                       loading={isProcessing}
                       disabled={isProcessing}
                       style={{marginTop: 8, backgroundColor: '#10B981'}} 
-                      onPress={() => acceptOffer(item.proposedPrice!)}
+                      onPress={() => acceptOffer(item.proposedPrice!, item.proposedQty || activeRfq.targetQuantity)}
                     >
                       {isProcessing ? 'Processing...' : 'Accept & Checkout'}
                     </Button>
@@ -244,7 +256,6 @@ export default function NegotiationRoomScreen() {
         </Chip>
       </View>
 
-      {/* Wrapper ensures FlatList shrinks and Input pushes up seamlessly */}
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -258,67 +269,93 @@ export default function NegotiationRoomScreen() {
         />
 
         {activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
-          <View style={styles.inputArea}>
+          <View>
+            {/* 🚀 Prominent Send Offer Button for Seller */}
             {viewMode === 'seller' && (
-              <IconButton 
-                 icon="file-document-edit-outline" 
-                 iconColor="#10B981" 
-                 size={24} 
-                 onPress={() => setOfferModalVisible(true)} 
-              />
+              <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
+                <Button 
+                  mode="contained" 
+                  icon="handshake" 
+                  buttonColor="#10B981" 
+                  contentStyle={{ height: 48 }}
+                  onPress={() => {
+                    // Pre-fill with the buyer's original target requests
+                    setOfferPrice(String(activeRfq.targetPrice || ''));
+                    setOfferQuantity(String(activeRfq.targetQuantity || ''));
+                    setOfferModalVisible(true);
+                  }}
+                >
+                  Create Offer
+                </Button>
+              </View>
             )}
-            
-            <TextInput
-              mode="outlined"
-              placeholder="Type a message..."
-              value={messageText}
-              onChangeText={setMessageText}
-              style={styles.input}
-              outlineStyle={{borderRadius: 24, borderColor: '#E2E8F0'}}
-            />
-            
-            <IconButton 
-              icon="send" 
-              mode="contained" 
-              containerColor="#004AAD" 
-              iconColor="white" 
-              onPress={sendChatMessage} 
-              style={{marginTop: 8}} 
-            />
+
+            {/* Normal Chat Input */}
+            <View style={styles.inputArea}>
+              <TextInput
+                mode="outlined"
+                placeholder="Type a message..."
+                value={messageText}
+                onChangeText={setMessageText}
+                style={styles.input}
+                outlineStyle={{borderRadius: 24, borderColor: '#E2E8F0'}}
+              />
+              
+              <IconButton 
+                icon="send" 
+                mode="contained" 
+                containerColor="#004AAD" 
+                iconColor="white" 
+                onPress={sendChatMessage} 
+                style={{marginTop: 8}} 
+              />
+            </View>
           </View>
         )}
       </KeyboardAvoidingView>
 
-      <Modal visible={offerModalVisible} transparent animationType="fade">
+      {/* 🚀 Scrollable Offer Modal */}
+      <Modal visible={offerModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView 
           style={styles.modalOverlay} 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={styles.modalContent}>
-             <Text variant="titleLarge" style={{fontWeight: 'bold', marginBottom: 15, color: '#0F172A'}}>
-                Send Custom Offer
-             </Text>
-             
-             <TextInput
-                mode="outlined"
-                keyboardType="numeric"
-                label={`Final Agreed Price (₹ / ${activeRfq.unit})`}
-                value={offerPrice}
-                onChangeText={setOfferPrice}
-                style={{backgroundColor: 'white', marginBottom: 20}}
-                activeOutlineColor="#10B981"
-                autoFocus
-             />
+          <ScrollView contentContainerStyle={styles.modalScrollCenter} keyboardShouldPersistTaps="handled">
+            <View style={styles.modalContent}>
+               <Text variant="titleLarge" style={{fontWeight: 'bold', marginBottom: 15, color: '#0F172A'}}>
+                  Send Custom Offer
+               </Text>
+               
+               <TextInput
+                  mode="outlined"
+                  keyboardType="numeric"
+                  label={`Quantity Offered (${activeRfq.unit})`}
+                  value={offerQuantity}
+                  onChangeText={setOfferQuantity}
+                  style={{backgroundColor: 'white', marginBottom: 15}}
+                  activeOutlineColor="#10B981"
+               />
 
-             <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 10}}>
-                <Button mode="text" onPress={() => setOfferModalVisible(false)} textColor="#64748B">
-                   Cancel
-                </Button>
-                <Button mode="contained" onPress={sendOffer} buttonColor="#10B981">
-                   Send Offer
-                </Button>
-             </View>
-          </View>
+               <TextInput
+                  mode="outlined"
+                  keyboardType="numeric"
+                  label={`Final Agreed Price (₹ / ${activeRfq.unit})`}
+                  value={offerPrice}
+                  onChangeText={setOfferPrice}
+                  style={{backgroundColor: 'white', marginBottom: 20}}
+                  activeOutlineColor="#10B981"
+               />
+
+               <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 10}}>
+                  <Button mode="text" onPress={() => setOfferModalVisible(false)} textColor="#64748B">
+                     Cancel
+                  </Button>
+                  <Button mode="contained" onPress={sendOffer} buttonColor="#10B981">
+                     Send Offer
+                  </Button>
+               </View>
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -335,8 +372,9 @@ const styles = StyleSheet.create({
   msgBubble: { maxWidth: '80%', padding: 12, borderRadius: 16 },
   msgBubbleMe: { backgroundColor: '#004AAD', borderBottomRightRadius: 4 },
   msgBubbleThem: { backgroundColor: 'white', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#E2E8F0' },
-  inputArea: { flexDirection: 'row', padding: 5, backgroundColor: 'white', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  inputArea: { flexDirection: 'row', padding: 10, backgroundColor: 'white', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
   input: { flex: 1, backgroundColor: '#F1F5F9', marginRight: 5, height: 48, justifyContent: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalScrollCenter: { flexGrow: 1, justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', width: '100%', borderRadius: 16, padding: 24, elevation: 5, shadowColor: '#000' }
 });

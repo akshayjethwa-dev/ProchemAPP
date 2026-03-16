@@ -14,12 +14,10 @@ export default function AdminUsersScreen() {
   const [filter, setFilter] = useState('all'); 
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 🚀 Get state variables for Impersonation
   const { user: currentAdmin, impersonateUser } = useAppStore();
 
   useEffect(() => { loadData(); }, []);
 
-  // Filter & Search Logic
   useEffect(() => {
     let result = users;
     if (filter === 'pending') {
@@ -61,7 +59,6 @@ export default function AdminUsersScreen() {
     else Alert.alert("No contact info available");
   };
 
-  // 🚀 NEW: Handle Login As User
   const handleLoginAs = (targetUser: User) => {
     if (!currentAdmin) return;
     Alert.alert(
@@ -71,7 +68,12 @@ export default function AdminUsersScreen() {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Proceed', 
-          onPress: () => impersonateUser(targetUser, currentAdmin) 
+          onPress: () => {
+            // 🚀 FIX: Delay the state update so the Alert closes before unmounting
+            setTimeout(() => {
+              impersonateUser(targetUser, currentAdmin);
+            }, 400);
+          }
         }
       ]
     );
@@ -108,7 +110,6 @@ export default function AdminUsersScreen() {
            <Text style={styles.infoText}>📞 {item.phoneNumber || 'Phone not linked'}</Text>
         </View>
 
-        {/* Action Row */}
         <View style={styles.actionRow}>
            {!item.verified ? (
              <Button mode="contained" compact buttonColor="#2E7D32" icon="shield-check" style={{flex:1, marginRight:8}} onPress={() => handleVerify(item.uid, item.companyName || 'User')}>
@@ -122,7 +123,6 @@ export default function AdminUsersScreen() {
              Contact
            </Button>
 
-           {/* 🚀 NEW: Login As Button */}
            <Button mode="outlined" compact textColor="#D32F2F" style={{flex:1, borderColor:'#D32F2F'}} onPress={() => handleLoginAs(item)}>
              Login As
            </Button>

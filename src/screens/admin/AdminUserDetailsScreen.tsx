@@ -6,11 +6,15 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Order, Product } from '../../types';
+import { useAppStore } from '../../store/appStore';
 
 export default function AdminUserDetailsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = route.params || {}; 
+
+  // Pulling AppStore methods for impersonation
+  const { user: currentAdmin, impersonateUser } = useAppStore();
 
   if (!user) {
     return (
@@ -55,7 +59,6 @@ export default function AdminUserDetailsScreen() {
   };
 
   const toggleVerification = async () => {
-    // Toggles the verified status (KYC Approval)
     await updateDoc(doc(db, 'users', user.uid), { verified: !user.verified });
     Alert.alert("Success", `User status changed to ${!user.verified ? 'Verified' : 'Unverified'}`);
     navigation.goBack();
@@ -67,8 +70,27 @@ export default function AdminUserDetailsScreen() {
   };
 
   const handleInvoice = (order: Order) => {
-    // ✅ PASS ADMIN ROLE to see all invoice types (Goods, Buyer Service, Seller Service)
     navigation.navigate('InvoiceViewer', { order, role: 'admin' });
+  };
+
+  const handleLoginAs = () => {
+    if (!currentAdmin) return;
+    Alert.alert(
+      'Login As User',
+      `Are you sure you want to view the app as ${user.companyName || user.email}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Proceed', 
+          onPress: () => {
+            // 🚀 FIX: Delay the state update so the Alert closes before unmounting
+            setTimeout(() => {
+              impersonateUser(user, currentAdmin);
+            }, 400);
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -82,14 +104,12 @@ export default function AdminUserDetailsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{paddingBottom: 40}}>
-        {/* User Profile Card */}
         <Card style={styles.card}>
           <Card.Content style={{alignItems:'center'}}>
              <Avatar.Text size={60} label={user.companyName?.[0] || 'U'} style={{backgroundColor: user.verified ? '#2E7D32' : '#F57C00'}} />
              <Text variant="headlineSmall" style={{fontWeight:'bold', marginTop:10}}>{user.companyName}</Text>
              <Text style={{color:'#666'}}>{user.email}</Text>
              
-             {/* ✅ SHOW GSTIN FOR MANUAL VERIFICATION */}
              <View style={styles.gstRow}>
                 <Text style={{fontWeight:'bold', color: '#004AAD'}}>GSTIN: {user.gstin || 'N/A'}</Text>
                 {user.gstin && (
@@ -103,10 +123,19 @@ export default function AdminUserDetailsScreen() {
                 </Chip>
                 <Chip icon="account" compact>{user.userType.toUpperCase()}</Chip>
              </View>
+
+             <Button 
+               mode="contained" 
+               buttonColor="#D32F2F" 
+               icon="login" 
+               style={{marginTop: 15, width: '100%'}} 
+               onPress={handleLoginAs}
+             >
+               Login As {user.companyName || 'User'}
+             </Button>
           </Card.Content>
         </Card>
 
-        {/* Stats Row */}
         <View style={styles.statsRow}>
            <Card style={[styles.statCard, {backgroundColor:'#E3F2FD'}]}>
              <Card.Content>
@@ -143,7 +172,6 @@ export default function AdminUserDetailsScreen() {
                       title={`Order #${o.id.slice(0,6).toUpperCase()}`} 
                       subtitle={new Date(o.createdAt).toDateString()}
                       right={(props) => (
-                         // ✅ ADMIN INVOICE BUTTON
                          <IconButton {...props} icon="file-document-outline" onPress={() => handleInvoice(o)} />
                       )}
                     />

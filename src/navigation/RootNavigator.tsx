@@ -90,12 +90,9 @@ export const RootNavigator = () => {
         </SafeAreaView>
       )}
 
-      <NavigationContainer>
-        {/* 🚀 KEY FIX: Added user.uid and adminImpersonating to force React Navigation to rebuild the stack */}
-        <Stack.Navigator 
-          key={user ? `auth-${user.uid}-${viewMode}-${adminImpersonating}` : 'public'} 
-          screenOptions={{ headerShown: false }}
-        >
+      {/* 🚀 THE FIX: A dynamic key on NavigationContainer forces a hard reset of the navigation tree when impersonation toggles */}
+      <NavigationContainer key={adminImpersonating ? 'impersonating-mode' : 'admin-mode'}>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!user ? (
             <Stack.Group>
               <Stack.Screen name="Splash" component={SplashScreen} />

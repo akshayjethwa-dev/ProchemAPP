@@ -16,8 +16,8 @@ export default function ProductDetail() {
   const insets = useSafeAreaInsets();
   
   const { productId, product: paramProduct } = route.params || {};
-  // 🚀 Added compareList
-  const { products, addToCart, addToCompare, compareList, user } = useAppStore();
+  // 🚀 Added 'cart' and 'removeFromCart' to check/toggle favorite status
+  const { products, cart, addToCart, removeFromCart, addToCompare, compareList, user } = useAppStore();
   
   const product = products.find(p => p.id === productId) || paramProduct || ({} as Product);
 
@@ -31,28 +31,41 @@ export default function ProductDetail() {
   const [rfqLoading, setRfqLoading] = useState(false);
   const [rfqForm, setRfqForm] = useState({ targetQty: '', targetPrice: '', pincode: '', notes: '' });
 
-  // Educational Success Modal
   const [rfqSuccess, setRfqSuccess] = useState({ visible: false, rfqId: '' });
   
-  // 🚀 NEW STATE: Controls the Compare Snackbar
   const [compareVisible, setCompareVisible] = useState(false);
+  
+  // 🚀 NEW: Snackbar states for Favorites
+  const [favoriteVisible, setFavoriteVisible] = useState(false);
+  const [favoriteMessage, setFavoriteMessage] = useState('');
 
   useEffect(() => {
     setQty(String(minQty));
   }, [product]);
 
-  const handleRequestSample = () => {
-    addToCart({
-      ...product,
-      id: `${product.id}_sample`, 
-      name: `${product.name} (Lab Sample)`,
-      quantity: 1,
-      pricePerUnit: product.samplePrice || 0,
-      unit: product.sampleSize || '100g',
-      sellerId: product.sellerId || 'unknown',
-      price: product.samplePrice || 0
-    });
-    Alert.alert('Sample Added', 'Lab sample added to cart for checkout.');
+  // 🚀 Check if the item is already in favorites
+  const isFavorite = cart.some(p => p.id === `${product.id}_favorite`);
+
+  // 🚀 Toggle Favorite Logic
+  const toggleFavorite = () => {
+    if (isFavorite) {
+      removeFromCart(`${product.id}_favorite`);
+      setFavoriteMessage('Removed from Favorites');
+      setFavoriteVisible(true);
+    } else {
+      addToCart({
+        ...product,
+        id: `${product.id}_favorite`, 
+        name: `${product.name} (Saved)`,
+        quantity: 1,
+        pricePerUnit: price,
+        unit: unit,
+        sellerId: product.sellerId || 'unknown',
+        price: price
+      });
+      setFavoriteMessage('Added to Favorites ❤️');
+      setFavoriteVisible(true);
+    }
   };
 
   const submitRFQ = async () => {
@@ -131,33 +144,9 @@ export default function ProductDetail() {
     }
   };
 
-  // 🚀 UPDATED: Uses Snackbar instead of Alert
   const handleCompare = () => {
     addToCompare(product);
     setCompareVisible(true);
-  };
-
-  const handleBuyNow = () => {
-    if (!product || !product.id) return Alert.alert('Error', 'Product data is missing');
-
-    const orderQty = parseInt(qty) || minQty;
-    if (orderQty < minQty) {
-       return Alert.alert('Minimum Order Limit', `You cannot order less than ${minQty} ${unit}.`);
-    }
-
-    addToCart({
-      ...product,
-      id: product.id,
-      quantity: orderQty,
-      pricePerUnit: price,
-      unit: unit,
-      sellerId: product.sellerId || 'unknown',
-      name: product.name,
-      category: product.category,
-      price: price
-    });
-    
-    navigation.navigate('BuyerTabs', { screen: 'Cart' });
   };
 
   const openDocument = async (url: string | undefined, docName: string) => {
@@ -167,7 +156,6 @@ export default function ProductDetail() {
 
   if (!product.name) return null;
 
-  // 🚀 Check if the item is already compared to dynamically update the UI buttons
   const isAlreadyInCompare = compareList.some(p => p.id === product.id);
 
   return (
@@ -209,7 +197,6 @@ export default function ProductDetail() {
               Your request has been securely sent to the supplier. They will review it and reply shortly.
             </Text>
 
-            {/* Educational Box */}
             <View style={{backgroundColor: '#F8FAFC', padding: 15, borderRadius: 12, width: '100%', marginBottom: 25, borderWidth: 1, borderColor: '#E2E8F0'}}>
               <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
                  <Avatar.Icon size={24} icon="information-outline" style={{backgroundColor: 'transparent', margin: 0, padding: 0}} color="#004AAD" />
@@ -249,19 +236,23 @@ export default function ProductDetail() {
       </Modal>
 
       <ScrollView contentContainerStyle={{paddingBottom: 120}}>
-        {/* Image Header */}
         <View style={styles.imageHeader}>
           <View style={[styles.safeHeader, { paddingTop: Math.max(insets.top, 20) }]}>
             <IconButton icon="arrow-left" iconColor="black" containerColor="white" onPress={() => navigation.goBack()} />
             <View style={{flexDirection: 'row'}}>
-              {/* 🚀 Dynamic Icon Color for Compare */}
               <IconButton 
                 icon="compare-horizontal" 
                 iconColor={isAlreadyInCompare ? theme.colors.primary : "black"} 
                 containerColor="white" 
                 onPress={handleCompare} 
               />
-              <IconButton icon="share-variant" iconColor="black" containerColor="white" onPress={() => {}} />
+              {/* 🚀 Changed to dynamically show red heart when added to favorites */}
+              <IconButton 
+                icon={isFavorite ? "cards-heart" : "heart-outline"} 
+                iconColor={isFavorite ? "red" : "black"} 
+                containerColor="white" 
+                onPress={toggleFavorite} 
+              />
             </View>
           </View>
           <View style={styles.imagePlaceholder}>
@@ -274,7 +265,6 @@ export default function ProductDetail() {
         </View>
 
         <View style={styles.content}>
-          {/* Main Info */}
           <View style={styles.titleRow}>
             <View style={{flex: 1}}>
               <Text variant="headlineSmall" style={styles.title}>{product.name}</Text>
@@ -294,11 +284,10 @@ export default function ProductDetail() {
               <Text variant="headlineSmall" style={{color: theme.colors.primary, fontWeight:'bold'}}>
                 ₹{price}
               </Text>
-              <Text variant="labelSmall">per {unit} <Text style={{fontSize: 8, color: '#999'}}>(+{product.gstPercent || 18}% GST)</Text></Text>
+              <Text variant="labelSmall">per {unit} <Text style={{fontSize: 8, color: '#999'}}>(Reference Only)</Text></Text>
             </View>
           </View>
 
-          {/* 🚀 NEW: Explicit Compare Button for clear visibility */}
           <Button 
             mode={isAlreadyInCompare ? "contained-tonal" : "outlined"} 
             icon="scale-balance" 
@@ -322,28 +311,13 @@ export default function ProductDetail() {
             </View>
           )}
 
-          {/* SAMPLE ORDERING */}
-          {product.sampleAvailable && (
-             <View style={{backgroundColor: '#EFF6FF', padding: 16, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-                <View>
-                  <Text style={{fontWeight: 'bold', color: '#1D4ED8'}}>Lab Sample Available</Text>
-                  <Text style={{color: '#3B82F6', fontSize: 12}}>{product.sampleSize} sample for ₹{product.samplePrice}</Text>
-                </View>
-                <Button mode="contained-tonal" compact onPress={handleRequestSample} buttonColor="#DBEAFE" textColor="#1D4ED8">
-                   Add Sample
-                </Button>
-             </View>
-          )}
-
           <Divider style={styles.divider} />
 
-          {/* Supplier Info */}
           <Text variant="titleMedium" style={styles.sectionTitle}>Supplier Info</Text>
           <View style={styles.sellerCard}>
             <View style={styles.sellerRow}>
               <View style={styles.sellerIcon}><Text>🛡️</Text></View>
               <View>
-                {/* 🚀 HIDDEN EXPLICIT SELLER IDENTITY */}
                 <Text variant="titleMedium" style={{fontWeight:'bold'}}>Prochem Verified Supplier</Text>
                 <Text variant="bodySmall" style={{color:'#666'}}>
                   Origin: {product.origin || 'India'}
@@ -355,7 +329,6 @@ export default function ProductDetail() {
             </View>
           </View>
 
-          {/* Specs */}
           <Text variant="titleMedium" style={styles.sectionTitle}>Chemical Specifications</Text>
           <View style={styles.grid}>
             <View style={styles.gridItem}>
@@ -372,7 +345,6 @@ export default function ProductDetail() {
             </View>
           </View>
 
-          {/* Logistics & Safety Specs */}
           <Text variant="titleMedium" style={styles.sectionTitle}>Logistics & Handling</Text>
           <View style={styles.grid}>
             <View style={styles.gridItem}>
@@ -389,7 +361,6 @@ export default function ProductDetail() {
             </View>
           </View>
 
-          {/* Technical Documents Section */}
           <Text variant="titleMedium" style={styles.sectionTitle}>Technical Documents</Text>
           <View style={styles.docRow}>
             <Button mode="contained-tonal" icon="file-document-outline" onPress={() => openDocument(product.tdsUrl, 'TDS')} style={styles.docBtn} labelStyle={{fontSize: 12}} disabled={!product.tdsUrl}>
@@ -405,31 +376,16 @@ export default function ProductDetail() {
 
           <Divider style={styles.divider} />
 
-          {/* Quantity Selector Section */}
-          <Text variant="titleMedium" style={styles.sectionTitle}>Select Bulk Quantity</Text>
+          <Text variant="titleMedium" style={styles.sectionTitle}>How to Order</Text>
           <View style={styles.qtyContainer}>
-             <TextInput 
-                mode="outlined" 
-                keyboardType="numeric" 
-                label={`Quantity (${unit})`}
-                value={qty} 
-                onChangeText={setQty} 
-                style={{backgroundColor: 'white', marginBottom: 10}}
-             />
-             
-             <Text style={styles.moqText}>
-                *Minimum Order Quantity: {minQty} {unit}
+             <Text style={{fontSize: 13, color: '#333', textAlign: 'center', marginBottom: 5}}>
+                Chemical prices fluctuate based on market demand. 
              </Text>
-
-             <View style={styles.totalRow}>
-                <Text variant="bodyLarge">Estimated Base Total:</Text>
-                <Text variant="titleMedium" style={{color: theme.colors.primary, fontWeight:'bold'}}>
-                   ₹{((parseFloat(qty) || 0) * price).toLocaleString()}
-                </Text>
-             </View>
-             
-             <Text style={{fontSize: 11, color: '#D97706', marginTop: 8, fontStyle: 'italic', textAlign: 'center'}}>
-                * Delivery charges will apply. We will connect with you soon with the exact price.
+             <Text style={styles.moqText}>
+                Minimum Order Quantity: {minQty} {unit}
+             </Text>
+             <Text style={{fontSize: 12, color: '#D97706', marginTop: 10, textAlign: 'center', fontStyle: 'italic'}}>
+                * Submit a quote request below. Sellers will respond with the latest price and delivery timeline.
              </Text>
           </View>
 
@@ -440,35 +396,36 @@ export default function ProductDetail() {
         </View>
       </ScrollView>
 
-      {/* Bottom Action Bar */}
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
         <Button 
-          mode="outlined" 
-          onPress={() => setShowRfqModal(true)}
-          style={[styles.actionBtn, {borderColor: theme.colors.primary, borderWidth: 2}]}
-          textColor={theme.colors.primary}
-        >
-          Negotiate / RFQ
-        </Button>
-        <View style={{width: 12}} />
-        <Button 
           mode="contained" 
-          onPress={handleBuyNow} 
-          style={[styles.actionBtn, {backgroundColor: theme.colors.primary}]}
+          onPress={() => setShowRfqModal(true)}
+          style={[styles.actionBtn, {backgroundColor: theme.colors.primary, marginHorizontal: 10}]}
+          contentStyle={{height: 50}}
         >
-          Buy Now
+          Negotiate & Get Latest Price
         </Button>
       </View>
 
-      {/* 🚀 LONG DURATION COMPARE SNACKBAR */}
       <Snackbar
         visible={compareVisible}
         onDismiss={() => setCompareVisible(false)}
-        duration={5000} // Lasts for 5 seconds
+        duration={5000} 
         style={{marginBottom: Platform.OS === 'ios' ? 90 : 80}}
         action={{ label: 'View List', onPress: () => navigation.navigate('Compare') }}
       >
         Added to comparison.
+      </Snackbar>
+
+      {/* 🚀 NEW: Snackbar for Favorites */}
+      <Snackbar
+        visible={favoriteVisible}
+        onDismiss={() => setFavoriteVisible(false)}
+        duration={3000} 
+        style={{marginBottom: Platform.OS === 'ios' ? 140 : 130}}
+        action={{ label: 'View', onPress: () => navigation.navigate('BuyerTabs', { screen: 'Cart' }) }} // Navigating to the reused Cart screen
+      >
+        {favoriteMessage}
       </Snackbar>
     </View>
   );
@@ -497,8 +454,7 @@ const styles = StyleSheet.create({
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', elevation: 20 },
   actionBtn: { flex: 1, borderRadius: 12, paddingVertical: 4 },
   qtyContainer: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 12, marginBottom: 10 },
-  moqText: { fontSize: 12, color: '#DC2626', marginTop: 10, textAlign: 'center', fontStyle: 'italic' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  moqText: { fontSize: 12, color: '#DC2626', marginTop: 10, textAlign: 'center', fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400, elevation: 10 },
   rfqInput: { marginBottom: 12, backgroundColor: 'white' }
