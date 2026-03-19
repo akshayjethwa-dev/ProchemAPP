@@ -16,7 +16,6 @@ export default function ProductDetail() {
   const insets = useSafeAreaInsets();
   
   const { productId, product: paramProduct } = route.params || {};
-  // 🚀 Added 'cart' and 'removeFromCart' to check/toggle favorite status
   const { products, cart, addToCart, removeFromCart, addToCompare, compareList, user } = useAppStore();
   
   const product = products.find(p => p.id === productId) || paramProduct || ({} as Product);
@@ -34,8 +33,6 @@ export default function ProductDetail() {
   const [rfqSuccess, setRfqSuccess] = useState({ visible: false, rfqId: '' });
   
   const [compareVisible, setCompareVisible] = useState(false);
-  
-  // 🚀 NEW: Snackbar states for Favorites
   const [favoriteVisible, setFavoriteVisible] = useState(false);
   const [favoriteMessage, setFavoriteMessage] = useState('');
 
@@ -43,10 +40,8 @@ export default function ProductDetail() {
     setQty(String(minQty));
   }, [product]);
 
-  // 🚀 Check if the item is already in favorites
   const isFavorite = cart.some(p => p.id === `${product.id}_favorite`);
 
-  // 🚀 Toggle Favorite Logic
   const toggleFavorite = () => {
     if (isFavorite) {
       removeFromCart(`${product.id}_favorite`);
@@ -163,25 +158,32 @@ export default function ProductDetail() {
       
       {/* IN-APP RFQ MODAL */}
       <Modal transparent visible={showRfqModal} animationType="slide">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={styles.modalOverlay}
+        >
+          {/* ✅ FIXED: Set maxHeight to ensure scrolling occurs when keyboard opens */}
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
               <Text variant="titleLarge" style={{fontWeight:'bold'}}>Request Custom Quote</Text>
               <IconButton icon="close" onPress={() => { Keyboard.dismiss(); setShowRfqModal(false); }} />
             </View>
             
-            <Text style={{color: '#666', marginBottom: 15, fontSize: 13}}>
-              Propose your desired quantity and target price directly to the supplier.
-            </Text>
+            {/* ✅ FIXED: Wrapped inputs in ScrollView to allow scrolling when keyboard is active */}
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{flexGrow: 1, paddingBottom: 20}}>
+              <Text style={{color: '#666', marginBottom: 15, fontSize: 13}}>
+                Propose your desired quantity and target price directly to the supplier.
+              </Text>
 
-            <TextInput label={`Target Quantity (${unit}) *`} keyboardType="numeric" value={rfqForm.targetQty} onChangeText={t => setRfqForm({...rfqForm, targetQty: t})} mode="outlined" style={styles.rfqInput} />
-            <TextInput label="Target Price per Unit (₹) *" keyboardType="numeric" value={rfqForm.targetPrice} onChangeText={t => setRfqForm({...rfqForm, targetPrice: t})} mode="outlined" style={styles.rfqInput} left={<TextInput.Affix text="₹ " />} />
-            <TextInput label="Delivery Pincode *" keyboardType="numeric" value={rfqForm.pincode} onChangeText={t => setRfqForm({...rfqForm, pincode: t})} mode="outlined" style={styles.rfqInput} maxLength={6} />
-            <TextInput label="Additional Notes (Optional)" multiline numberOfLines={3} value={rfqForm.notes} onChangeText={t => setRfqForm({...rfqForm, notes: t})} mode="outlined" style={styles.rfqInput} placeholder="e.g. Need immediate dispatch" />
+              <TextInput label={`Target Quantity (${unit}) *`} keyboardType="numeric" value={rfqForm.targetQty} onChangeText={t => setRfqForm({...rfqForm, targetQty: t})} mode="outlined" style={styles.rfqInput} />
+              <TextInput label="Target Price per Unit (₹) *" keyboardType="numeric" value={rfqForm.targetPrice} onChangeText={t => setRfqForm({...rfqForm, targetPrice: t})} mode="outlined" style={styles.rfqInput} left={<TextInput.Affix text="₹ " />} />
+              <TextInput label="Delivery Pincode *" keyboardType="numeric" value={rfqForm.pincode} onChangeText={t => setRfqForm({...rfqForm, pincode: t})} mode="outlined" style={styles.rfqInput} maxLength={6} />
+              <TextInput label="Additional Notes (Optional)" multiline numberOfLines={3} value={rfqForm.notes} onChangeText={t => setRfqForm({...rfqForm, notes: t})} mode="outlined" style={styles.rfqInput} placeholder="e.g. Need immediate dispatch" />
 
-            <Button mode="contained" onPress={submitRFQ} loading={rfqLoading} style={{marginTop: 10, backgroundColor: '#004AAD'}} contentStyle={{height: 50}}>
-              Submit RFQ to Seller
-            </Button>
+              <Button mode="contained" onPress={submitRFQ} loading={rfqLoading} style={{marginTop: 10, backgroundColor: '#004AAD'}} contentStyle={{height: 50}}>
+                Submit RFQ to Seller
+              </Button>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -246,7 +248,6 @@ export default function ProductDetail() {
                 containerColor="white" 
                 onPress={handleCompare} 
               />
-              {/* 🚀 Changed to dynamically show red heart when added to favorites */}
               <IconButton 
                 icon={isFavorite ? "cards-heart" : "heart-outline"} 
                 iconColor={isFavorite ? "red" : "black"} 
@@ -376,16 +377,38 @@ export default function ProductDetail() {
 
           <Divider style={styles.divider} />
 
-          <Text variant="titleMedium" style={styles.sectionTitle}>How to Order</Text>
+          {/* 🚀 UPGRADED 'HOW TO ORDER' SECTION */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>How to Order (B2B Flow)</Text>
           <View style={styles.qtyContainer}>
-             <Text style={{fontSize: 13, color: '#333', textAlign: 'center', marginBottom: 5}}>
-                Chemical prices fluctuate based on market demand. 
+             <Text style={{fontSize: 13, color: '#1F2937', textAlign: 'center', marginBottom: 15, fontWeight: '500'}}>
+                Chemical prices fluctuate based on market conditions. Secure the best rate in 3 simple steps:
              </Text>
+
+             <View style={styles.stepRow}>
+               <Avatar.Icon size={28} icon="numeric-1-circle" style={styles.stepIcon} color={theme.colors.primary} />
+               <Text style={styles.stepText}>
+                 <Text style={{fontWeight: 'bold', color: '#111827'}}>Request Quote:</Text> Submit your target price and desired quantity below.
+               </Text>
+             </View>
+             
+             <View style={styles.stepRow}>
+               <Avatar.Icon size={28} icon="numeric-2-circle" style={styles.stepIcon} color={theme.colors.primary} />
+               <Text style={styles.stepText}>
+                 <Text style={{fontWeight: 'bold', color: '#111827'}}>Negotiate Deal:</Text> Chat directly with the supplier. Once agreed, the supplier will generate a formal <Text style={{fontWeight: 'bold', color: theme.colors.primary}}>Custom Offer</Text>.
+               </Text>
+             </View>
+
+             <View style={styles.stepRow}>
+               <Avatar.Icon size={28} icon="numeric-3-circle" style={styles.stepIcon} color={theme.colors.primary} />
+               <Text style={styles.stepText}>
+                 <Text style={{fontWeight: 'bold', color: '#111827'}}>Accept & Checkout:</Text> Accept the Custom Offer in your chat room to proceed to the final payment and complete your order.
+               </Text>
+             </View>
+
+             <Divider style={{marginVertical: 12, backgroundColor: '#E5E7EB'}} />
+
              <Text style={styles.moqText}>
                 Minimum Order Quantity: {minQty} {unit}
-             </Text>
-             <Text style={{fontSize: 12, color: '#D97706', marginTop: 10, textAlign: 'center', fontStyle: 'italic'}}>
-                * Submit a quote request below. Sellers will respond with the latest price and delivery timeline.
              </Text>
           </View>
 
@@ -417,13 +440,12 @@ export default function ProductDetail() {
         Added to comparison.
       </Snackbar>
 
-      {/* 🚀 NEW: Snackbar for Favorites */}
       <Snackbar
         visible={favoriteVisible}
         onDismiss={() => setFavoriteVisible(false)}
         duration={3000} 
         style={{marginBottom: Platform.OS === 'ios' ? 140 : 130}}
-        action={{ label: 'View', onPress: () => navigation.navigate('BuyerTabs', { screen: 'Cart' }) }} // Navigating to the reused Cart screen
+        action={{ label: 'View', onPress: () => navigation.navigate('BuyerTabs', { screen: 'Cart' }) }}
       >
         {favoriteMessage}
       </Snackbar>
@@ -453,8 +475,13 @@ const styles = StyleSheet.create({
   desc: { color: '#4B5563', lineHeight: 24 },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', elevation: 20 },
   actionBtn: { flex: 1, borderRadius: 12, paddingVertical: 4 },
-  qtyContainer: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 12, marginBottom: 10 },
-  moqText: { fontSize: 12, color: '#DC2626', marginTop: 10, textAlign: 'center', fontWeight: 'bold' },
+  // 👇 UPDATED STYLES FOR THE HOW-TO-ORDER SECTION
+  qtyContainer: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#F3F4F6' },
+  stepRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+  stepIcon: { backgroundColor: 'transparent', margin: 0, padding: 0 },
+  stepText: { flex: 1, fontSize: 13, color: '#4B5563', marginLeft: 6, lineHeight: 18 },
+  moqText: { fontSize: 12, color: '#DC2626', marginTop: 5, textAlign: 'center', fontWeight: 'bold' },
+  // 👆 END UPDATED STYLES
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400, elevation: 10 },
   rfqInput: { marginBottom: 12, backgroundColor: 'white' }

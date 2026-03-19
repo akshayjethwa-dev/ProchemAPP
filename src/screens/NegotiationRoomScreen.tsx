@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView } from 'react-native';
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView, Keyboard } from 'react-native';
 import { Text, TextInput, IconButton, Avatar, Button, Card, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -23,7 +23,6 @@ export default function NegotiationRoomScreen() {
 
   const [messageText, setMessageText] = useState('');
   
-  // 🚀 Added Quantity State for the Offer
   const [offerPrice, setOfferPrice] = useState('');
   const [offerQuantity, setOfferQuantity] = useState('');
   const [offerModalVisible, setOfferModalVisible] = useState(false);
@@ -114,8 +113,8 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // 🚀 Updated to handle both Quantity and Price
   const sendOffer = async () => {
+    Keyboard.dismiss();
     const price = parseFloat(offerPrice);
     const qty = parseInt(offerQuantity, 10);
 
@@ -137,7 +136,7 @@ export default function NegotiationRoomScreen() {
         isBuyer: false,
         isOffer: true,
         proposedPrice: price,
-        proposedQty: qty // Saving the new negotiated quantity
+        proposedQty: qty 
       });
       
       await updateDoc(doc(db, 'rfqs', activeRfq.id), {
@@ -150,14 +149,13 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // 🚀 Pass quantity through to checkout
   const proceedToCheckout = async (price: number, qty: number) => {
     setIsProcessing(true);
     try {
       await updateDoc(doc(db, 'rfqs', activeRfq.id), {
         status: 'CONVERTED',
         agreedPrice: price,
-        agreedQuantity: qty, // Log the updated quantity
+        agreedQuantity: qty, 
         updatedAt: new Date().toISOString()
       });
 
@@ -165,7 +163,7 @@ export default function NegotiationRoomScreen() {
         id: `${activeRfq.productId}_rfq`,
         productId: activeRfq.productId,
         name: `${activeRfq.productName} (Custom Quote)`,
-        quantity: qty, // Inject the specific offered quantity into cart
+        quantity: qty, 
         pricePerUnit: price,
         unit: activeRfq.unit || 'unit',
         sellerId: activeRfq.sellerId,
@@ -173,7 +171,7 @@ export default function NegotiationRoomScreen() {
       };
 
       setIsProcessing(false);
-      navigation.navigate('Checkout', { negotiatedItem });
+      navigation.navigate('OrderSummary', { negotiatedItem });
 
     } catch (error) {
       console.error("Checkout Navigation Error: ", error);
@@ -182,7 +180,6 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  // 🚀 Updated acceptOffer to take the agreed quantity
   const acceptOffer = (price: number, qty: number) => {
     if (Platform.OS === 'web') {
       const isConfirmed = window.confirm(`Do you agree to transact ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}?`);
@@ -256,9 +253,10 @@ export default function NegotiationRoomScreen() {
         </Chip>
       </View>
 
+      {/* ✅ FIXED: Changed behavior from undefined to 'height' for Android to properly push UI up */}
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <FlatList
           data={roomMessages}
@@ -266,11 +264,11 @@ export default function NegotiationRoomScreen() {
           renderItem={renderMessage}
           contentContainerStyle={{padding: 16, flexGrow: 1}}
           keyboardShouldPersistTaps="handled"
+          inverted={false} 
         />
 
         {activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
           <View>
-            {/* 🚀 Prominent Send Offer Button for Seller */}
             {viewMode === 'seller' && (
               <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
                 <Button 
@@ -279,7 +277,6 @@ export default function NegotiationRoomScreen() {
                   buttonColor="#10B981" 
                   contentStyle={{ height: 48 }}
                   onPress={() => {
-                    // Pre-fill with the buyer's original target requests
                     setOfferPrice(String(activeRfq.targetPrice || ''));
                     setOfferQuantity(String(activeRfq.targetQuantity || ''));
                     setOfferModalVisible(true);
@@ -290,7 +287,6 @@ export default function NegotiationRoomScreen() {
               </View>
             )}
 
-            {/* Normal Chat Input */}
             <View style={styles.inputArea}>
               <TextInput
                 mode="outlined"
@@ -314,18 +310,21 @@ export default function NegotiationRoomScreen() {
         )}
       </KeyboardAvoidingView>
 
-      {/* 🚀 Scrollable Offer Modal */}
+      {/* 🚀 FIXED Offer Modal UI/UX: Made it behave exactly like the RFQ modal to prevent hiding */}
       <Modal visible={offerModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView 
           style={styles.modalOverlay} 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <ScrollView contentContainerStyle={styles.modalScrollCenter} keyboardShouldPersistTaps="handled">
-            <View style={styles.modalContent}>
-               <Text variant="titleLarge" style={{fontWeight: 'bold', marginBottom: 15, color: '#0F172A'}}>
-                  Send Custom Offer
-               </Text>
-               
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
+              <Text variant="titleLarge" style={{fontWeight: 'bold', color: '#0F172A'}}>
+                 Send Offer
+              </Text>
+              <IconButton icon="close" onPress={() => { Keyboard.dismiss(); setOfferModalVisible(false); }} />
+            </View>
+            
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                <TextInput
                   mode="outlined"
                   keyboardType="numeric"
@@ -346,7 +345,7 @@ export default function NegotiationRoomScreen() {
                   activeOutlineColor="#10B981"
                />
 
-               <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 10}}>
+               <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingBottom: 15}}>
                   <Button mode="text" onPress={() => setOfferModalVisible(false)} textColor="#64748B">
                      Cancel
                   </Button>
@@ -354,8 +353,8 @@ export default function NegotiationRoomScreen() {
                      Send Offer
                   </Button>
                </View>
-            </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -374,7 +373,6 @@ const styles = StyleSheet.create({
   msgBubbleThem: { backgroundColor: 'white', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#E2E8F0' },
   inputArea: { flexDirection: 'row', padding: 10, backgroundColor: 'white', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
   input: { flex: 1, backgroundColor: '#F1F5F9', marginRight: 5, height: 48, justifyContent: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalScrollCenter: { flexGrow: 1, justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: 'white', width: '100%', borderRadius: 16, padding: 24, elevation: 5, shadowColor: '#000' }
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: 'white', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400, elevation: 10 }
 });
