@@ -1,18 +1,16 @@
-// App.tsx
-
 import React, { useEffect, useState } from 'react';
 import { Platform, View, StyleSheet, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider as PaperProvider, MD3LightTheme, Text, Button } from 'react-native-paper';
 
-// 🚀 1. Import Notification Libraries
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-
-// 🚀 2. Import Force Update Libraries
 import Constants from 'expo-constants';
-import { doc, getDoc } from 'firebase/firestore'; 
+
+// 🚀 Firebase Auth & Firestore imports for saving the token
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
 import { db } from './src/config/firebase'; 
 
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -22,12 +20,11 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true, 
     shouldPlaySound: true, 
     shouldSetBadge: true,  
-    shouldShowBanner: true, // ✅ Required for new Expo versions
-    shouldShowList: true,   // ✅ Required for new Expo versions
+    shouldShowBanner: true, 
+    shouldShowList: true,   
   }),
 });
 
-// Optional: Define your custom theme colors here
 const theme = {
   ...MD3LightTheme,
   colors: {
@@ -37,7 +34,6 @@ const theme = {
   },
 };
 
-// 🚀 Helper function to compare semantic versions (e.g., '1.0.2' vs '1.0.10')
 const isVersionOlder = (current: string, required: string) => {
   const v1 = current.split('.').map(Number);
   const v2 = required.split('.').map(Number);
@@ -51,25 +47,83 @@ const isVersionOlder = (current: string, required: string) => {
 };
 
 export default function App() {
-  
-  // 🚀 Force Update States
   const [isUpdateRequired, setIsUpdateRequired] = useState(false);
   const [storeUrl, setStoreUrl] = useState('');
   const [checkingVersion, setCheckingVersion] = useState(true);
 
-  // Request permissions on app launch AND check for force updates
   useEffect(() => {
-    registerForPushNotificationsAsync();
     checkForForceUpdate();
+    setupPushNotifications();
   }, []);
 
-  // 🚀 Version Check Logic
+  // 🚀 Register for Push Notifications AND Sync to Firebase User
+  const setupPushNotifications = async () => {
+    const token = await registerForPushNotificationsAsync();
+    
+    if (token) {
+      const auth = getAuth();
+      // Listen for when the user logs in, so we can save their specific token
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          try {
+            await updateDoc(doc(db, 'users', user.uid), {
+              expoPushToken: token
+            });
+            console.log("Push token saved to user profile!");
+          } catch (error) {
+            console.error("Failed to save push token to user:", error);
+          }
+        }
+      });
+    }
+  };
+
+  async function registerForPushNotificationsAsync() {
+    let token;
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
+
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        console.log('User denied push notification permissions!');
+        return null;
+      }
+
+      // 🚀 Get the unique token for this device
+      try {
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+        token = (await Notifications.getExpoPushTokenAsync({
+          projectId: projectId, // Required for modern Expo apps
+        })).data;
+        return token;
+      } catch (e) {
+        console.log("Error getting push token:", e);
+        return null;
+      }
+    } else {
+      console.log('Must use physical device for Push Notifications');
+      return null;
+    }
+  }
+
   const checkForForceUpdate = async () => {
     try {
-      // Get current app version from Expo config (e.g., "1.0.0")
       const currentVersion = Constants.expoConfig?.version || '1.0.0';
-      
-      // Fetch required version from Firestore
       const docRef = doc(db, 'app_settings', 'app_config');
       const docSnap = await getDoc(docRef);
 
@@ -89,41 +143,6 @@ export default function App() {
     }
   };
 
-  // Function to ask the user for permission and configure Android
-  async function registerForPushNotificationsAsync() {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX, // Max importance ensures banner shows
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
-
-    if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      
-      // If permission hasn't been asked yet, ask for it
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      
-      if (finalStatus !== 'granted') {
-        console.log('User denied push notification permissions!');
-        return;
-      }
-
-      // At this point, permissions are granted!
-      // (Later, you will get the Expo Push Token here to save to Firebase)
-      
-    } else {
-      console.log('Must use physical device for Push Notifications');
-    }
-  }
-
-  // 🚀 Render Blocking Screen if Update is Required
   if (isUpdateRequired) {
     return (
       <SafeAreaProvider>
@@ -150,27 +169,18 @@ export default function App() {
     );
   }
 
-  // If still checking version, render nothing so the old app doesn't flash
-  if (checkingVersion) {
-    return null; 
-  }
+  if (checkingVersion) return null; 
 
   return (
-    // 1. SafeAreaProvider prevents content from hiding behind the notch/status bar
     <SafeAreaProvider>
-      {/* 2. PaperProvider enables the UI components we used (Buttons, Cards, etc.) */}
       <PaperProvider theme={theme}>
-        {/* 3. StatusBar controls the battery/time icons color */}
         <StatusBar style="dark" />
-        
-        {/* 4. The main navigation structure */}
         <RootNavigator />
       </PaperProvider>
     </SafeAreaProvider>
   );
 }
 
-// 🚀 Styles for the Force Update screen
 const styles = StyleSheet.create({
   forceUpdateContainer: {
     flex: 1,

@@ -131,6 +131,7 @@ export interface RFQ {
   productName: string;
   buyerId: string;
   buyerName: string;
+  sellerName?: string;
   sellerId: string;
   targetQuantity: number;
   targetPrice: number;
@@ -146,7 +147,7 @@ export interface RFQ {
 // 🚀 UPDATED: Negotiation Message Schema (for the chat room)
 export interface NegotiationMessage {
   id: string;
-  rfqId: string; // Links back to the specific RFQ
+  rfqId?: string; // Links back to the specific RFQ
   text: string;
   senderId: string;
   timestamp: number;
@@ -254,14 +255,6 @@ export interface TransportOrder {
   sellerId: string;
 }
 
-export interface NegotiationMessage {
-  id: string;
-  text: string;
-  senderId: string;
-  timestamp: number;
-  isBuyer: boolean;
-}
-
 export interface Address {
   id: string;
   label: string; 
@@ -271,4 +264,31 @@ export interface Address {
   zipCode: string;
   country: string;
   isDefault?: boolean;
+}
+
+// 🚀 NEW: Live Market / Broadcast Types
+export interface BroadcastLead {
+  id?: string;
+  originalOrderId?: string; // Optional: if this was generated from a failed order
+  productName: string;
+  casNumber?: string;
+  purity?: string;
+  quantityRequired: string;
+  unit: string;
+  deliveryRegion: string; // e.g., "Ahmedabad, Gujarat" (Keeps buyer anonymous)
+  status: 'OPEN' | 'CLOSED';
+  createdAt: any;
+}
+
+export interface SupplierQuote {
+  id?: string;
+  leadId: string;
+  productName: string;
+  supplierId: string;
+  supplierName: string;
+  pricePerUnit: number;
+  availableQuantity: string;
+  dispatchDays: string; // e.g., "2-3 Days"
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  createdAt: any;
 }

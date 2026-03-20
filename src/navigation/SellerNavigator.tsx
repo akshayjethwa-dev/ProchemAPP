@@ -1,11 +1,12 @@
+// src/navigation/SellerNavigator.tsx
 import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, useTheme, Badge } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'react-native';
-import { collection, query, where, onSnapshot } from 'firebase/firestore'; // 🚀 Added Real-time Fetch
-import { db } from '../config/firebase'; // 🚀 Added Firebase
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
+import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 
 // Screens
@@ -15,10 +16,11 @@ import SellerManageChemicals from '../screens/SellerManageChemicals';
 import SellerAddChemical from '../screens/SellerAddChemical';
 import AccountScreen from '../screens/AccountScreen';
 import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
-
-// 🚀 IMPORT NEW NEGOTIATION SCREENS
 import NegotiationsListScreen from '../screens/NegotiationsListScreen';
 import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
+
+// 🔥 IMPORT NEW LIVE LEADS SCREEN
+import SellerLiveLeadsScreen from '../screens/SellerLiveLeadsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -28,13 +30,11 @@ function SellerTabs() {
   const insets = useSafeAreaInsets();
   const { user } = useAppStore();
   
-  // 🚀 FIXED: Global Badge state fetching directly from Firebase in real-time
   const [pendingQuotesCount, setPendingQuotesCount] = useState(0);
 
   useEffect(() => {
     if (!user?.uid) return;
     
-    // Listen for PENDING quotes directed at this seller
     const q = query(
       collection(db, 'rfqs'),
       where('sellerId', '==', user.uid),
@@ -80,7 +80,6 @@ function SellerTabs() {
         }}
       />
       
-      {/* 🚀 NEW QUOTES/INBOX TAB FOR SELLERS */}
       <Tab.Screen 
         name="Quotes" 
         component={NegotiationsListScreen}
@@ -132,9 +131,18 @@ export default function SellerNavigator() {
         }} 
       />
       <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} options={{ headerShown: false }} />
-      
-      {/* 🚀 NEGOTIATION ROOM STACK */}
       <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />
+      
+      {/* 🔥 ADDED: Live Market Screen via Stack Navigation */}
+      <Stack.Screen 
+        name="SellerLiveLeads" 
+        component={SellerLiveLeadsScreen} 
+        options={{ 
+          headerShown: true, 
+          title: 'Live Market',
+          headerBackTitle: 'Back'
+        }} 
+      />
     </Stack.Navigator>
   );
 }

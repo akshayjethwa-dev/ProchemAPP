@@ -14,8 +14,9 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ totalUsers: 0, totalProducts: 0, totalOrders: 0 });
   const [loading, setLoading] = useState(true);
   
-  // State for unread custom requirements
+  // State for badges
   const [pendingLeads, setPendingLeads] = useState(0); 
+  const [activeNegotiations, setActiveNegotiations] = useState(0);
 
   useEffect(() => {
     loadStats();
@@ -26,8 +27,15 @@ export default function AdminDashboard() {
       setPendingLeads(snap.size);
     });
 
+    // Real-time listener for active negotiations
+    const qNegos = query(collection(db, 'rfqs'), where('status', 'in', ['PENDING', 'NEGOTIATING']));
+    const unsubNegos = onSnapshot(qNegos, (snap) => {
+      setActiveNegotiations(snap.size);
+    });
+
     return () => {
-      unsubLeads(); // Cleanup listener on unmount
+      unsubLeads();
+      unsubNegos();
     };
   }, []);
 
@@ -82,8 +90,8 @@ export default function AdminDashboard() {
           </View>
         )}
 
-        {/* Lead Management Section */}
-        <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Lead Management</Text>
+        {/* Lead & Negotiation Management */}
+        <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Marketplace Monitoring</Text>
         
         <Card 
           style={{marginBottom: 12, backgroundColor: 'white'}} 
@@ -95,7 +103,6 @@ export default function AdminDashboard() {
                  <Text style={{fontSize: 16, fontWeight: 'bold'}}>Custom Requirements</Text>
                  {pendingLeads > 0 && (
                     <Badge style={{backgroundColor: '#EF4444', marginLeft: 8}} size={22}>
-                      {/* ✅ FIXED: Passed as a single template literal string */}
                       {`${pendingLeads} New`}
                     </Badge>
                  )}
@@ -103,6 +110,28 @@ export default function AdminDashboard() {
             }
             subtitle="View chemicals requested by buyers" 
             left={(props) => <IconButton icon="clipboard-text-search-outline" iconColor="#EA580C" size={28} />}
+            right={(props) => <IconButton icon="chevron-right" {...props} />}
+          />
+        </Card>
+
+        {/* ✅ NEW: Negotiation Monitoring Card */}
+        <Card 
+          style={{marginBottom: 12, backgroundColor: 'white'}} 
+          onPress={() => navigation.navigate('AdminNegotiations', { isAdminView: true })}
+        >
+          <Card.Title 
+            title={
+              <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                <Text style={{fontSize: 16, fontWeight: 'bold'}}>Price Negotiations</Text>
+                {activeNegotiations > 0 && (
+                   <Badge style={{backgroundColor: '#004AAD', marginLeft: 8}} size={22}>
+                     {`${activeNegotiations} Active`}
+                   </Badge>
+                )}
+              </View>
+            }
+            subtitle="Oversee chats between Buyers & Sellers" 
+            left={(props) => <IconButton icon="message-text-clock-outline" iconColor="#004AAD" size={28} />}
             right={(props) => <IconButton icon="chevron-right" {...props} />}
           />
         </Card>

@@ -14,8 +14,14 @@ import AdminPaymentsScreen from '../screens/admin/AdminPaymentsScreen';
 import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
 import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationScreen';
 import AdminPayment from '../screens/admin/AdminPayment';
-// ✅ NEW: Import Custom Requirements Screen
 import AdminCustomRequirementsScreen from '../screens/admin/AdminCustomRequirementsScreen';
+
+// ✅ Import Negotiation Screens
+import NegotiationsListScreen from '../screens/NegotiationsListScreen';
+import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
+
+// 🚀 NEW: Import Admin Broadcast Bids Screen
+import AdminBroadcastBidsScreen from '../screens/admin/AdminBroadcastBidsScreen';
 
 export type AdminStackParamList = {
   UsersList: undefined;
@@ -23,7 +29,10 @@ export type AdminStackParamList = {
   InvoiceViewer: { order: any }; 
   AdminDashboard: undefined;
   SendNotification: undefined;
-  AdminCustomRequirements: undefined; // ✅ ADDED
+  AdminCustomRequirements: undefined;
+  AdminNegotiations: { isAdminView: boolean }; 
+  NegotiationRoom: { negotiationId: string; title: string }; 
+  AdminBroadcastBids: undefined; // 🚀 ADDED
 };
 
 const Tab = createBottomTabNavigator();
@@ -44,8 +53,26 @@ function DashboardStackNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
       <Stack.Screen name="SendNotification" component={AdminSendNotificationScreen} />
-      {/* ✅ ADDED: Admin Custom Requirements Screen */}
       <Stack.Screen name="AdminCustomRequirements" component={AdminCustomRequirementsScreen} />
+      
+      {/* Admin Negotiation Monitoring Screens */}
+      <Stack.Screen 
+        name="AdminNegotiations" 
+        component={NegotiationsListScreen} 
+        options={{ headerShown: true, title: 'Monitor Negotiations' }}
+      />
+      <Stack.Screen 
+        name="NegotiationRoom" 
+        component={NegotiationRoomScreen} 
+        options={{ headerShown: true, title: 'Price Discussion' }}
+      />
+
+      {/* 🚀 NEW: Admin Supplier Bids Screen */}
+      <Stack.Screen 
+        name="AdminBroadcastBids" 
+        component={AdminBroadcastBidsScreen} 
+        options={{ headerShown: true, title: 'Supplier Bids', headerBackTitle: 'Back' }}
+      />
     </Stack.Navigator>
   );
 }

@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, Alert, Image, StyleSheet } from 'react-native';
-import { Text, TextInput, Button, RadioButton } from 'react-native-paper';
+import { Text, TextInput, Button, RadioButton, Checkbox, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, addDoc } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../config/firebase'; // ✅ This MUST export storage
+import { db, storage } from '../../config/firebase'; 
 import { getAllUsers } from '../../services/adminService';
 import { User } from '../../types';
-import { Picker } from '@react-native-picker/picker'; 
 
 export default function AdminSendNotificationScreen({ navigation }: any) {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [targetType, setTargetType] = useState('ALL'); 
-  const [selectedUser, setSelectedUser] = useState('');
+  const [targetType, setTargetType] = useState('ALL'); // 'ALL', 'SELECTED', 'EXCLUDE'
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
@@ -26,6 +25,14 @@ export default function AdminSendNotificationScreen({ navigation }: any) {
   const loadUsers = async () => {
     const data = await getAllUsers();
     setUsers(data);
+  };
+
+  const toggleUserSelection = (uid: string) => {
+    if (selectedUsers.includes(uid)) {
+      setSelectedUsers(selectedUsers.filter(id => id !== uid));
+    } else {
+      setSelectedUsers([...selectedUsers, uid]);
+    }
   };
 
   const pickImage = async () => {
@@ -46,7 +53,6 @@ export default function AdminSendNotificationScreen({ navigation }: any) {
       const response = await fetch(uri);
       const blob = await response.blob();
       
-      // ✅ Generate a safe filename
       const filename = `notifications/${Date.now()}.jpg`;
       const storageRef = ref(storage, filename);
       
@@ -65,8 +71,8 @@ export default function AdminSendNotificationScreen({ navigation }: any) {
       Alert.alert('Missing Fields', 'Please enter a Title and Message');
       return;
     }
-    if (targetType === 'SPECIFIC' && !selectedUser) {
-      Alert.alert('Missing User', 'Please select a user from the dropdown');
+    if ((targetType === 'SELECTED' || targetType === 'EXCLUDE') && selectedUsers.length === 0) {
+      Alert.alert('Missing Selection', 'Please select at least one user from the list.');
       return;
     }
 
@@ -75,15 +81,13 @@ export default function AdminSendNotificationScreen({ navigation }: any) {
       let imageUrl = null;
       if (imageUri) {
         imageUrl = await uploadImage(imageUri);
-        // If image upload fails, stop here (optional)
         if (!imageUrl && imageUri) { 
            setLoading(false);
            return; 
         }
       }
 
-      const notificationData = {
-        userId: targetType === 'ALL' ? 'ALL' : selectedUser,
+      const baseNotification = {
         title,
         message,
         imageUrl,
@@ -92,7 +96,24 @@ export default function AdminSendNotificationScreen({ navigation }: any) {
         createdAt: new Date().toISOString(),
       };
 
-      await addDoc(collection(db, 'notifications'), notificationData);
+      if (targetType === 'ALL') {
+        // Send global broadcast doc (assuming frontend listens for 'ALL')
+        await addDoc(collection(db, 'notifications'), { ...baseNotification, userId: 'ALL' });
+      } else {
+        // Determine the array of user IDs to send to
+        let targetUserIds: string[] = [];
+        if (targetType === 'SELECTED') {
+          targetUserIds = selectedUsers;
+        } else if (targetType === 'EXCLUDE') {
+          targetUserIds = users.filter(u => !selectedUsers.includes(u.uid)).map(u => u.uid);
+        }
+
+        // Loop and create a notification for each specific user
+        const promises = targetUserIds.map(uid => 
+          addDoc(collection(db, 'notifications'), { ...baseNotification, userId: uid })
+        );
+        await Promise.all(promises);
+      }
       
       Alert.alert('Success', 'Notification sent successfully!');
       navigation.goBack();
@@ -107,31 +128,44 @@ export default function AdminSendNotificationScreen({ navigation }: any) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <Text variant="headlineSmall" style={{ marginBottom: 20, fontWeight: 'bold' }}>Send Broadcast</Text>
+        <Text variant="headlineSmall" style={{ marginBottom: 20, fontWeight: 'bold' }}>Send Notification</Text>
 
         <Text variant="titleMedium" style={{marginTop: 10}}>Target Audience</Text>
-        <RadioButton.Group onValueChange={value => setTargetType(value)} value={targetType}>
+        <RadioButton.Group onValueChange={value => {
+            setTargetType(value);
+            setSelectedUsers([]); // Reset selection when mode changes
+        }} value={targetType}>
           <View style={styles.radioRow}>
             <RadioButton value="ALL" />
             <Text>All Users</Text>
           </View>
           <View style={styles.radioRow}>
-            <RadioButton value="SPECIFIC" />
-            <Text>Specific User</Text>
+            <RadioButton value="SELECTED" />
+            <Text>Only Selected Users</Text>
+          </View>
+          <View style={styles.radioRow}>
+            <RadioButton value="EXCLUDE" />
+            <Text>All Users EXCEPT Selected</Text>
           </View>
         </RadioButton.Group>
 
-        {targetType === 'SPECIFIC' && (
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={selectedUser}
-              onValueChange={(itemValue) => setSelectedUser(itemValue)}
-            >
-              <Picker.Item label="Select a user..." value="" />
+        {(targetType === 'SELECTED' || targetType === 'EXCLUDE') && (
+          <View style={styles.userListContainer}>
+            <Text variant="labelLarge" style={{ marginBottom: 5 }}>
+              {targetType === 'SELECTED' ? 'Select users to receive this:' : 'Select users to EXCLUDE:'}
+            </Text>
+            <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
               {users.map((u) => (
-                <Picker.Item key={u.uid} label={`${u.companyName || u.email} (${u.userType})`} value={u.uid} />
+                <Checkbox.Item
+                  key={u.uid}
+                  label={`${u.companyName || u.email} (${u.userType || 'User'})`}
+                  status={selectedUsers.includes(u.uid) ? 'checked' : 'unchecked'}
+                  onPress={() => toggleUserSelection(u.uid)}
+                  mode="android"
+                />
               ))}
-            </Picker>
+            </ScrollView>
+            <Divider style={{ marginVertical: 10 }} />
           </View>
         )}
 
@@ -179,7 +213,7 @@ export default function AdminSendNotificationScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   input: { marginBottom: 15, backgroundColor: 'white' },
   radioRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginBottom: 15 },
+  userListContainer: { borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 5, padding: 5, marginBottom: 15, backgroundColor: '#f9f9f9' },
   previewImage: { width: '100%', height: 200, borderRadius: 8, marginBottom: 15 },
   sendBtn: { marginTop: 10, paddingVertical: 6 }
 });

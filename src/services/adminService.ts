@@ -23,8 +23,6 @@ export const getAdminStats = async () => {
 // 2. User Management (Fetch All)
 export const getAllUsers = async (): Promise<User[]> => {
   const snapshot = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
-  
-  // ✅ FIX: Map doc.id to 'uid' (not 'id') to match your User type
   return snapshot.docs.map(d => ({ uid: d.id, ...d.data() } as unknown as User));
 };
 
@@ -38,15 +36,33 @@ export const verifyUserKYC = async (uid: string, status: boolean) => {
 
 // 4. Product Moderation (Fetch Pending)
 export const getPendingProducts = async (): Promise<Product[]> => {
-  // Fetch products where verified is false
   const q = query(collection(db, 'products'), where('verified', '==', false));
   const snapshot = await getDocs(q);
-  
-  // Products usually use 'id', so this remains 'id'
   return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product));
 };
 
 // 5. Approve Product
 export const approveProductListing = async (productId: string) => {
   await updateDoc(doc(db, 'products', productId), { verified: true });
+};
+
+/**
+ * NEW: Fetch all negotiation sessions for Admin monitoring
+ * This allows the admin to oversee all price discussions on the platform
+ */
+export const getAllNegotiations = async () => {
+  try {
+    const negotiationsRef = collection(db, 'negotiations');
+    // Fetching all negotiations ordered by most recent update
+    const q = query(negotiationsRef, orderBy('updatedAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.error("Error fetching all negotiations for admin:", error);
+    throw error;
+  }
 };

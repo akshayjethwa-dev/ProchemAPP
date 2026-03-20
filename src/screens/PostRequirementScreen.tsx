@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text, useTheme, Snackbar } from 'react-native-paper';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { useNavigation } from '@react-navigation/native';
@@ -32,7 +32,8 @@ export default function PostRequirementScreen() {
 
     setLoading(true);
     try {
-      await addDoc(collection(db, 'custom_requirements'), {
+      // ✅ FIXED: Changed to camelCase 'customRequirements' to match Admin panel
+      await addDoc(collection(db, 'customRequirements'), {
         buyerId: user?.uid || 'UNKNOWN',
         buyerName: user?.companyName || user?.businessName || 'Unknown Company',
         buyerPhone: user?.phone || '',
@@ -42,14 +43,14 @@ export default function PostRequirementScreen() {
         targetPrice: targetPrice.trim(),
         description: description.trim(),
         status: 'PENDING',
-        createdAt: new Date().toISOString()
+        createdAt: serverTimestamp()
       });
 
       setToastMessage('Requirement Submitted! Redirecting...');
       setToastVisible(true);
       
       setTimeout(() => {
-        navigation.navigate('BuyerTabs', { screen: 'HomeTab' });
+        navigation.navigate('BuyerRequirements'); // Navigate to the new requirements list
       }, 1500);
 
     } catch (error: any) {
@@ -70,7 +71,7 @@ export default function PostRequirementScreen() {
       >
         <ScrollView 
           contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled" // Allows clicking submit without dismissing keyboard first
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.headerArea}>
@@ -86,7 +87,6 @@ export default function PostRequirementScreen() {
             onChangeText={setProductName}
             mode="outlined"
             style={styles.input}
-            placeholder="e.g. Acetic Acid, Sodium Bicarbonate"
           />
 
           <View style={styles.row}>
@@ -104,7 +104,6 @@ export default function PostRequirementScreen() {
               onChangeText={setUnit}
               mode="outlined"
               style={[styles.input, { flex: 1 }]}
-              placeholder="kg, L, Ton"
             />
           </View>
 
@@ -115,7 +114,6 @@ export default function PostRequirementScreen() {
             mode="outlined"
             keyboardType="numeric"
             style={styles.input}
-            placeholder="Expected price per unit (₹)"
             left={<TextInput.Affix text="₹" />}
           />
 
@@ -127,7 +125,6 @@ export default function PostRequirementScreen() {
             multiline
             numberOfLines={4}
             style={[styles.input, { minHeight: 100 }]}
-            placeholder="Mention any specific grade, purity, packaging size, or delivery timeline required..."
           />
 
           <Button 
@@ -140,6 +137,16 @@ export default function PostRequirementScreen() {
           >
             Submit Requirement
           </Button>
+
+          {/* ✅ NEW: Button to view past requirements */}
+          <Button 
+            mode="text" 
+            onPress={() => navigation.navigate('BuyerRequirements')} 
+            style={{marginTop: 15}}
+          >
+            View My Past Requirements
+          </Button>
+
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -148,11 +155,7 @@ export default function PostRequirementScreen() {
         onDismiss={() => setToastVisible(false)}
         duration={3000}
         style={{ backgroundColor: '#333' }}
-        action={{
-          label: 'OK',
-          textColor: theme.colors.primaryContainer,
-          onPress: () => setToastVisible(false),
-        }}
+        action={{ label: 'OK', textColor: theme.colors.primaryContainer, onPress: () => setToastVisible(false) }}
       >
         {toastMessage}
       </Snackbar>
@@ -161,32 +164,11 @@ export default function PostRequirementScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    flexGrow: 1,
-    paddingBottom: 100, // Extra padding at the bottom to scroll past keyboard
-  },
-  headerArea: {
-    marginBottom: 24,
-  },
-  title: {
-    fontWeight: 'bold',
-    color: '#0F172A',
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: '#64748B',
-  },
-  input: {
-    marginBottom: 16,
-    backgroundColor: '#F8FAFC'
-  },
-  row: {
-    flexDirection: 'row',
-  },
-  submitButton: {
-    marginTop: 10,
-    borderRadius: 8,
-    backgroundColor: '#004AAD'
-  }
+  container: { padding: 20, flexGrow: 1, paddingBottom: 100 },
+  headerArea: { marginBottom: 24 },
+  title: { fontWeight: 'bold', color: '#0F172A', marginBottom: 8 },
+  subtitle: { color: '#64748B' },
+  input: { marginBottom: 16, backgroundColor: '#F8FAFC' },
+  row: { flexDirection: 'row' },
+  submitButton: { marginTop: 10, borderRadius: 8, backgroundColor: '#004AAD' }
 });
