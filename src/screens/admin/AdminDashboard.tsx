@@ -17,12 +17,13 @@ export default function AdminDashboard() {
   // State for badges
   const [pendingLeads, setPendingLeads] = useState(0); 
   const [activeNegotiations, setActiveNegotiations] = useState(0);
+  const [pendingBids, setPendingBids] = useState(0); // ✅ NEW: Track pending supplier bids
 
   useEffect(() => {
     loadStats();
 
-    // Real-time listener for pending custom requirements
-    const qLeads = query(collection(db, 'custom_requirements'), where('status', '==', 'PENDING'));
+    // ✅ FIXED: Changed custom_requirements to customRequirements to fix the permission error
+    const qLeads = query(collection(db, 'customRequirements'), where('status', '==', 'PENDING'));
     const unsubLeads = onSnapshot(qLeads, (snap) => {
       setPendingLeads(snap.size);
     });
@@ -33,9 +34,16 @@ export default function AdminDashboard() {
       setActiveNegotiations(snap.size);
     });
 
+    // ✅ NEW: Real-time listener for pending Supplier Bids
+    const qBids = query(collection(db, 'supplierQuotes'), where('status', '==', 'PENDING'));
+    const unsubBids = onSnapshot(qBids, (snap) => {
+      setPendingBids(snap.size);
+    });
+
     return () => {
       unsubLeads();
       unsubNegos();
+      unsubBids();
     };
   }, []);
 
@@ -90,9 +98,31 @@ export default function AdminDashboard() {
           </View>
         )}
 
-        {/* Lead & Negotiation Management */}
         <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Marketplace Monitoring</Text>
         
+        {/* ✅ NEW: Supplier Bids Card (Admin can see quotes here) */}
+        <Card 
+          style={{marginBottom: 12, backgroundColor: 'white'}} 
+          onPress={() => navigation.navigate('AdminBroadcastBids')}
+        >
+          <Card.Title 
+            title={
+               <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                 <Text style={{fontSize: 16, fontWeight: 'bold'}}>Supplier Bids</Text>
+                 {pendingBids > 0 && (
+                    <Badge style={{backgroundColor: '#10B981', marginLeft: 8}} size={22}>
+                      {`${pendingBids} New`}
+                    </Badge>
+                 )}
+               </View>
+            }
+            subtitle="Review quotes submitted by suppliers" 
+            left={(props) => <IconButton icon="gavel" iconColor="#8B5CF6" size={28} />}
+            right={(props) => <IconButton icon="chevron-right" {...props} />}
+          />
+        </Card>
+
+        {/* Custom Requirements Card */}
         <Card 
           style={{marginBottom: 12, backgroundColor: 'white'}} 
           onPress={() => navigation.navigate('AdminCustomRequirements')}
@@ -114,7 +144,7 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        {/* ✅ NEW: Negotiation Monitoring Card */}
+        {/* Negotiation Monitoring Card */}
         <Card 
           style={{marginBottom: 12, backgroundColor: 'white'}} 
           onPress={() => navigation.navigate('AdminNegotiations', { isAdminView: true })}
@@ -136,7 +166,6 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        {/* Finance & Actions Section */}
         <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Finance & Actions</Text>
         
         <Card 
@@ -151,7 +180,6 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        {/* Quick Actions */}
         <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Quick Actions</Text>
         <Card style={{marginBottom: 20}} onPress={() => navigation.navigate('SendNotification')}>
           <Card.Title 

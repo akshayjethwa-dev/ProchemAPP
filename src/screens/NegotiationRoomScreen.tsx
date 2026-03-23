@@ -66,6 +66,9 @@ export default function NegotiationRoomScreen() {
     );
   }
 
+  // ✅ Extract adminOffer using 'any' bypass to prevent interface TS errors if it isn't in types.ts yet
+  const adminOffer = (activeRfq as any).adminOffer;
+
   const maskSensitiveInfo = (text: string) => {
     let filteredText = text;
     const phoneRegex = /(\d[\s\-\.]?){8,12}/g;
@@ -149,9 +152,21 @@ export default function NegotiationRoomScreen() {
     }
   };
 
-  const proceedToCheckout = async (price: number, qty: number) => {
+  const proceedToCheckout = async (price: number, qty: number, overrideSellerId?: string) => {
     setIsProcessing(true);
     try {
+      // If we accepted the Admin's sniped offer, we drop a graceful system message to end the chat with Supplier A
+      if (overrideSellerId) {
+        await addDoc(collection(db, 'messages'), {
+          rfqId: activeRfq.id,
+          text: `System: This requirement has been successfully fulfilled and closed. Thank you for participating.`,
+          senderId: 'system',
+          timestamp: Date.now(),
+          isBuyer: false,
+          isOffer: false
+        });
+      }
+
       await updateDoc(doc(db, 'rfqs', activeRfq.id), {
         status: 'CONVERTED',
         agreedPrice: price,
@@ -162,11 +177,11 @@ export default function NegotiationRoomScreen() {
       const negotiatedItem = {
         id: `${activeRfq.productId}_rfq`,
         productId: activeRfq.productId,
-        name: `${activeRfq.productName} (Custom Quote)`,
+        name: overrideSellerId ? `${activeRfq.productName} (Prochem Sourced)` : `${activeRfq.productName} (Custom Quote)`,
         quantity: qty, 
         pricePerUnit: price,
         unit: activeRfq.unit || 'unit',
-        sellerId: activeRfq.sellerId,
+        sellerId: overrideSellerId || activeRfq.sellerId,
         gstPercent: 18
       };
 
@@ -197,15 +212,29 @@ export default function NegotiationRoomScreen() {
     }
   };
 
+  // ✅ NEW: Direct handler for the Admin Offer Banner
+  const acceptAdminOffer = () => {
+    if (!adminOffer) return;
+    Alert.alert('Confirm Prochem Offer', `Accept verified supplier offer of ${adminOffer.quantity || activeRfq.targetQuantity} ${activeRfq.unit} at ₹${adminOffer.price} / ${activeRfq.unit}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Accept & Checkout', 
+        onPress: () => proceedToCheckout(adminOffer.price, adminOffer.quantity || activeRfq.targetQuantity, adminOffer.supplierId) 
+      }
+    ]);
+  };
+
   const renderMessage = ({ item }: { item: NegotiationMessage }) => {
-    const isMe = item.isBuyer === (viewMode === 'buyer');
+    // Treat "system" messages as incoming (gray side) but with standard UI
+    const isMe = item.senderId === user?.uid;
+    const isSystem = item.senderId === 'system';
     
     return (
       <View style={[styles.msgWrapper, isMe ? styles.msgRight : styles.msgLeft]}>
-        {!isMe && <Avatar.Icon size={32} icon={item.isBuyer ? "account" : "store"} style={{marginRight: 8, backgroundColor: '#E2E8F0'}} color="#64748B" />}
+        {!isMe && <Avatar.Icon size={32} icon={isSystem ? "robot-outline" : (item.isBuyer ? "account" : "store")} style={{marginRight: 8, backgroundColor: '#E2E8F0'}} color="#64748B" />}
         
-        <View style={[styles.msgBubble, isMe ? styles.msgBubbleMe : styles.msgBubbleThem]}>
-          <Text style={{color: isMe ? 'white' : '#1E293B'}}>{item.text}</Text>
+        <View style={[styles.msgBubble, isMe ? styles.msgBubbleMe : styles.msgBubbleThem, isSystem && { borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' }]}>
+          <Text style={[{color: isMe ? 'white' : '#1E293B'}, isSystem && { fontStyle: 'italic', color: '#64748B' }]}>{item.text}</Text>
           
           {item.isOffer && (item.proposedPrice || item.proposedQty) && (
              <Card style={{marginTop: 10, backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
@@ -253,7 +282,35 @@ export default function NegotiationRoomScreen() {
         </Chip>
       </View>
 
-      {/* ✅ FIXED: Changed behavior from undefined to 'height' for Android to properly push UI up */}
+      {/* ✅ APPROACH 2: Sleek Admin Offer Banner (Visible only to the Buyer) */}
+      {adminOffer && viewMode === 'buyer' && activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
+        <Card style={{ margin: 10, backgroundColor: '#ECFDF5', borderColor: '#10B981', borderWidth: 1 }}>
+           <Card.Content style={{ padding: 12 }}>
+             <View style={{flexDirection: 'row', alignItems: 'center'}}>
+               <Avatar.Icon size={36} icon="star-shooting" style={{backgroundColor: '#D1FAE5'}} color="#059669" />
+               <View style={{marginLeft: 12, flex: 1}}>
+                 <Text style={{ color: '#065F46', fontWeight: 'bold', fontSize: 14 }}>
+                   🔥 Prochem Official Offer
+                 </Text>
+                 <Text style={{ color: '#047857', marginTop: 2, fontSize: 13 }}>
+                   We secured a verified supplier for <Text style={{fontWeight: 'bold'}}>₹{adminOffer.price}</Text> / {activeRfq.unit}.
+                 </Text>
+               </View>
+             </View>
+             <Button 
+               mode="contained" 
+               buttonColor="#10B981" 
+               style={{ marginTop: 12 }}
+               onPress={acceptAdminOffer}
+               loading={isProcessing}
+               disabled={isProcessing}
+             >
+               Accept & Checkout
+             </Button>
+           </Card.Content>
+        </Card>
+      )}
+
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -310,7 +367,6 @@ export default function NegotiationRoomScreen() {
         )}
       </KeyboardAvoidingView>
 
-      {/* 🚀 FIXED Offer Modal UI/UX: Made it behave exactly like the RFQ modal to prevent hiding */}
       <Modal visible={offerModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView 
           style={styles.modalOverlay} 

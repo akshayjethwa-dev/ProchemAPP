@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Modal, ActivityIndicator, Dimensions, Alert } from 'react-native';
-import { Text, Avatar, List, Divider, Button, Chip, useTheme, Card, IconButton } from 'react-native-paper';
+import { Text, Avatar, List, Divider, Button, Chip, useTheme, Card, IconButton, Badge } from 'react-native-paper'; // ✅ Added Badge
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; // ✅ Added Firestore imports
+import { db } from '../config/firebase'; // ✅ Added db import
 import { useAppStore } from '../store/appStore';
 import { logoutUser, deleteUserAccount } from '../services/authService';
 
@@ -18,6 +20,26 @@ export default function AccountScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // ✅ Track quoted custom requirements for the notification badge
+  const [quotedReqsCount, setQuotedReqsCount] = useState(0);
+
+  useEffect(() => {
+    if (!user?.uid || viewMode !== 'buyer') return;
+    
+    // Listen for custom sourcing requests that the admin has quoted
+    const qReq = query(
+      collection(db, 'customRequirements'), 
+      where('buyerId', '==', user.uid), 
+      where('status', '==', 'QUOTED')
+    );
+    
+    const unsub = onSnapshot(qReq, snap => {
+      setQuotedReqsCount(snap.docs.length);
+    });
+    
+    return () => unsub();
+  }, [user?.uid, viewMode]);
 
   const handleSupport = () => {
     setShowSupportModal(true);
@@ -272,7 +294,7 @@ export default function AccountScreen() {
           />
           <Divider style={{marginLeft: 60}} />
 
-          {/* 🚀 BUYER RFQ TRACKING LINK INJECTED HERE */}
+          {/* 🚀 BUYER NEGOTIATIONS & REQUESTS */}
           {viewMode === 'buyer' && (
             <>
               <List.Item 
@@ -281,6 +303,26 @@ export default function AccountScreen() {
                 left={() => <List.Icon icon="handshake-outline" color="#004AAD" />}
                 right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
                 onPress={() => navigation.navigate('NegotiationsList')}
+                style={styles.listItem}
+              />
+              <Divider style={{marginLeft: 60}} />
+              
+              {/* ✅ ADDED: My Sourcing Requests with Notification Badge */}
+              <List.Item 
+                title="My Sourcing Requests"
+                description="Track custom chemicals we are sourcing" 
+                left={() => <List.Icon icon="clipboard-search-outline" color="#004AAD" />}
+                right={() => (
+                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                    {quotedReqsCount > 0 && (
+                      <Badge size={22} style={{marginRight: 10, backgroundColor: '#10B981', paddingHorizontal: 6}}>
+                        {`${quotedReqsCount} New`}
+                      </Badge>
+                    )}
+                    <List.Icon icon="chevron-right" color="#CBD5E1" />
+                  </View>
+                )}
+                onPress={() => navigation.navigate('BuyerRequirements')}
                 style={styles.listItem}
               />
               <Divider style={{marginLeft: 60}} />
@@ -319,7 +361,6 @@ export default function AccountScreen() {
           />
           <Divider style={{marginLeft: 60}} />
 
-          {/* ✅ ADDED: About Prochem Link */}
           <List.Item 
             title="About Prochem" 
             left={() => <List.Icon icon="information-outline" color="#004AAD" />} 

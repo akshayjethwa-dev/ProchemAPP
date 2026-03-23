@@ -1,8 +1,8 @@
 // src/screens/BuyerRequirementsScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet, Alert } from 'react-native';
+import { View, FlatList, StyleSheet } from 'react-native';
 import { Text, Card, Button, useTheme, Chip } from 'react-native-paper';
-import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { useNavigation } from '@react-navigation/native';
@@ -12,13 +12,14 @@ export default function BuyerRequirementsScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAppStore();
   const [requirements, setRequirements] = useState<any[]>([]);
-  const [isAccepting, setIsAccepting] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.uid) return;
     const q = query(collection(db, 'customRequirements'), where('buyerId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // ✅ Cast the mapped document to 'any' to resolve TypeScript errors
+      const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      
       // Sort manually to keep newest first
       reqs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setRequirements(reqs);
@@ -26,52 +27,22 @@ export default function BuyerRequirementsScreen() {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  const handleAcceptQuote = async (req: any) => {
-    setIsAccepting(req.id);
-    try {
-      // 1. Generate an official Order document
-      const totalAmount = Number(req.quantity) * Number(req.quotedPrice);
-      
-      const newOrder = {
-        buyerId: user?.uid,
-        sellerId: req.quotedSupplierId,
-        status: 'ACCEPTED', // Pre-accepted by seller and buyer
-        totalAmount: totalAmount,
-        shippingAddress: user?.address || 'Address pending', // Can be updated in cart/checkout logic
-        paymentMode: 'BANK_TRANSFER', // Defaulting for B2B
-        createdAt: serverTimestamp(),
-        date: serverTimestamp(),
-        items: [{
-          productId: 'CUSTOM_SOURCED',
-          productName: req.productName,
-          quantity: Number(req.quantity),
-          pricePerUnit: Number(req.quotedPrice),
-          total: totalAmount
-        }],
-        subTotal: totalAmount,
-        taxAmount: 0, // Add GST logic if needed
-        payoutAmount: totalAmount,
-        platformFeeSeller: 0,
-        safetyFee: 0,
-      };
+  const handleAcceptQuote = (req: any) => {
+    // ✅ Package the quoted requirement into a "Cart Item" format
+    const negotiatedItem = {
+      id: `custom_${req.id}`,
+      productId: 'CUSTOM_SOURCED',
+      name: req.productName,
+      quantity: Number(req.quantity),
+      pricePerUnit: Number(req.quotedPrice),
+      unit: req.unit || 'kg',
+      sellerId: req.quotedSupplierId,
+      gstPercent: 18, // Default B2B GST rate
+      customRequirementId: req.id // We pass this so Checkout knows what to mark as FULFILLED
+    };
 
-      const orderRef = await addDoc(collection(db, 'orders'), newOrder);
-
-      // 2. Mark Requirement as FULFILLED
-      await updateDoc(doc(db, 'customRequirements', req.id), {
-        status: 'FULFILLED',
-        finalOrderId: orderRef.id
-      });
-
-      Alert.alert('Order Created!', 'Your custom requirement has been converted into an active order.', [
-        { text: 'View Order', onPress: () => navigation.navigate('Orders') }
-      ]);
-
-    } catch (error) {
-      Alert.alert('Error', 'Failed to convert to order. Please try again.');
-    } finally {
-      setIsAccepting(null);
-    }
+    // ✅ Send the user to the Checkout Screen to finish the order
+    navigation.navigate('Checkout', { negotiatedItem });
   };
 
   const renderItem = ({ item }: { item: any }) => (
@@ -109,9 +80,8 @@ export default function BuyerRequirementsScreen() {
             mode="contained" 
             buttonColor="#004AAD" 
             onPress={() => handleAcceptQuote(item)}
-            loading={isAccepting === item.id}
           >
-            Accept & Create Order
+            Accept & Checkout
           </Button>
         </Card.Actions>
       )}

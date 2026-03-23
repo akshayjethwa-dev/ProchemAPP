@@ -16,7 +16,7 @@ interface Requirement {
   unit: string;
   targetPrice: string;
   description: string;
-  status: 'PENDING' | 'RESOLVED' | 'REJECTED';
+  status: 'PENDING' | 'RESOLVED' | 'REJECTED' | 'QUOTED' | 'FULFILLED';
   createdAt: string;
 }
 
@@ -27,8 +27,8 @@ export default function AdminCustomRequirementsScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch all requirements ordered by newest first
-    const q = query(collection(db, 'custom_requirements'), orderBy('createdAt', 'desc'));
+    // ✅ FIXED: Changed collection name to camelCase to match the new rules and submission format
+    const q = query(collection(db, 'customRequirements'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Requirement));
       setRequirements(data);
@@ -40,7 +40,8 @@ export default function AdminCustomRequirementsScreen() {
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      await updateDoc(doc(db, 'custom_requirements', id), {
+      // ✅ FIXED: Changed collection name to camelCase
+      await updateDoc(doc(db, 'customRequirements', id), {
         status: newStatus
       });
     } catch (error) {
@@ -66,11 +67,13 @@ export default function AdminCustomRequirementsScreen() {
           <View style={styles.headerRow}>
             <View style={{flex: 1}}>
                <Text variant="titleMedium" style={styles.productName}>{item.productName}</Text>
-               <Text style={styles.date}>{new Date(item.createdAt).toLocaleString()}</Text>
+               <Text style={styles.date}>
+                 {item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Just now'}
+               </Text>
             </View>
             <Chip 
-               style={{ backgroundColor: isPending ? '#FEE2E2' : (item.status === 'RESOLVED' ? '#DCFCE7' : '#F1F5F9') }}
-               textStyle={{ color: isPending ? '#B91C1C' : (item.status === 'RESOLVED' ? '#166534' : '#64748B'), fontSize: 10, fontWeight: 'bold' }}
+               style={{ backgroundColor: isPending ? '#FEE2E2' : (item.status === 'RESOLVED' || item.status === 'FULFILLED' ? '#DCFCE7' : '#F1F5F9') }}
+               textStyle={{ color: isPending ? '#B91C1C' : (item.status === 'RESOLVED' || item.status === 'FULFILLED' ? '#166534' : '#64748B'), fontSize: 10, fontWeight: 'bold' }}
             >
                {item.status}
             </Chip>

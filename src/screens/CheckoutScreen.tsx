@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert, BackHandler, Image, Clipboard, Platform } from 'react-native'; 
 import { Text, Card, Button, Divider, IconButton, TextInput, HelperText, useTheme, ActivityIndicator } from 'react-native-paper';
-import { useNavigation, useRoute, CommonActions } from '@react-navigation/native'; 
+import { useNavigation, useRoute } from '@react-navigation/native'; 
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, doc, getDoc } from 'firebase/firestore'; 
+import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore'; // ✅ IMPORTED updateDoc
 import { useAppStore } from '../store/appStore';
 import { placeOrder } from '../services/orderService';
 import { db, storage } from '../config/firebase';
@@ -241,6 +241,18 @@ export default function CheckoutScreen() {
         createdAt: new Date().toISOString(),
         date: new Date().toISOString(),
       } as any);
+
+      // ✅ 3.5. IF THIS WAS A CUSTOM REQUIREMENT, MARK IT AS FULFILLED
+      if (negotiatedItem && negotiatedItem.customRequirementId) {
+        try {
+          await updateDoc(doc(db, 'customRequirements', negotiatedItem.customRequirementId), {
+            status: 'FULFILLED',
+            finalOrderId: orderId
+          });
+        } catch (reqError) {
+          console.error("Failed to update custom requirement status:", reqError);
+        }
+      }
 
       // 4. NOTIFICATIONS
       try {

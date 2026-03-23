@@ -125,6 +125,25 @@ export default function ProductDetail() {
         proposedQty: parseInt(rfqForm.targetQty)
       });
 
+      // ✅ NEW: Auto-Broadcast Standard RFQ to the Live Market
+      try {
+        await addDoc(collection(db, 'broadcastLeads'), {
+          originalOrderId: newRfqId,
+          sourceType: 'RFQ', // Helps the Admin know where this came from
+          productId: product.id,
+          productName: product.name,
+          quantityRequired: parseInt(rfqForm.targetQty),
+          unit: unit,
+          deliveryRegion: rfqForm.pincode,
+          targetPrice: parseFloat(rfqForm.targetPrice),
+          status: 'OPEN',
+          createdAt: new Date().toISOString()
+        });
+        console.log("Successfully broadcasted RFQ to Live Market.");
+      } catch (broadcastErr) {
+        console.error("Failed to broadcast RFQ:", broadcastErr);
+      }
+
       setRfqLoading(false);
       setShowRfqModal(false);
 

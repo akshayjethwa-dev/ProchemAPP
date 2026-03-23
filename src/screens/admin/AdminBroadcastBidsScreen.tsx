@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet, Alert } from 'react-native';
 import { Text, Card, Button, useTheme, Portal, Modal, TextInput } from 'react-native-paper';
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore'; 
 import { db } from '../../config/firebase';
 import { SupplierQuote } from '../../types';
 
@@ -29,10 +29,12 @@ export default function AdminBroadcastBidsScreen() {
     }
     setIsProcessing(true);
     try {
-      // 1. Fetch the original lead to get the CustomRequirement ID
+      // 1. Fetch the original lead to get the original ID and source type
       const leadRef = doc(db, 'broadcastLeads', selectedQuote!.leadId);
       const leadSnap = await getDoc(leadRef);
-      const originalReqId = leadSnap.data()?.originalOrderId;
+      const leadData = leadSnap.data();
+      const originalReqId = leadData?.originalOrderId;
+      const sourceType = leadData?.sourceType; // We added this during creation
 
       // 2. Mark Quote as Accepted
       await updateDoc(doc(db, 'supplierQuotes', selectedQuote!.id!), { status: 'ACCEPTED' });
@@ -40,17 +42,32 @@ export default function AdminBroadcastBidsScreen() {
       // 3. Close the Live Lead
       await updateDoc(leadRef, { status: 'CLOSED' });
 
-      // 4. Update the Buyer's Custom Requirement to 'QUOTED' so they can accept it
+      // 4. Handle based on where the requirement originated from
       if (originalReqId) {
-        await updateDoc(doc(db, 'customRequirements', originalReqId), {
-          status: 'QUOTED',
-          quotedPrice: Number(adminFinalPrice),
-          quotedSupplierId: selectedQuote!.supplierId,
-          quotedSupplierName: selectedQuote!.supplierName // Kept hidden from buyer until payment if you wish
-        });
+        if (sourceType === 'RFQ') {
+           // ✅ APPROACH 2: Attach the Admin Offer directly to the RFQ document (Hidden from Seller Chat)
+           await updateDoc(doc(db, 'rfqs', originalReqId), {
+              adminOffer: {
+                 price: Number(adminFinalPrice),
+                 quantity: Number(selectedQuote!.availableQuantity) || 0,
+                 supplierId: selectedQuote!.supplierId,
+                 timestamp: Date.now()
+              },
+              updatedAt: new Date().toISOString()
+           });
+
+        } else {
+           // ✅ REGULAR CUSTOM REQUIREMENT: Update the Buyer's Custom Requirement to 'QUOTED'
+           await updateDoc(doc(db, 'customRequirements', originalReqId), {
+             status: 'QUOTED',
+             quotedPrice: Number(adminFinalPrice),
+             quotedSupplierId: selectedQuote!.supplierId,
+             quotedSupplierName: selectedQuote!.supplierName // Kept hidden from buyer until payment if you wish
+           });
+        }
       }
 
-      Alert.alert('Success', 'Quote accepted and sent to the buyer for final approval.');
+      Alert.alert('Success', 'Quote accepted and sent to the buyer!');
       setSelectedQuote(null);
       setAdminFinalPrice('');
     } catch (error) {

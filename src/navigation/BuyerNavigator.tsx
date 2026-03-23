@@ -4,8 +4,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, Badge, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, query, where, onSnapshot } from 'firebase/firestore'; // 🚀 Added Firebase for real-time badge
-import { db } from '../config/firebase'; // 🚀 Added Firebase
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
+import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 
 import BuyerHome from '../screens/BuyerHome';
@@ -24,11 +24,12 @@ import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
 import PostRequirementScreen from '../screens/PostRequirementScreen';
 import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
 import CompareScreen from '../screens/CompareScreen';
+import BuyerRequirementsScreen from '../screens/BuyerRequirementsScreen'; 
 
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
   ProductDetail: { product: any };
-  Checkout: undefined;
+  Checkout: { negotiatedItem?: any }; // Added parameter typing
   AddressList: undefined;
   AddAddress: undefined;
   InvoiceViewer: { order: any };
@@ -36,8 +37,9 @@ export type BuyerStackParamList = {
   NegotiationsList: undefined;
   NegotiationRoom: { rfqId?: string };
   PostRequirement: undefined;
-  PaymentSuccess: any; // ✅ FIXED: Added PaymentSuccess to the param list
+  PaymentSuccess: any; 
   Compare: undefined;
+  BuyerRequirements: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -46,28 +48,45 @@ const Stack = createNativeStackNavigator<BuyerStackParamList>();
 function BuyerTabs() {
   const theme = useTheme();
   const cartCount = useAppStore(state => state.cart.length);
-  const { user } = useAppStore(); // 🚀 Get user to listen for their quotes
+  const { user } = useAppStore(); 
   const insets = useSafeAreaInsets();
 
-  // 🚀 NEW: State to track active negotiations for the notification badge
   const [activeNegotiations, setActiveNegotiations] = useState(0);
+  const [quotedRequirements, setQuotedRequirements] = useState(0);
 
   useEffect(() => {
     if (!user?.uid) return;
 
-    // Listen for quotes belonging to this buyer where the supplier has replied (NEGOTIATING)
-    const q = query(
+    // 1. Listen for standard RFQ negotiations
+    const qRfq = query(
       collection(db, 'rfqs'),
       where('buyerId', '==', user.uid),
       where('status', '==', 'NEGOTIATING') 
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubRfq = onSnapshot(qRfq, (snapshot) => {
       setActiveNegotiations(snapshot.docs.length);
     });
 
-    return () => unsubscribe();
+    // ✅ 2. Listen for Custom Requirements that have received a Quote
+    const qReq = query(
+      collection(db, 'customRequirements'),
+      where('buyerId', '==', user.uid),
+      where('status', '==', 'QUOTED') 
+    );
+
+    const unsubReq = onSnapshot(qReq, (snapshot) => {
+      setQuotedRequirements(snapshot.docs.length);
+    });
+
+    return () => {
+      unsubRfq();
+      unsubReq();
+    };
   }, [user?.uid]);
+
+  // Combine both alerts for the tab badge
+  const totalAlerts = activeNegotiations + quotedRequirements;
 
   return (
     <Tab.Navigator
@@ -131,8 +150,8 @@ function BuyerTabs() {
           tabBarIcon: ({ color }) => (
             <View>
               <IconButton icon="account" iconColor={color} size={24} />
-              {/* 🚀 RED DOT NOTIFICATION: Shows if there are active negotiations */}
-              {activeNegotiations > 0 && (
+              {/* ✅ RED DOT NOTIFICATION: Shows if there are active negotiations OR new quotes */}
+              {totalAlerts > 0 && (
                 <Badge 
                   style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#EF4444' }} 
                   size={10} 
@@ -182,16 +201,20 @@ export default function BuyerNavigator() {
       <Stack.Screen 
         name="PaymentSuccess" 
         component={PaymentSuccessScreen} 
-        options={{ headerShown: false, gestureEnabled: false }} // Prevent swiping back to checkout
+        options={{ headerShown: false, gestureEnabled: false }} 
       />
       <Stack.Screen name="NegotiationsList" component={NegotiationsListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />
       <Stack.Screen name="PostRequirement" component={PostRequirementScreen} options={{ headerShown: true, title: 'Post Custom Requirement' }} />
-      {/* 🚀 NEW COMPARE SCREEN */}
       <Stack.Screen 
         name="Compare" 
         component={CompareScreen} 
         options={{ headerShown: true, title: 'Compare Products' }} 
+      />
+      <Stack.Screen 
+        name="BuyerRequirements" 
+        component={BuyerRequirementsScreen} 
+        options={{ headerShown: true, title: 'My Sourcing Requests' }} 
       />
     </Stack.Navigator>
   );

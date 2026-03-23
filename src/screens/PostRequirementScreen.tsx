@@ -32,8 +32,8 @@ export default function PostRequirementScreen() {
 
     setLoading(true);
     try {
-      // ✅ FIXED: Changed to camelCase 'customRequirements' to match Admin panel
-      await addDoc(collection(db, 'customRequirements'), {
+      // ✅ Capture the doc reference to get the newly created ID
+      const docRef = await addDoc(collection(db, 'customRequirements'), {
         buyerId: user?.uid || 'UNKNOWN',
         buyerName: user?.companyName || user?.businessName || 'Unknown Company',
         buyerPhone: user?.phone || '',
@@ -45,6 +45,24 @@ export default function PostRequirementScreen() {
         status: 'PENDING',
         createdAt: serverTimestamp()
       });
+
+      // ✅ NEW: Auto-Broadcast Custom Requirement to Live Market
+      try {
+        await addDoc(collection(db, 'broadcastLeads'), {
+          originalOrderId: docRef.id,
+          sourceType: 'CUSTOM', // Identifies this as a Custom Requirement
+          productName: productName.trim(),
+          quantityRequired: quantity.trim(),
+          unit: unit.trim(),
+          deliveryRegion: 'Any', 
+          targetPrice: targetPrice ? parseFloat(targetPrice) : 0,
+          status: 'OPEN',
+          createdAt: new Date().toISOString()
+        });
+        console.log("Successfully broadcasted Custom Requirement to Live Market.");
+      } catch (broadcastErr) {
+        console.error("Failed to broadcast Custom Requirement:", broadcastErr);
+      }
 
       setToastMessage('Requirement Submitted! Redirecting...');
       setToastVisible(true);
