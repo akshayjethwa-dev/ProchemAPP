@@ -333,21 +333,32 @@ export default function ProductDetail() {
 
           <Divider style={styles.divider} />
 
+          {/* ✅ UPDATED: Premium Supplier Badge */}
           <Text variant="titleMedium" style={styles.sectionTitle}>Supplier Info</Text>
-          <View style={styles.sellerCard}>
-            <View style={styles.sellerRow}>
-              <View style={styles.sellerIcon}><Text>🛡️</Text></View>
-              <View>
-                <Text variant="titleMedium" style={{fontWeight:'bold'}}>Prochem Verified Supplier</Text>
-                <Text variant="bodySmall" style={{color:'#666'}}>
-                  Origin: {product.origin || 'India'}
-                </Text>
-                <Text variant="bodySmall" style={{color:'#2E7D32', fontSize: 10, fontWeight:'bold', marginTop: 2}}>
-                  ✓ Quality Checked
-                </Text>
+          
+          {(() => {
+            const isPremiumSupplier = (product as any).sellerTier === 'GROWTH_PACKAGE';
+            return (
+              <View style={[styles.sellerCard, isPremiumSupplier && { backgroundColor: '#FFFBEB', borderColor: '#FDE68A', borderWidth: 1 }]}>
+                <View style={styles.sellerRow}>
+                  <View style={[styles.sellerIcon, isPremiumSupplier && { backgroundColor: '#FEF3C7' }]}>
+                    <Text>{isPremiumSupplier ? '👑' : '🛡️'}</Text>
+                  </View>
+                  <View>
+                    <Text variant="titleMedium" style={{fontWeight:'bold', color: isPremiumSupplier ? '#92400E' : '#000'}}>
+                      {isPremiumSupplier ? 'Verified Premium Supplier' : 'Prochem Verified Supplier'}
+                    </Text>
+                    <Text variant="bodySmall" style={{color:'#666'}}>
+                      Origin: {product.origin || 'India'}
+                    </Text>
+                    <Text variant="bodySmall" style={{color: isPremiumSupplier ? '#D97706' : '#2E7D32', fontSize: 10, fontWeight:'bold', marginTop: 2}}>
+                      ✓ {isPremiumSupplier ? '100% Upfront Payment Assured' : 'Quality Checked'}
+                    </Text>
+                  </View>
+                </View>
               </View>
-            </View>
-          </View>
+            );
+          })()}
 
           <Text variant="titleMedium" style={styles.sectionTitle}>Chemical Specifications</Text>
           <View style={styles.grid}>
@@ -438,15 +449,28 @@ export default function ProductDetail() {
         </View>
       </ScrollView>
 
+      {/* ✅ FOMO GATE: Bottom Bar Logic */}
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
-        <Button 
-          mode="contained" 
-          onPress={() => setShowRfqModal(true)}
-          style={[styles.actionBtn, {backgroundColor: theme.colors.primary, marginHorizontal: 10}]}
-          contentStyle={{height: 50}}
-        >
-          Negotiate & Get Latest Price
-        </Button>
+        {product.readyToDispatch && user?.subscriptionTier !== 'GROWTH_PACKAGE' ? (
+          <Button 
+            mode="contained" 
+            buttonColor="#F59E0B" // Gold Color
+            onPress={() => navigation.navigate('BusinessGrowth')}
+            style={[styles.actionBtn, {marginHorizontal: 10}]}
+            contentStyle={{height: 50}}
+          >
+            👑 Upgrade to Negotiate (Ready Stock)
+          </Button>
+        ) : (
+          <Button 
+            mode="contained" 
+            onPress={() => setShowRfqModal(true)}
+            style={[styles.actionBtn, {backgroundColor: theme.colors.primary, marginHorizontal: 10}]}
+            contentStyle={{height: 50}}
+          >
+            Negotiate & Get Latest Price
+          </Button>
+        )}
       </View>
 
       <Snackbar
@@ -494,13 +518,11 @@ const styles = StyleSheet.create({
   desc: { color: '#4B5563', lineHeight: 24 },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'white', flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', elevation: 20 },
   actionBtn: { flex: 1, borderRadius: 12, paddingVertical: 4 },
-  // 👇 UPDATED STYLES FOR THE HOW-TO-ORDER SECTION
   qtyContainer: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#F3F4F6' },
   stepRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   stepIcon: { backgroundColor: 'transparent', margin: 0, padding: 0 },
   stepText: { flex: 1, fontSize: 13, color: '#4B5563', marginLeft: 6, lineHeight: 18 },
   moqText: { fontSize: 12, color: '#DC2626', marginTop: 5, textAlign: 'center', fontWeight: 'bold' },
-  // 👆 END UPDATED STYLES
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400, elevation: 10 },
   rfqInput: { marginBottom: 12, backgroundColor: 'white' }

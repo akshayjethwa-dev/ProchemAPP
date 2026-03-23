@@ -18,6 +18,8 @@ export interface TieredPrice {
   pricePerUnit: number;
 }
 
+export type SubscriptionTier = 'FREE' | 'GROWTH_PACKAGE';
+
 export interface User {
   uid: string;
   email: string;
@@ -40,6 +42,9 @@ export interface User {
   profile?: any;
   createdAt?: any;
   updatedAt?: any;
+  subscriptionTier?: SubscriptionTier; 
+  subscriptionExpiry?: string | Date | null; // Can be a Firebase Timestamp string/Date
+  paymentHistory?: string[]; // Array of transaction/reference IDs
 }
 
 export interface UserProfile {
@@ -123,6 +128,9 @@ export interface Product {
   inStock?: boolean;
   createdAt?: any;
   updatedAt?: any;
+
+  sellerTier?: SubscriptionTier; 
+  readyToDispatch?: boolean;
 }
 
 export interface RFQ {

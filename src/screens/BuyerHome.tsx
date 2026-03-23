@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Dimensions, RefreshControl } from 'react-native';
-import { Text, Searchbar, IconButton, Card, Button, useTheme, ActivityIndicator, Badge } from 'react-native-paper'; 
+import { Text, Searchbar, IconButton, Card, Button, useTheme, ActivityIndicator, Badge, Chip } from 'react-native-paper'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
@@ -15,6 +15,9 @@ export default function BuyerHome() {
   const theme = useTheme();
   
   const { user, products, setProducts } = useAppStore();
+  // Fetching cart/favorites count from the global store
+  const cartCount = useAppStore(state => state.cart?.length || 0);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,8 +56,15 @@ export default function BuyerHome() {
     }
   };
 
-  const displayProducts = products
+  // ✅ UPDATED: Boost products from Premium Sellers
+  const displayProducts = [...products]
     .filter(p => p.name?.toLowerCase().includes(searchQuery.toLowerCase()) && p.sellerId !== user?.uid)
+    .sort((a, b) => {
+      // Products with sellerTier === 'GROWTH_PACKAGE' will sort to the top (1 vs 0)
+      const aIsPremium = (a as any).sellerTier === 'GROWTH_PACKAGE' ? 1 : 0;
+      const bIsPremium = (b as any).sellerTier === 'GROWTH_PACKAGE' ? 1 : 0;
+      return bIsPremium - aIsPremium;
+    })
     .slice(0, 6);
 
   return (
@@ -69,17 +79,36 @@ export default function BuyerHome() {
             </Text>
           </View>
           <View style={{flex:1}} />
-          <View>
-            <IconButton 
-              icon="bell" 
-              iconColor="white" 
-              onPress={() => navigation.navigate('Notifications')} 
-            />
-            {unreadCount > 0 && (
-              <Badge style={{ position: 'absolute', top: 5, right: 5, backgroundColor: theme.colors.error }} size={16}>
-                {unreadCount}
-              </Badge>
-            )}
+          
+          {/* Action Icons: Favorites & Notifications */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* New Cart/Favorites Icon */}
+            <View>
+              <IconButton 
+                icon="heart-outline" 
+                iconColor="white" 
+                onPress={() => navigation.navigate('Cart')} 
+              />
+              {cartCount > 0 && (
+                <Badge style={{ position: 'absolute', top: 5, right: 5, backgroundColor: theme.colors.error }} size={16}>
+                  {cartCount}
+                </Badge>
+              )}
+            </View>
+
+            {/* Existing Notification Icon */}
+            <View>
+              <IconButton 
+                icon="bell" 
+                iconColor="white" 
+                onPress={() => navigation.navigate('Notifications')} 
+              />
+              {unreadCount > 0 && (
+                <Badge style={{ position: 'absolute', top: 5, right: 5, backgroundColor: theme.colors.error }} size={16}>
+                  {unreadCount}
+                </Badge>
+              )}
+            </View>
           </View>
         </View>
         
@@ -116,7 +145,7 @@ export default function BuyerHome() {
             {displayProducts.map((p) => (
               <Card 
                 key={p.id} 
-                style={styles.card} 
+                style={[styles.card, p.readyToDispatch && { borderColor: '#FDE68A', borderWidth: 1 }]} 
                 onPress={() => navigation.navigate('ProductDetail', { product: p })}
               >
                 <View style={styles.cardContent}>
@@ -126,13 +155,25 @@ export default function BuyerHome() {
                   <Text style={{color: theme.colors.primary, fontWeight:'bold', marginTop:4}}>
                     ₹{p.pricePerUnit || p.price}/{p.unit || 'kg'}
                   </Text>
+                  
+                  {/* ✅ FOMO VISUAL: Premium Badge for Dashboard */}
+                  {p.readyToDispatch && (
+                    <Chip 
+                      compact 
+                      icon="flash" 
+                      style={{backgroundColor: '#FEF3C7', marginTop: 6, height: 20}} 
+                      textStyle={{fontSize: 8, color: '#D97706', fontWeight: 'bold', marginVertical: 0}}
+                    >
+                      Premium Stock
+                    </Chip>
+                  )}
                 </View>
               </Card>
             ))}
           </View>
         )}
 
-        {/* ✅ NEW: Global "Post Requirement" Banner Lead Gen */}
+        {/* ✅ Global "Post Requirement" Banner Lead Gen */}
         <Card style={styles.requirementCard} mode="contained" onPress={() => navigation.navigate('PostRequirement')}>
           <Card.Content style={styles.requirementContent}>
              <View style={{flex: 1}}>
@@ -162,11 +203,10 @@ const styles = StyleSheet.create({
   card: { width: '48%', marginBottom: 16, backgroundColor: 'white' },
   cardContent: { padding: 12, alignItems: 'center' },
   imagePlaceholder: { width: 60, height: 60, backgroundColor: '#F1F5F9', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  // ✅ New styles for the banner
   requirementCard: {
     marginHorizontal: 16,
     marginTop: 10,
-    backgroundColor: '#E0F2FE', // Light blue background
+    backgroundColor: '#E0F2FE', 
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#BAE6FD'

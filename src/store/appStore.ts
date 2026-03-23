@@ -14,7 +14,6 @@ interface AppState {
   messages: NegotiationMessage[];
   compareList: Product[];
 
-  // Admin Impersonation States
   adminImpersonating: boolean;
   originalAdminUser: User | null;
 
@@ -36,9 +35,10 @@ interface AppState {
   removeFromCompare: (id: string) => void;
   clearCompare: () => void;
 
-  // Admin Impersonation Actions
   impersonateUser: (targetUser: User, currentAdmin: User) => void;
   stopImpersonating: () => void;
+
+  upgradeUserToPremium: (expiryDate: string | Date, paymentRef: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -81,19 +81,23 @@ export const useAppStore = create<AppState>()(
       })),
       addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
 
+      // ✅ UPDATED: Dynamic Compare Limit based on Subscription Tier
       addToCompare: (product) => set((state) => {
         if (state.compareList.find((p) => p.id === product.id)) return state; 
         const newList = [...state.compareList, product];
-        if (newList.length > 3) newList.shift(); 
+        
+        // Feature Gate Check
+        const maxItems = state.user?.subscriptionTier === 'GROWTH_PACKAGE' ? 5 : 3;
+        
+        if (newList.length > maxItems) newList.shift(); 
         return { compareList: newList };
       }),
+      
       removeFromCompare: (id) => set((state) => ({ compareList: state.compareList.filter((p) => p.id !== id) })),
       clearCompare: () => set({ compareList: [] }),
       completeOnboarding: () => set({ hasSeenOnboarding: true }),
 
-      // 🚀 UPDATED: Impersonation Logic
       impersonateUser: (targetUser, currentAdmin) => {
-        // Automatically set the view mode so they don't land on a blank screen
         const newViewMode = (targetUser.userType === 'seller' || targetUser.userType === 'dual') ? 'seller' : 'buyer';
         set({
           user: targetUser,
@@ -109,6 +113,18 @@ export const useAppStore = create<AppState>()(
         adminImpersonating: false,
         viewMode: 'buyer'
       })),
+
+      upgradeUserToPremium: (expiryDate, paymentRef) => set((state) => {
+        if (!state.user) return state;
+        return {
+          user: {
+            ...state.user,
+            subscriptionTier: 'GROWTH_PACKAGE',
+            subscriptionExpiry: expiryDate,
+            paymentHistory: [...(state.user.paymentHistory || []), paymentRef]
+          }
+        };
+      }),
     }),
     {
       name: 'prochem-app-storage', 

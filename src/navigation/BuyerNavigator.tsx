@@ -10,7 +10,6 @@ import { useAppStore } from '../store/appStore';
 
 import BuyerHome from '../screens/BuyerHome';
 import CategoriesScreen from '../screens/CategoriesScreen';
-import CartScreen from '../screens/CartScreen';
 import OrderHistoryScreen from '../screens/OrderHistoryScreen';
 import AccountScreen from '../screens/AccountScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
@@ -26,10 +25,15 @@ import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
 import CompareScreen from '../screens/CompareScreen';
 import BuyerRequirementsScreen from '../screens/BuyerRequirementsScreen'; 
 
+// ✅ New Screen Imports
+import CartScreen from '../screens/CartScreen'; // Moved to Stack
+import BusinessGrowthScreen from '../screens/BusinessGrowthScreen';
+
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
   ProductDetail: { product: any };
-  Checkout: { negotiatedItem?: any }; // Added parameter typing
+  Cart: undefined; // Added here since it's no longer a tab
+  Checkout: { negotiatedItem?: any }; 
   AddressList: undefined;
   AddAddress: undefined;
   InvoiceViewer: { order: any };
@@ -47,7 +51,6 @@ const Stack = createNativeStackNavigator<BuyerStackParamList>();
 
 function BuyerTabs() {
   const theme = useTheme();
-  const cartCount = useAppStore(state => state.cart.length);
   const { user } = useAppStore(); 
   const insets = useSafeAreaInsets();
 
@@ -68,7 +71,7 @@ function BuyerTabs() {
       setActiveNegotiations(snapshot.docs.length);
     });
 
-    // ✅ 2. Listen for Custom Requirements that have received a Quote
+    // 2. Listen for Custom Requirements that have received a Quote
     const qReq = query(
       collection(db, 'customRequirements'),
       where('buyerId', '==', user.uid),
@@ -85,7 +88,6 @@ function BuyerTabs() {
     };
   }, [user?.uid]);
 
-  // Combine both alerts for the tab badge
   const totalAlerts = activeNegotiations + quotedRequirements;
 
   return (
@@ -119,18 +121,14 @@ function BuyerTabs() {
           tabBarIcon: ({ color }) => <IconButton icon="view-grid" iconColor={color} size={24} />
         }}
       />
+      {/* ✅ Premium Growth Package Tab (Replaces Cart) */}
       <Tab.Screen 
-        name="Cart" 
-        component={CartScreen} 
+        name="Growth" 
+        component={BusinessGrowthScreen} 
         options={{
-          tabBarLabel: 'Cart',
+          tabBarLabel: 'Premium',
           tabBarIcon: ({ color }) => (
-            <View>
-              <IconButton icon="cart" iconColor={color} size={24} />
-              {cartCount > 0 && (
-                <Badge style={{ position: 'absolute', top: 4, right: 4 }} size={16}>{cartCount}</Badge>
-              )}
-            </View>
+            <IconButton icon="crown" iconColor="#EAB308" size={28} style={{ margin: 0 }} />
           )
         }}
       />
@@ -150,7 +148,6 @@ function BuyerTabs() {
           tabBarIcon: ({ color }) => (
             <View>
               <IconButton icon="account" iconColor={color} size={24} />
-              {/* ✅ RED DOT NOTIFICATION: Shows if there are active negotiations OR new quotes */}
               {totalAlerts > 0 && (
                 <Badge 
                   style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#EF4444' }} 
@@ -176,6 +173,13 @@ export default function BuyerNavigator() {
       <Stack.Screen name="BuyerTabs" component={BuyerTabs} />
       <Stack.Screen name="ProductDetail" component={ProductDetail} />
       
+      {/* ✅ Added Cart to Stack Navigator */}
+      <Stack.Screen 
+        name="Cart" 
+        component={CartScreen} 
+        options={{ headerShown: true, title: 'Your Cart' }} 
+      />
+
       <Stack.Screen 
         name="Checkout" 
         component={CheckoutScreen} 

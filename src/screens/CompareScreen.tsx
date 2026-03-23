@@ -10,7 +10,12 @@ const { width } = Dimensions.get('window');
 export default function CompareScreen() {
   const navigation = useNavigation<any>();
   const theme = useTheme();
-  const { compareList, removeFromCompare, addToCart, clearCompare } = useAppStore();
+  
+  // ✅ Fetch user to check premium status
+  const { compareList, removeFromCompare, addToCart, clearCompare, user } = useAppStore();
+
+  const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
+  const maxCompare = isPremium ? 5 : 3;
 
   if (compareList.length === 0) {
     return (
@@ -19,7 +24,6 @@ export default function CompareScreen() {
         <Text variant="titleMedium" style={{ marginTop: 16, color: '#64748B' }}>
           No products selected for comparison.
         </Text>
-        {/* 🚀 FIXED: Routed through BuyerTabs */}
         <Button mode="contained" onPress={() => navigation.navigate('BuyerTabs', { screen: 'Categories' })} style={{ marginTop: 24 }}>
           Browse Products
         </Button>
@@ -36,18 +40,16 @@ export default function CompareScreen() {
       unit: product.unit || 'kg',
       sellerId: product.sellerId || 'unknown'
     });
-    // 🚀 FIXED: Routed through BuyerTabs to correctly reach the Cart Tab
     navigation.navigate('BuyerTabs', { screen: 'Cart' });
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-         <Text variant="titleMedium" style={{fontWeight: 'bold'}}>Comparing {compareList.length} Items</Text>
+         <Text variant="titleMedium" style={{fontWeight: 'bold'}}>Comparing {compareList.length} of {maxCompare} Items</Text>
          <Button mode="text" textColor={theme.colors.error} onPress={clearCompare}>Clear All</Button>
       </View>
 
-      {/* Mobile-First Card Layout */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {compareList.map((product) => (
           <Card key={product.id} style={styles.productCard}>
@@ -91,19 +93,29 @@ export default function CompareScreen() {
               </View>
               <View style={styles.specRow}>
                 <Text style={styles.specLabel}>Supplier</Text>
-                <Text style={[styles.specValue, {color: '#16A34A', fontWeight: 'bold'}]}>✓ Prochem Verified</Text>
+                {/* Check if the product belongs to a Premium Seller */}
+                <Text style={[styles.specValue, {color: (product as any).sellerTier === 'GROWTH_PACKAGE' ? '#D97706' : '#16A34A', fontWeight: 'bold'}]}>
+                  {(product as any).sellerTier === 'GROWTH_PACKAGE' ? '👑 Premium Seller' : '✓ Verified'}
+                </Text>
               </View>
             </View>
           </Card>
         ))}
 
-        {/* "Add More" Card placeholder */}
-        {compareList.length < 3 && (
-           /* 🚀 FIXED: Routed through BuyerTabs to correctly reach the Categories Tab */
+        {/* ✅ Dynamic Add Card based on Tier */}
+        {compareList.length < maxCompare && (
            <Card style={styles.addCard} onPress={() => navigation.navigate('BuyerTabs', { screen: 'Categories' })}>
               <IconButton icon="plus-circle-outline" size={40} iconColor={theme.colors.primary} />
               <Text style={{fontWeight: 'bold', color: theme.colors.primary, marginTop: 8}}>Add Product</Text>
-              <Text style={{color: '#64748B', fontSize: 12, marginTop: 4}}>Max 3 items</Text>
+              <Text style={{color: '#64748B', fontSize: 12, marginTop: 4}}>Max {maxCompare} items</Text>
+           </Card>
+        )}
+
+        {/* ✅ Upsell Card if they hit the limit of 3 and are FREE */}
+        {!isPremium && compareList.length === 3 && (
+           <Card style={styles.upsellCard} onPress={() => navigation.navigate('BusinessGrowth')}>
+              <IconButton icon="crown" size={40} iconColor="#D97706" />
+              <Text style={{fontWeight: 'bold', color: '#D97706', marginTop: 8, textAlign: 'center'}}>Upgrade to Compare 5+</Text>
            </Card>
         )}
       </ScrollView>
@@ -131,5 +143,6 @@ const styles = StyleSheet.create({
   specLabel: { color: '#64748B', fontSize: 13, flex: 1 },
   specValue: { fontWeight: 'bold', color: '#334155', fontSize: 13, flex: 1, textAlign: 'right' },
 
-  addCard: { width: 140, backgroundColor: '#F1F5F9', borderWidth: 2, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 16, justifyContent: 'center', alignItems: 'center', height: 200, alignSelf: 'center' }
+  addCard: { width: 140, backgroundColor: '#F1F5F9', borderWidth: 2, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 16, justifyContent: 'center', alignItems: 'center', height: 200, alignSelf: 'center' },
+  upsellCard: { width: 140, backgroundColor: '#FFFBEB', borderWidth: 2, borderColor: '#FCD34D', borderStyle: 'dashed', borderRadius: 16, justifyContent: 'center', alignItems: 'center', height: 200, alignSelf: 'center', marginLeft: 16 }
 });

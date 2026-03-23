@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Text, Card, ActivityIndicator, Button, useTheme, IconButton, Badge } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { getAdminStats } from '../../services/adminService';
+import { getAdminStats, backfillUserSubscriptions } from '../../services/adminService';
 import { logoutUser } from '../../services/authService';
 import { collection, query, onSnapshot, where } from 'firebase/firestore'; 
 import { db } from '../../config/firebase';
@@ -17,24 +17,24 @@ export default function AdminDashboard() {
   // State for badges
   const [pendingLeads, setPendingLeads] = useState(0); 
   const [activeNegotiations, setActiveNegotiations] = useState(0);
-  const [pendingBids, setPendingBids] = useState(0); // ✅ NEW: Track pending supplier bids
+  const [pendingBids, setPendingBids] = useState(0);
+
+  // ✅ NEW: State for the one-time migration script
+  const [isBackfilling, setIsBackfilling] = useState(false);
 
   useEffect(() => {
     loadStats();
 
-    // ✅ FIXED: Changed custom_requirements to customRequirements to fix the permission error
     const qLeads = query(collection(db, 'customRequirements'), where('status', '==', 'PENDING'));
     const unsubLeads = onSnapshot(qLeads, (snap) => {
       setPendingLeads(snap.size);
     });
 
-    // Real-time listener for active negotiations
     const qNegos = query(collection(db, 'rfqs'), where('status', 'in', ['PENDING', 'NEGOTIATING']));
     const unsubNegos = onSnapshot(qNegos, (snap) => {
       setActiveNegotiations(snap.size);
     });
 
-    // ✅ NEW: Real-time listener for pending Supplier Bids
     const qBids = query(collection(db, 'supplierQuotes'), where('status', '==', 'PENDING'));
     const unsubBids = onSnapshot(qBids, (snap) => {
       setPendingBids(snap.size);
@@ -56,6 +56,32 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ✅ NEW: Handler function for backfilling users
+  const handleBackfillUsers = async () => {
+    Alert.alert(
+      "Confirm Migration",
+      "Are you sure you want to backfill all legacy users to the 'FREE' tier? This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Run Script", 
+          style: "destructive",
+          onPress: async () => {
+            setIsBackfilling(true);
+            try {
+              const updatedCount = await backfillUserSubscriptions();
+              Alert.alert("Success", `Migration complete! Updated ${updatedCount} legacy users.`);
+            } catch (error) {
+              Alert.alert("Error", "Failed to run migration script. Check console for details.");
+            } finally {
+              setIsBackfilling(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -100,7 +126,6 @@ export default function AdminDashboard() {
 
         <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Marketplace Monitoring</Text>
         
-        {/* ✅ NEW: Supplier Bids Card (Admin can see quotes here) */}
         <Card 
           style={{marginBottom: 12, backgroundColor: 'white'}} 
           onPress={() => navigation.navigate('AdminBroadcastBids')}
@@ -122,7 +147,6 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        {/* Custom Requirements Card */}
         <Card 
           style={{marginBottom: 12, backgroundColor: 'white'}} 
           onPress={() => navigation.navigate('AdminCustomRequirements')}
@@ -144,7 +168,6 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        {/* Negotiation Monitoring Card */}
         <Card 
           style={{marginBottom: 12, backgroundColor: 'white'}} 
           onPress={() => navigation.navigate('AdminNegotiations', { isAdminView: true })}
@@ -190,13 +213,28 @@ export default function AdminDashboard() {
         </Card>
 
         <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold'}}>System Health</Text>
-        <Card style={{backgroundColor:'#E3F2FD'}}>
+        <Card style={{backgroundColor:'#E3F2FD', marginBottom: 20}}>
           <Card.Title 
             title="GST API Status" 
             subtitle="Operational • Latency 120ms" 
             left={(props) => <Text style={{fontSize:24}}>🟢</Text>} 
           />
         </Card>
+
+        {/* ✅ NEW: Temporary System Actions Section */}
+        <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold', color: '#EF4444'}}>System Actions (One-Time)</Text>
+        <Button 
+          mode="contained" 
+          buttonColor="#EF4444" 
+          icon="database-sync"
+          loading={isBackfilling}
+          disabled={isBackfilling}
+          onPress={handleBackfillUsers}
+          style={{ marginBottom: 40 }} // Extra bottom padding for scroll space
+        >
+          Run User Data Migration 
+        </Button>
+
       </ScrollView>
     </SafeAreaView>
   );

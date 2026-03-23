@@ -1,4 +1,4 @@
-import { collection, getDocs, doc, updateDoc, query, where, orderBy, getCountFromServer } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, where, orderBy, getCountFromServer, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { User, Product } from '../types';
 
@@ -63,6 +63,55 @@ export const getAllNegotiations = async () => {
     }));
   } catch (error) {
     console.error("Error fetching all negotiations for admin:", error);
+    throw error;
+  }
+};
+
+export const backfillUserSubscriptions = async (): Promise<number> => {
+  try {
+    const usersRef = collection(db, 'users');
+    const snapshot = await getDocs(usersRef);
+    
+    // Firestore batches allow a maximum of 500 operations per batch
+    const batches = [];
+    let currentBatch = writeBatch(db);
+    let operationCount = 0;
+    let totalUpdated = 0;
+
+    snapshot.docs.forEach((userDoc) => {
+      const userData = userDoc.data();
+      
+      // Only update if they don't already have the subscription field
+      if (userData.subscriptionTier === undefined) {
+        currentBatch.update(userDoc.ref, {
+          subscriptionTier: 'FREE',
+          subscriptionExpiry: null,
+          paymentHistory: []
+        });
+        
+        operationCount++;
+        totalUpdated++;
+
+        // If we approach the 500 limit, commit the batch and start a new one
+        if (operationCount >= 490) { 
+          batches.push(currentBatch.commit());
+          currentBatch = writeBatch(db);
+          operationCount = 0;
+        }
+      }
+    });
+
+    // Commit any remaining operations in the final batch
+    if (operationCount > 0) {
+      batches.push(currentBatch.commit());
+    }
+
+    await Promise.all(batches);
+    console.log(`Successfully backfilled ${totalUpdated} users.`);
+    return totalUpdated;
+
+  } catch (error) {
+    console.error('Error backfilling user subscriptions:', error);
     throw error;
   }
 };

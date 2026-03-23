@@ -33,6 +33,9 @@ export default function SellerAddChemical() {
   const editingProduct = route.params?.product;
   const isEditMode = !!editingProduct;
 
+  // ✅ Identify if seller is premium
+  const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
+
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState<any>(null);
   
@@ -43,6 +46,9 @@ export default function SellerAddChemical() {
 
   const [isCompliant, setIsCompliant] = useState(false);
   
+  // ✅ NEW: Ready to Dispatch State
+  const [isReadyToDispatch, setIsReadyToDispatch] = useState(false);
+
   // --- DROPDOWN STATES ---
   const [menus, setMenus] = useState({ unit: false, category: false, gst: false, hazard: false, packaging: false });
   
@@ -61,9 +67,9 @@ export default function SellerAddChemical() {
     description: '',
     origin: 'India',
     imageUrl: '',
-    gstPercent: GST_SLABS[2], // Default 18%
+    gstPercent: GST_SLABS[2], 
     packagingType: PACKAGING_OPTIONS[0],
-    customPackagingType: '', // ✅ NEW: State for custom packaging
+    customPackagingType: '', 
     hazardClass: HAZARD_CLASSES[0],
     unNumber: '',
     storageConditions: '',
@@ -80,7 +86,6 @@ export default function SellerAddChemical() {
 
   useEffect(() => {
     if (isEditMode) {
-      // ✅ Handle case where edited product has a custom packaging type not in the default dropdown
       const isStandardPackaging = PACKAGING_OPTIONS.includes(editingProduct.packagingType);
       
       setForm({
@@ -104,7 +109,6 @@ export default function SellerAddChemical() {
         expiryDate: editingProduct.expiryDate || ''
       });
       
-      // Load existing Tiers and Sample data if available
       if (editingProduct.tieredPricing) {
         setTiers(editingProduct.tieredPricing.map((t:any) => ({ minQty: String(t.minQty), pricePerUnit: String(t.pricePerUnit) })));
       }
@@ -112,6 +116,8 @@ export default function SellerAddChemical() {
         setSample({ available: true, price: String(editingProduct.samplePrice || ''), size: editingProduct.sampleSize || '100g' });
       }
 
+      // Load Ready to Dispatch status
+      setIsReadyToDispatch(editingProduct.readyToDispatch || false);
       setIsCompliant(true);
       navigation.setOptions({ title: 'Edit Product' });
     }
@@ -130,16 +136,6 @@ export default function SellerAddChemical() {
 
   const handleChange = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
   const toggleMenu = (key: keyof typeof menus, show: boolean) => setMenus(prev => ({ ...prev, [key]: show }));
-
-  // 🚀 Manage Volume Pricing Tiers
-  const addTier = () => setTiers([...tiers, { minQty: '', pricePerUnit: '' }]);
-  const updateTier = (index: number, field: string, value: string) => {
-    const newTiers = [...tiers];
-    // @ts-ignore
-    newTiers[index][field] = value;
-    setTiers(newTiers);
-  };
-  const removeTier = (index: number) => setTiers(tiers.filter((_, i) => i !== index));
 
   const pickImage = async () => {
     try {
@@ -163,7 +159,6 @@ export default function SellerAddChemical() {
   };
 
   const handleSubmit = async () => {
-    // ✅ ADDED VALIDATION FOR DESCRIPTION AND CUSTOM PACKAGING
     if (!form.name.trim() || !form.pricePerUnit.trim() || !form.description.trim()) {
       return showAlert('Missing Field', 'Please enter Name, Base Price, and Description.');
     }
@@ -174,16 +169,14 @@ export default function SellerAddChemical() {
 
     setLoading(true);
     try {
-      // Clean up Tiers for Database
       const validTiers = tiers
         .filter(t => t.minQty && t.pricePerUnit)
         .map(t => ({
           minQty: parseInt(t.minQty),
           pricePerUnit: parseFloat(t.pricePerUnit)
         }))
-        .sort((a, b) => a.minQty - b.minQty); // Sort ascending by quantity
+        .sort((a, b) => a.minQty - b.minQty); 
 
-      // Note: In production, upload files to Firebase Storage here and get URLs
       const productData = {
         ...form,
         pricePerUnit: parseFloat(form.pricePerUnit) || 0,
@@ -191,18 +184,21 @@ export default function SellerAddChemical() {
         purity: parseFloat(form.purity) || 0,
         gstPercent: parseInt(form.gstPercent) || 18,
         
-        // ✅ Decide which packaging type to save
         packagingType: form.packagingType === 'Other' ? form.customPackagingType.trim() : form.packagingType,
         
         quantity: 1000, 
         sellerId: user?.uid,
         sellerName: user?.companyName || 'Unknown',
+        sellerTier: user?.subscriptionTier || 'FREE', // Stamping Seller Tier
+        
+        // ✅ NEW: Saving Ready to Dispatch Status (force false if they somehow bypassed the UI gate)
+        readyToDispatch: isPremium ? isReadyToDispatch : false,
+        
         active: isEditMode ? editingProduct.active : true,
         msdsUrl: msdsFile?.uri || editingProduct?.msdsUrl || '', 
         tdsUrl: tdsFile?.uri || editingProduct?.tdsUrl || '',
         coaUrl: coaFile?.uri || editingProduct?.coaUrl || '',
         
-        // 🚀 B2B Commerce Upgrades Data Attach
         tieredPricing: validTiers,
         sampleAvailable: sample.available,
         samplePrice: parseFloat(sample.price) || 0,
@@ -211,7 +207,6 @@ export default function SellerAddChemical() {
         updatedAt: new Date().toISOString()
       };
 
-      // Clean up local-only state before saving
       // @ts-ignore
       delete productData.customPackagingType; 
 
@@ -315,7 +310,6 @@ export default function SellerAddChemical() {
              <TextInput label="Storage Conditions" placeholder="e.g. Store below 25°C" value={form.storageConditions} onChangeText={t => handleChange('storageConditions', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
           </View>
           
-          {/* ✅ CONDITIONAL TEXT INPUT FOR CUSTOM PACKAGING */}
           {form.packagingType === 'Other' && (
             <TextInput 
               label="Specify Packaging Type *" 
@@ -326,6 +320,30 @@ export default function SellerAddChemical() {
               style={styles.input} 
             />
           )}
+
+          {/* ✅ FEATURE GATE: READY TO DISPATCH TOGGLE */}
+          <View style={styles.dispatchContainer}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+              <Text style={{fontWeight: 'bold', fontSize: 15, color: '#1E293B'}}>⚡ Ready to Dispatch</Text>
+              <Switch 
+                value={isReadyToDispatch} 
+                onValueChange={setIsReadyToDispatch} 
+                color={theme.colors.primary}
+                disabled={!isPremium} // Disabled if FREE
+              />
+            </View>
+            
+            {/* Contextual Messaging based on Tier */}
+            {!isPremium ? (
+              <Text style={{fontSize: 12, color: '#D97706', marginTop: 8, fontWeight: '600'}}>
+                👑 Premium Feature: Boost visibility for your ready stock to buyers needing urgent delivery.
+              </Text>
+            ) : (
+              <Text style={{fontSize: 12, color: '#64748B', marginTop: 6}}>
+                Highlight this product to buyers who need urgent delivery.
+              </Text>
+            )}
+          </View>
 
           <Text variant="titleMedium" style={styles.sectionTitle}>4. Safety & Compliance</Text>
           <View style={styles.row}>
@@ -380,6 +398,18 @@ const styles = StyleSheet.create({
   payoutRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   payoutLabel: { fontSize: 12, color: '#555' },
   payoutValue: { fontSize: 12, fontWeight: 'bold', color: '#333' },
+  
+  // ✅ NEW STYLE: Dispatch Box
+  dispatchContainer: { 
+    backgroundColor: '#F8FAFC', 
+    padding: 16, 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0', 
+    marginBottom: 10,
+    marginTop: 5
+  },
+
   docUploadContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15 },
   docBtn: { flexGrow: 1, borderColor: '#CBD5E1' },
   complianceContainer: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0B2' },

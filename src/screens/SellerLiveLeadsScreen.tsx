@@ -1,18 +1,24 @@
-// src/screens/SellerLiveLeadsScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet, Alert } from 'react-native';
 import { Text, Card, Button, Portal, Modal, TextInput, useTheme } from 'react-native-paper';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useNavigation } from '@react-navigation/native';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { BroadcastLead } from '../types';
 
 export default function SellerLiveLeadsScreen() {
   const theme = useTheme();
+  const navigation = useNavigation<any>();
   const { user } = useAppStore();
+  
   const [leads, setLeads] = useState<BroadcastLead[]>([]);
   const [selectedLead, setSelectedLead] = useState<BroadcastLead | null>(null);
   
+  // ✅ NEW: Quota Tracking State
+  const [quotesUsedThisMonth, setQuotesUsedThisMonth] = useState(0);
+  const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
+
   // Quote Form State
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -21,13 +27,31 @@ export default function SellerLiveLeadsScreen() {
 
   useEffect(() => {
     // Fetch OPEN leads from the Live Market
-    const q = query(collection(db, 'broadcastLeads'), where('status', '==', 'OPEN'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const qLeads = query(collection(db, 'broadcastLeads'), where('status', '==', 'OPEN'));
+    const unsubLeads = onSnapshot(qLeads, (snapshot) => {
       const fetchedLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead));
       setLeads(fetchedLeads);
     });
-    return () => unsubscribe();
-  }, []);
+
+    // ✅ NEW: Fetch user's quotes to calculate usage this month
+    if (user?.uid) {
+      const qQuotes = query(collection(db, 'supplierQuotes'), where('supplierId', '==', user.uid));
+      const unsubQuotes = onSnapshot(qQuotes, (snapshot) => {
+        const now = new Date();
+        const thisMonthQuotes = snapshot.docs.filter(doc => {
+          const data = doc.data();
+          if (!data.createdAt) return false;
+          // Handle both Firestore Timestamp and ISO Strings
+          const dateObj = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+          return dateObj.getMonth() === now.getMonth() && dateObj.getFullYear() === now.getFullYear();
+        });
+        setQuotesUsedThisMonth(thisMonthQuotes.length);
+      });
+      return () => { unsubLeads(); unsubQuotes(); };
+    }
+
+    return () => unsubLeads();
+  }, [user?.uid]);
 
   const submitQuote = async () => {
     if (!price || !quantity || !dispatchDays) {
@@ -40,7 +64,7 @@ export default function SellerLiveLeadsScreen() {
         leadId: selectedLead?.id,
         productName: selectedLead?.productName,
         supplierId: user?.uid,
-        supplierName: user?.businessName || user?.companyName || 'Verified Supplier',
+        supplierName: user?.companyName || 'Verified Supplier',
         pricePerUnit: Number(price),
         availableQuantity: quantity,
         dispatchDays: dispatchDays,
@@ -72,7 +96,22 @@ export default function SellerLiveLeadsScreen() {
         </View>
       </Card.Content>
       <Card.Actions>
-        <Button mode="contained" onPress={() => setSelectedLead(item)}>Submit Quote</Button>
+        {/* ✅ FEATURE GATE: FOMO Quota Logic */}
+        {isPremium ? (
+          <Button mode="contained" onPress={() => setSelectedLead(item)}>Submit Quote</Button>
+        ) : quotesUsedThisMonth < 3 ? (
+          <Button mode="contained" onPress={() => setSelectedLead(item)}>
+            Submit Quote ({3 - quotesUsedThisMonth} Free Left)
+          </Button>
+        ) : (
+          <Button 
+            mode="contained" 
+            buttonColor="#F59E0B" // Gold Color
+            onPress={() => navigation.navigate('BusinessGrowth')}
+          >
+            👑 Upgrade to Quote
+          </Button>
+        )}
       </Card.Actions>
     </Card>
   );

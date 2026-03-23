@@ -11,8 +11,8 @@ import {
   getDoc, 
   setDoc, 
   deleteDoc,
-  collection,   // ✅ Added for notifications
-  addDoc,       // ✅ Added for notifications
+  collection,   
+  addDoc,       
   serverTimestamp 
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -60,14 +60,19 @@ export const registerUser = async ({ email, password, companyName, phoneNumber, 
       kycStatus: 'pending',
       addresses: [], 
       documents: { gstin: false, shopLicense: false, udyogAadhar: false },
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      
+      // ✅ NEW: Default subscription fields for all new users
+      subscriptionTier: 'FREE',
+      subscriptionExpiry: null,
+      paymentHistory: [],
     };
 
     // 1. Save User to Firestore
     await setDoc(doc(db, 'users', user.uid), userData);
     await updateProfile(user, { displayName: companyName });
 
-    // ✅ 2. NEW: Send Welcome Notification to the User
+    // 2. Send Welcome Notification to the User
     try {
       await addDoc(collection(db, 'notifications'), {
         userId: user.uid,
@@ -78,7 +83,7 @@ export const registerUser = async ({ email, password, companyName, phoneNumber, 
         createdAt: new Date().toISOString()
       });
       
-      // ✅ 3. NEW: Send Alert to Admins
+      // 3. Send Alert to Admins
       await addDoc(collection(db, 'notifications'), {
         userId: 'ALL_ADMINS',
         title: 'New User Registration',

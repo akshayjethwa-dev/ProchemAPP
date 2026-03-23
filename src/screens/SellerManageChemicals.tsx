@@ -3,7 +3,7 @@ import { View, FlatList, Alert, StyleSheet } from 'react-native';
 import { Text, IconButton, FAB, Card, Switch, ActivityIndicator, Chip, Searchbar } from 'react-native-paper';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
-import { getSellerProducts, deleteProduct, toggleProductStatus } from '../services/productService';
+import { getSellerProducts, deleteProduct, toggleProductStatus, updateProduct } from '../services/productService';
 import { Product } from '../types';
 
 export default function SellerManageChemicals() {
@@ -14,6 +14,9 @@ export default function SellerManageChemicals() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Check if the seller has the Growth Package
+  const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
 
   useEffect(() => {
     if (isFocused && user) {
@@ -33,7 +36,7 @@ export default function SellerManageChemicals() {
     navigation.navigate('AddChemical', { product });
   };
 
-  const handleToggle = async (id: string, currentStatus: boolean) => {
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
     if (!id) return;
     setProducts(prev => prev.map(p => p.id === id ? { ...p, active: !currentStatus } : p));
     try {
@@ -41,6 +44,33 @@ export default function SellerManageChemicals() {
     } catch (error) {
       Alert.alert('Error', 'Failed to update status');
       loadData(); 
+    }
+  };
+
+  // ✅ FIXED: Touch handler for the Dispatch Toggle
+  const handleToggleDispatch = async (product: any) => {
+    if (!isPremium) {
+      Alert.alert(
+        '👑 Premium Feature', 
+        'Boost your visibility by marking products as "Ready to Dispatch". Upgrade to the Business Growth Package to unlock this feature.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Learn More', onPress: () => navigation.navigate('BusinessGrowth') } // Assuming BusinessGrowth is the screen name
+        ]
+      );
+      return;
+    }
+
+    const newStatus = !product.readyToDispatch;
+    
+    // Optimistic UI Update
+    setProducts(prev => prev.map(p => p.id === product.id ? { ...p, readyToDispatch: newStatus } : p));
+    
+    try {
+      await updateProduct(product.id, { readyToDispatch: newStatus });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update dispatch status');
+      loadData(); // Revert on failure
     }
   };
 
@@ -66,8 +96,9 @@ export default function SellerManageChemicals() {
     );
   });
 
-  const renderItem = ({ item }: { item: Product }) => {
+  const renderItem = ({ item }: { item: any }) => {
     const isActive = item.active !== false; 
+    const isReady = item.readyToDispatch === true;
 
     return (
       <Card style={styles.card}>
@@ -82,36 +113,56 @@ export default function SellerManageChemicals() {
               Stock: {item.quantity || 'Available'} • ₹{item.pricePerUnit}
             </Text>
             
-            <View style={{flexDirection:'row', marginTop: 4}}>
+            <View style={{flexDirection:'row', marginTop: 8, gap: 8, flexWrap: 'wrap'}}>
+              {/* Status Indicator Chip */}
               <Chip 
                 compact 
-                textStyle={{fontSize: 10}}
+                textStyle={{fontSize: 10, fontWeight: 'bold'}}
                 style={{
                   backgroundColor: isActive ? '#DCFCE7' : '#F1F5F9', 
-                  height: 24
+                  height: 26
                 }}
               >
                 {isActive ? 'Active' : 'Inactive'}
               </Chip>
+
+              {/* ✅ FIXED: Removed TouchableOpacity. Passed onPress directly to the Chip to fix the touch swallowing issue. */}
+              <Chip 
+                compact 
+                icon={isReady ? "flash" : "flash-outline"}
+                onPress={() => handleToggleDispatch(item)}
+                textStyle={{fontSize: 10, fontWeight: 'bold', color: isReady ? '#D97706' : '#64748B'}}
+                style={{
+                  backgroundColor: isReady ? '#FEF3C7' : 'transparent', 
+                  borderColor: isReady ? '#F59E0B' : '#CBD5E1',
+                  borderWidth: 1,
+                  height: 26
+                }}
+              >
+                {isReady ? 'Ready to Dispatch' : 'Mark as Ready'}
+              </Chip>
             </View>
           </View>
 
+          {/* Right Actions Container */}
           <View style={{alignItems:'flex-end'}}>
-            <View style={{flexDirection:'row', alignItems:'center'}}>
+            {/* The Main Toggle Switch (Only for Active/Inactive) */}
+            <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
                <Switch 
                  value={isActive} 
-                 onValueChange={() => handleToggle(item.id!, isActive)} 
+                 onValueChange={() => handleToggleActive(item.id!, isActive)} 
                  color="#2E7D32"
                />
             </View>
             
-            <View style={{flexDirection:'row', marginTop: 0}}>
-              <IconButton icon="pencil" size={20} onPress={() => handleEdit(item)} />
+            <View style={{flexDirection:'row'}}>
+              <IconButton icon="pencil" size={20} onPress={() => handleEdit(item)} style={{margin: 0}} />
               <IconButton 
                 icon="delete" 
                 size={20} 
                 iconColor="#EF4444" 
                 onPress={() => handleDelete(item.id!)} 
+                style={{margin: 0}}
               />
             </View>
           </View>
@@ -138,7 +189,7 @@ export default function SellerManageChemicals() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{marginTop: 50}} size="large" />
+        <ActivityIndicator style={{marginTop: 50}} size="large" color="#004AAD" />
       ) : (
         <FlatList 
           data={filteredProducts} 
@@ -169,7 +220,7 @@ const styles = StyleSheet.create({
   searchContainer: { paddingHorizontal: 16, paddingBottom: 10, backgroundColor: 'white', elevation: 2 },
   searchbar: { backgroundColor: '#F1F5F9', borderRadius: 10, height: 45, elevation: 0 },
   card: { marginBottom: 12, backgroundColor: 'white' },
-  cardRow: { flexDirection: 'row', alignItems: 'center' },
-  iconBox: { width: 50, height: 50, backgroundColor: '#F1F5F9', borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  fab: { position: 'absolute', margin: 16, right: 0, bottom: 0, backgroundColor: '#004AAD' },
+  cardRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 4 },
+  iconBox: { width: 50, height: 50, backgroundColor: '#F1F5F9', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  fab: { position: 'absolute', margin: 16, right: 0, bottom: 0, backgroundColor: '#004AAD', color: 'white' },
 });
