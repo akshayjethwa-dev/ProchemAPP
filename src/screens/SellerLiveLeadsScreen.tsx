@@ -15,7 +15,6 @@ export default function SellerLiveLeadsScreen() {
   const [leads, setLeads] = useState<BroadcastLead[]>([]);
   const [selectedLead, setSelectedLead] = useState<BroadcastLead | null>(null);
   
-  // ✅ NEW: Quota Tracking State
   const [quotesUsedThisMonth, setQuotesUsedThisMonth] = useState(0);
   const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
 
@@ -30,10 +29,13 @@ export default function SellerLiveLeadsScreen() {
     const qLeads = query(collection(db, 'broadcastLeads'), where('status', '==', 'OPEN'));
     const unsubLeads = onSnapshot(qLeads, (snapshot) => {
       const fetchedLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead));
-      setLeads(fetchedLeads);
+      
+      // ✅ NEW: Filter out leads where the current supplier is already negotiating (excludedSellerId)
+      const filteredLeads = fetchedLeads.filter(lead => lead.excludedSellerId !== user?.uid);
+      
+      setLeads(filteredLeads);
     });
 
-    // ✅ NEW: Fetch user's quotes to calculate usage this month
     if (user?.uid) {
       const qQuotes = query(collection(db, 'supplierQuotes'), where('supplierId', '==', user.uid));
       const unsubQuotes = onSnapshot(qQuotes, (snapshot) => {
@@ -96,7 +98,6 @@ export default function SellerLiveLeadsScreen() {
         </View>
       </Card.Content>
       <Card.Actions>
-        {/* ✅ FEATURE GATE: FOMO Quota Logic */}
         {isPremium ? (
           <Button mode="contained" onPress={() => setSelectedLead(item)}>Submit Quote</Button>
         ) : quotesUsedThisMonth < 3 ? (
@@ -106,7 +107,7 @@ export default function SellerLiveLeadsScreen() {
         ) : (
           <Button 
             mode="contained" 
-            buttonColor="#F59E0B" // Gold Color
+            buttonColor="#F59E0B" 
             onPress={() => navigation.navigate('BusinessGrowth')}
           >
             👑 Upgrade to Quote

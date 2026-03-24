@@ -104,6 +104,7 @@ export default function ProductDetail() {
         buyerId: user.uid,
         buyerName: user.companyName || 'Buyer Company', 
         sellerId: product.sellerId || 'unknown', 
+        sellerName: product.sellerName || 'Verified Supplier', // ✅ FIXED: Capture seller name directly for Admin visibility
         targetQuantity: parseInt(rfqForm.targetQty),
         targetPrice: parseFloat(rfqForm.targetPrice),
         unit: unit,
@@ -129,7 +130,7 @@ export default function ProductDetail() {
       try {
         await addDoc(collection(db, 'broadcastLeads'), {
           originalOrderId: newRfqId,
-          sourceType: 'RFQ', // Helps the Admin know where this came from
+          sourceType: 'RFQ', 
           productId: product.id,
           productName: product.name,
           quantityRequired: parseInt(rfqForm.targetQty),
@@ -137,6 +138,7 @@ export default function ProductDetail() {
           deliveryRegion: rfqForm.pincode,
           targetPrice: parseFloat(rfqForm.targetPrice),
           status: 'OPEN',
+          excludedSellerId: product.sellerId, // ✅ HIDDEN FROM THE SELLER BEING NEGOTIATED WITH
           createdAt: new Date().toISOString()
         });
         console.log("Successfully broadcasted RFQ to Live Market.");
@@ -181,14 +183,12 @@ export default function ProductDetail() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
           style={styles.modalOverlay}
         >
-          {/* ✅ FIXED: Set maxHeight to ensure scrolling occurs when keyboard opens */}
           <View style={[styles.modalContent, { maxHeight: '90%' }]}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
               <Text variant="titleLarge" style={{fontWeight:'bold'}}>Request Custom Quote</Text>
               <IconButton icon="close" onPress={() => { Keyboard.dismiss(); setShowRfqModal(false); }} />
             </View>
             
-            {/* ✅ FIXED: Wrapped inputs in ScrollView to allow scrolling when keyboard is active */}
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{flexGrow: 1, paddingBottom: 20}}>
               <Text style={{color: '#666', marginBottom: 15, fontSize: 13}}>
                 Propose your desired quantity and target price directly to the supplier.
@@ -407,7 +407,6 @@ export default function ProductDetail() {
 
           <Divider style={styles.divider} />
 
-          {/* 🚀 UPGRADED 'HOW TO ORDER' SECTION */}
           <Text variant="titleMedium" style={styles.sectionTitle}>How to Order (B2B Flow)</Text>
           <View style={styles.qtyContainer}>
              <Text style={{fontSize: 13, color: '#1F2937', textAlign: 'center', marginBottom: 15, fontWeight: '500'}}>

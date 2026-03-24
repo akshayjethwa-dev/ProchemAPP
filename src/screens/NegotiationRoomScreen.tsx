@@ -15,6 +15,8 @@ export default function NegotiationRoomScreen() {
   const { user, viewMode } = useAppStore();
   
   const rfqId = route.params?.rfqId;
+  // ✅ FIXED: Detect if Admin is monitoring
+  const isAdminView = route.params?.isAdminView || user?.userType === 'admin';
 
   const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
   const [roomMessages, setRoomMessages] = useState<NegotiationMessage[]>([]);
@@ -66,7 +68,6 @@ export default function NegotiationRoomScreen() {
     );
   }
 
-  // ✅ Extract adminOffer using 'any' bypass to prevent interface TS errors if it isn't in types.ts yet
   const adminOffer = (activeRfq as any).adminOffer;
 
   const maskSensitiveInfo = (text: string) => {
@@ -155,7 +156,6 @@ export default function NegotiationRoomScreen() {
   const proceedToCheckout = async (price: number, qty: number, overrideSellerId?: string) => {
     setIsProcessing(true);
     try {
-      // If we accepted the Admin's sniped offer, we drop a graceful system message to end the chat with Supplier A
       if (overrideSellerId) {
         await addDoc(collection(db, 'messages'), {
           rfqId: activeRfq.id,
@@ -204,47 +204,71 @@ export default function NegotiationRoomScreen() {
     } else {
       Alert.alert('Confirm Custom Offer', `Do you agree to transact ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}?`, [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Agree & Checkout', 
-          onPress: () => proceedToCheckout(price, qty) 
-        }
+        { text: 'Agree & Checkout', onPress: () => proceedToCheckout(price, qty) }
       ]);
     }
   };
 
-  // ✅ NEW: Direct handler for the Admin Offer Banner
   const acceptAdminOffer = () => {
     if (!adminOffer) return;
     Alert.alert('Confirm Prochem Offer', `Accept verified supplier offer of ${adminOffer.quantity || activeRfq.targetQuantity} ${activeRfq.unit} at ₹${adminOffer.price} / ${activeRfq.unit}?`, [
       { text: 'Cancel', style: 'cancel' },
-      { 
-        text: 'Accept & Checkout', 
-        onPress: () => proceedToCheckout(adminOffer.price, adminOffer.quantity || activeRfq.targetQuantity, adminOffer.supplierId) 
-      }
+      { text: 'Accept & Checkout', onPress: () => proceedToCheckout(adminOffer.price, adminOffer.quantity || activeRfq.targetQuantity, adminOffer.supplierId) }
     ]);
   };
 
   const renderMessage = ({ item }: { item: NegotiationMessage }) => {
-    // Treat "system" messages as incoming (gray side) but with standard UI
     const isMe = item.senderId === user?.uid;
     const isSystem = item.senderId === 'system';
     
+    // ✅ NEW ADMIN UI: If admin is viewing, group Buyer to left and Seller to Right, keeping names visible.
+    const alignRight = isAdminView ? (!item.isBuyer && !isSystem) : isMe;
+    
+    let bubbleStyle: any = styles.msgBubbleThem;
+    let textStyle: any = { color: '#1E293B' };
+    
+    if (isAdminView) {
+       if (isSystem) {
+           bubbleStyle = { ...styles.msgBubbleThem, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' };
+           textStyle = { fontStyle: 'italic', color: '#64748B' };
+       } else if (item.isBuyer) {
+           bubbleStyle = { ...styles.msgBubbleThem, backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' };
+       } else {
+           bubbleStyle = { ...styles.msgBubbleThem, backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' };
+       }
+    } else {
+       if (isSystem) {
+           bubbleStyle = { ...styles.msgBubbleThem, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' };
+           textStyle = { fontStyle: 'italic', color: '#64748B' };
+       } else if (isMe) {
+           bubbleStyle = styles.msgBubbleMe;
+           textStyle = { color: 'white' };
+       }
+    }
+
     return (
-      <View style={[styles.msgWrapper, isMe ? styles.msgRight : styles.msgLeft]}>
-        {!isMe && <Avatar.Icon size={32} icon={isSystem ? "robot-outline" : (item.isBuyer ? "account" : "store")} style={{marginRight: 8, backgroundColor: '#E2E8F0'}} color="#64748B" />}
+      <View style={[styles.msgWrapper, alignRight ? styles.msgRight : styles.msgLeft]}>
+        {!alignRight && <Avatar.Icon size={32} icon={isSystem ? "robot-outline" : (item.isBuyer ? "account" : "store")} style={{marginRight: 8, backgroundColor: '#E2E8F0'}} color="#64748B" />}
         
-        <View style={[styles.msgBubble, isMe ? styles.msgBubbleMe : styles.msgBubbleThem, isSystem && { borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' }]}>
-          <Text style={[{color: isMe ? 'white' : '#1E293B'}, isSystem && { fontStyle: 'italic', color: '#64748B' }]}>{item.text}</Text>
+        <View style={[styles.msgBubble, bubbleStyle]}>
+          {/* ✅ FIXED: Inject Real Buyer/Supplier Identity for Admin */}
+          {isAdminView && !isSystem && (
+            <Text style={{ fontSize: 10, fontWeight: 'bold', color: item.isBuyer ? '#1D4ED8' : '#15803D', marginBottom: 2 }}>
+              {item.isBuyer ? (activeRfq.buyerName || 'Buyer') : (activeRfq.sellerName || 'Supplier')}
+            </Text>
+          )}
+
+          <Text style={textStyle}>{item.text}</Text>
           
           {item.isOffer && (item.proposedPrice || item.proposedQty) && (
-             <Card style={{marginTop: 10, backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
+             <Card style={{marginTop: 10, backgroundColor: (!isAdminView && isMe) ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
                <Card.Content style={{padding: 10}}>
-                 <Text style={{fontWeight: 'bold', color: isMe ? 'white' : '#0F172A'}}>
-                   {isMe ? 'You Offered:' : 'Custom Offer:'} 
+                 <Text style={{fontWeight: 'bold', color: (!isAdminView && isMe) ? 'white' : '#0F172A'}}>
+                   {isAdminView ? 'Proposed Offer:' : (isMe ? 'You Offered:' : 'Custom Offer:')} 
                    {'\n'}{item.proposedQty || activeRfq.targetQuantity} {activeRfq.unit} at ₹{item.proposedPrice} / {activeRfq.unit}
                  </Text>
                  
-                 {!isMe && viewMode === 'buyer' && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
+                 {!isAdminView && !isMe && viewMode === 'buyer' && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
                     <Button 
                       mode="contained" 
                       compact 
@@ -271,8 +295,12 @@ export default function NegotiationRoomScreen() {
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={{flex: 1}}>
            <Text variant="titleMedium" style={{fontWeight: 'bold'}}>{activeRfq.productName}</Text>
+           {/* ✅ FIXED: Header unmasks the true users when Admin is viewing */}
            <Text style={{fontSize: 12, color: '#666'}}>
-             Chat with {viewMode === 'buyer' ? 'Prochem Supplier' : 'Verified Buyer'}
+             {isAdminView 
+                ? `Buyer: ${activeRfq.buyerName || 'User'}  •  Supplier: ${activeRfq.sellerName || 'Supplier'}`
+                : `Chat with ${viewMode === 'buyer' ? 'Prochem Supplier' : 'Verified Buyer'}`
+             }
            </Text>
         </View>
         <Chip style={{backgroundColor: activeRfq.status === 'CONVERTED' ? '#DCFCE7' : '#FEF9C3'}}>
@@ -282,7 +310,6 @@ export default function NegotiationRoomScreen() {
         </Chip>
       </View>
 
-      {/* ✅ APPROACH 2: Sleek Admin Offer Banner (Visible only to the Buyer) */}
       {adminOffer && viewMode === 'buyer' && activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
         <Card style={{ margin: 10, backgroundColor: '#ECFDF5', borderColor: '#10B981', borderWidth: 1 }}>
            <Card.Content style={{ padding: 12 }}>
@@ -324,7 +351,8 @@ export default function NegotiationRoomScreen() {
           inverted={false} 
         />
 
-        {activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
+        {/* Hide Input area for Admins */}
+        {!isAdminView && activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
           <View>
             {viewMode === 'seller' && (
               <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>

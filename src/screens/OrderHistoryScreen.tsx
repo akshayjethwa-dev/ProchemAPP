@@ -60,7 +60,7 @@ export default function OrderHistoryScreen() {
 
   // ✅ UPDATED: Open WhatsApp for Invoice Request
   const handleRequestInvoice = async (order: Order) => {
-    const phoneNumber = '+918460852903'; // REPLACE with your Admin/Support WhatsApp Number
+    const phoneNumber = '+917984856652'; // REPLACE with your Admin/Support WhatsApp Number
     const message = `Hello, I need the invoice for Order #${order.id.slice(0,6).toUpperCase()}.`;
     const url = `whatsapp://send?text=${encodeURIComponent(message)}&phone=${phoneNumber}`;
 

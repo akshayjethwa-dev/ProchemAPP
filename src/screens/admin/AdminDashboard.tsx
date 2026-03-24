@@ -221,20 +221,7 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        {/* ✅ NEW: Temporary System Actions Section */}
-        <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold', color: '#EF4444'}}>System Actions (One-Time)</Text>
-        <Button 
-          mode="contained" 
-          buttonColor="#EF4444" 
-          icon="database-sync"
-          loading={isBackfilling}
-          disabled={isBackfilling}
-          onPress={handleBackfillUsers}
-          style={{ marginBottom: 40 }} // Extra bottom padding for scroll space
-        >
-          Run User Data Migration 
-        </Button>
-
+        
       </ScrollView>
     </SafeAreaView>
   );

@@ -279,6 +279,7 @@ export interface BroadcastLead {
   id?: string;
   originalOrderId?: string; // Optional: if this was generated from a failed order
   productName: string;
+  excludedSellerId?: string;
   casNumber?: string;
   purity?: string;
   quantityRequired: string;
