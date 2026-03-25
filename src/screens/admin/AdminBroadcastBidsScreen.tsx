@@ -33,19 +33,18 @@ export default function AdminBroadcastBidsScreen() {
       const leadRef = doc(db, 'broadcastLeads', selectedQuote!.leadId);
       const leadSnap = await getDoc(leadRef);
       const leadData = leadSnap.data();
-      const originalReqId = leadData?.originalOrderId;
-      const sourceType = leadData?.sourceType; // We added this during creation
+      const originalReqId = leadData?.originalOrderId || leadData?.rfqId;
+      const sourceType = leadData?.sourceType; 
 
       // 2. Mark Quote as Accepted
       await updateDoc(doc(db, 'supplierQuotes', selectedQuote!.id!), { status: 'ACCEPTED' });
       
-      // 3. Close the Live Lead
-      await updateDoc(leadRef, { status: 'CLOSED' });
+      // ❌ REMOVED: We DO NOT close the Live Lead here anymore. 
+      // The lead stays 'OPEN' on the Live Market until the Buyer officially accepts it.
 
-      // 4. Handle based on where the requirement originated from
+      // 3. Handle based on where the requirement originated from
       if (originalReqId) {
-        if (sourceType === 'RFQ') {
-           // ✅ APPROACH 2: Attach the Admin Offer directly to the RFQ document (Hidden from Seller Chat)
+        if (sourceType === 'RFQ' || leadData?.rfqId) {
            await updateDoc(doc(db, 'rfqs', originalReqId), {
               adminOffer: {
                  price: Number(adminFinalPrice),
@@ -57,12 +56,11 @@ export default function AdminBroadcastBidsScreen() {
            });
 
         } else {
-           // ✅ REGULAR CUSTOM REQUIREMENT: Update the Buyer's Custom Requirement to 'QUOTED'
            await updateDoc(doc(db, 'customRequirements', originalReqId), {
              status: 'QUOTED',
              quotedPrice: Number(adminFinalPrice),
              quotedSupplierId: selectedQuote!.supplierId,
-             quotedSupplierName: selectedQuote!.supplierName // Kept hidden from buyer until payment if you wish
+             quotedSupplierName: selectedQuote!.supplierName 
            });
         }
       }

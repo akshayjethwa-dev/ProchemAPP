@@ -1,3 +1,4 @@
+// src/screens/SellerLiveLeadsScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet, Alert } from 'react-native';
 import { Text, Card, Button, Portal, Modal, TextInput, useTheme } from 'react-native-paper';
@@ -5,14 +6,18 @@ import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'f
 import { useNavigation } from '@react-navigation/native';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
-import { BroadcastLead } from '../types';
+import { BroadcastLead, RFQ } from '../types';
 
 export default function SellerLiveLeadsScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const { user } = useAppStore();
   
+  // We maintain raw leads and active RFQs in state separately
+  const [rawLeads, setRawLeads] = useState<BroadcastLead[]>([]);
+  const [activeRfqs, setActiveRfqs] = useState<RFQ[]>([]);
   const [leads, setLeads] = useState<BroadcastLead[]>([]);
+  
   const [selectedLead, setSelectedLead] = useState<BroadcastLead | null>(null);
   
   const [quotesUsedThisMonth, setQuotesUsedThisMonth] = useState(0);
@@ -25,48 +30,100 @@ export default function SellerLiveLeadsScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Fetch OPEN leads from the Live Market
+    if (!user?.uid) return;
+
+    // 1. Fetch OPEN leads from the Live Market
     const qLeads = query(collection(db, 'broadcastLeads'), where('status', '==', 'OPEN'));
     const unsubLeads = onSnapshot(qLeads, (snapshot) => {
       const fetchedLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead));
-      
-      // ✅ NEW: Filter out leads where the current supplier is already negotiating (excludedSellerId)
-      const filteredLeads = fetchedLeads.filter(lead => lead.excludedSellerId !== user?.uid);
-      
-      setLeads(filteredLeads);
+      setRawLeads(fetchedLeads);
     });
 
-    if (user?.uid) {
-      const qQuotes = query(collection(db, 'supplierQuotes'), where('supplierId', '==', user.uid));
-      const unsubQuotes = onSnapshot(qQuotes, (snapshot) => {
-        const now = new Date();
-        const thisMonthQuotes = snapshot.docs.filter(doc => {
-          const data = doc.data();
-          if (!data.createdAt) return false;
-          // Handle both Firestore Timestamp and ISO Strings
-          const dateObj = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-          return dateObj.getMonth() === now.getMonth() && dateObj.getFullYear() === now.getFullYear();
-        });
-        setQuotesUsedThisMonth(thisMonthQuotes.length);
-      });
-      return () => { unsubLeads(); unsubQuotes(); };
-    }
+    // 2. Fetch the current Seller's Active RFQs
+    const qRfqs = query(collection(db, 'rfqs'), where('sellerId', '==', user.uid));
+    const unsubRfqs = onSnapshot(qRfqs, (snapshot) => {
+      const rfqs = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as RFQ))
+        // Only consider RFQs that are currently in an active state
+        .filter(rfq => rfq.status === 'PENDING' || rfq.status === 'NEGOTIATING');
+      setActiveRfqs(rfqs);
+    });
 
-    return () => unsubLeads();
+    // 3. Fetch Quote Limits
+    const qQuotes = query(collection(db, 'supplierQuotes'), where('supplierId', '==', user.uid));
+    const unsubQuotes = onSnapshot(qQuotes, (snapshot) => {
+      const now = new Date();
+      const thisMonthQuotes = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        if (!data.createdAt) return false;
+        const dateObj = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+        return dateObj.getMonth() === now.getMonth() && dateObj.getFullYear() === now.getFullYear();
+      });
+      setQuotesUsedThisMonth(thisMonthQuotes.length);
+    });
+
+    return () => { 
+      unsubLeads(); 
+      unsubRfqs(); 
+      unsubQuotes(); 
+    };
   }, [user?.uid]);
 
+  // Compute final visible leads by cross-referencing with active RFQs
+  useEffect(() => {
+    const filtered = rawLeads.filter(lead => {
+      // 1. Check explicit backend exclusions
+      if (lead.excludedSellerId === user?.uid) return false;
+      
+      // ✅ FIX: Verify user.uid exists before passing it to includes()
+      if (user?.uid && lead.excludedSellerIds && lead.excludedSellerIds.includes(user.uid)) {
+        return false;
+      }
+
+      // 2. Cross-reference with the seller's active RFQs
+      const isAlreadyNegotiating = activeRfqs.some(rfq => {
+        // Direct ID match (if the backend sets rfqId or originalOrderId)
+        if (lead.rfqId && lead.rfqId === rfq.id) return true;
+        if (lead.originalOrderId && lead.originalOrderId === rfq.id) return true;
+
+        // Heuristic fallback match: If product name and target quantity match exactly,
+        // it's highly likely to be the same underlying buyer request
+        if (
+          rfq.productName.toLowerCase() === lead.productName.toLowerCase() &&
+          String(rfq.targetQuantity) === String(lead.quantityRequired)
+        ) {
+          return true;
+        }
+
+        return false;
+      });
+
+      // Show the lead ONLY if they aren't already negotiating it
+      return !isAlreadyNegotiating;
+    });
+
+    setLeads(filtered);
+  }, [rawLeads, activeRfqs, user?.uid]);
+
   const submitQuote = async () => {
+    // ✅ FIX: Ensure we have the required IDs so we don't pass undefined to Firestore
+    if (!user?.uid || !selectedLead?.id) {
+      Alert.alert('Error', 'Missing user or lead information.');
+      return;
+    }
+
     if (!price || !quantity || !dispatchDays) {
       Alert.alert('Error', 'Please fill all fields to submit your quote.');
       return;
     }
+
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, 'supplierQuotes'), {
-        leadId: selectedLead?.id,
-        productName: selectedLead?.productName,
-        supplierId: user?.uid,
-        supplierName: user?.companyName || 'Verified Supplier',
+        leadId: selectedLead.id,
+        productName: selectedLead.productName,
+        supplierId: user.uid,
+        supplierName: user.companyName || 'Verified Supplier',
         pricePerUnit: Number(price),
         availableQuantity: quantity,
         dispatchDays: dispatchDays,
@@ -75,7 +132,9 @@ export default function SellerLiveLeadsScreen() {
       });
       Alert.alert('Success', 'Your quote has been sent to the Admin.');
       setSelectedLead(null);
-      setPrice(''); setQuantity(''); setDispatchDays('');
+      setPrice(''); 
+      setQuantity(''); 
+      setDispatchDays('');
     } catch (error) {
       Alert.alert('Error', 'Failed to submit quote.');
     } finally {
@@ -135,7 +194,7 @@ export default function SellerLiveLeadsScreen() {
           <Text variant="titleLarge" style={{ marginBottom: 15, fontWeight: 'bold' }}>Quote for {selectedLead?.productName}</Text>
           
           <TextInput
-            label={`Price per ${selectedLead?.unit} (₹)`}
+            label={`Price per ${selectedLead?.unit || 'Unit'} (₹)`}
             value={price}
             onChangeText={setPrice}
             keyboardType="numeric"

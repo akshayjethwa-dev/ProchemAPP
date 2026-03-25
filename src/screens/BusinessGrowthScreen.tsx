@@ -20,7 +20,7 @@ import { Product } from '../types';
 const { width } = Dimensions.get('window');
 
 const RAZORPAY_LINK = 'https://razorpay.me/@aapacapitalprivatelimited';
-const WHATSAPP_NUMBER = '917984856652'; // 🔁 Replace with your actual WhatsApp business number
+const WHATSAPP_NUMBER = '917984856652'; 
 
 const PLANS = {
   standard: {
@@ -362,7 +362,6 @@ function UpgradePaymentModal({
     const userId = user?.uid || 'N/A';
     const userName = user?.companyName || user?.businessName || 'User';
 
-
     const userEmail = user?.email || 'N/A';
     const phone = user?.phone || 'N/A';
     const message =
@@ -389,12 +388,10 @@ function UpgradePaymentModal({
       <View style={upgradeStyles.overlay}>
         <View style={upgradeStyles.sheet}>
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-            {/* Close Button */}
             <TouchableOpacity style={upgradeStyles.closeBtn} onPress={onClose}>
               <MaterialCommunityIcons name="close" size={20} color="#64748B" />
             </TouchableOpacity>
 
-            {/* Header */}
             <View style={{ alignItems: 'center', marginBottom: 16 }}>
               <View style={upgradeStyles.shieldIcon}>
                 <MaterialCommunityIcons name="shield-check" size={30} color="#004AAD" />
@@ -405,7 +402,6 @@ function UpgradePaymentModal({
               </Text>
             </View>
 
-            {/* Plan Details */}
             <View style={upgradeStyles.detailsBox}>
               <View style={upgradeStyles.detailRow}>
                 <MaterialCommunityIcons name="calendar-range" size={18} color="#004AAD" />
@@ -419,7 +415,6 @@ function UpgradePaymentModal({
               ))}
             </View>
 
-            {/* Company Note */}
             <View style={upgradeStyles.noteBox}>
               <MaterialCommunityIcons name="information-outline" size={18} color="#004AAD" style={{ marginTop: 2 }} />
               <Text style={upgradeStyles.noteText}>
@@ -430,7 +425,6 @@ function UpgradePaymentModal({
               </Text>
             </View>
 
-            {/* Step 2 – SS Reminder shown FIRST so user knows before paying */}
             <View style={[upgradeStyles.stepBox, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
               <Text style={[upgradeStyles.stepLabel, { color: '#16A34A' }]}>STEP 2 — Before You Pay</Text>
               <Text style={upgradeStyles.stepDescription}>
@@ -439,7 +433,6 @@ function UpgradePaymentModal({
               </Text>
             </View>
 
-            {/* Step 1 – Pay Now */}
             <View style={upgradeStyles.stepBox}>
               <Text style={upgradeStyles.stepLabel}>STEP 1</Text>
               <Text style={upgradeStyles.stepDescription}>
@@ -451,7 +444,6 @@ function UpgradePaymentModal({
               </TouchableOpacity>
             </View>
 
-            {/* Step 2 – Send Receipt */}
             <View style={[upgradeStyles.stepBox, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
               <Text style={[upgradeStyles.stepLabel, { color: '#16A34A' }]}>STEP 2</Text>
               <Text style={upgradeStyles.stepDescription}>
@@ -484,6 +476,7 @@ function SalesPitchUI() {
   const [activeTab, setActiveTab] = useState<'buyers' | 'sellers'>('buyers');
   const [selectedPlan, setSelectedPlan] = useState<keyof typeof PLANS | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showTnCModal, setShowTnCModal] = useState(false); // ✅ State for T&C Modal
 
   const buyerFeatures = [
     { title: 'Compare products with 5+ verified companies', isReady: true },
@@ -575,6 +568,22 @@ function SalesPitchUI() {
               </View>
             ))}
           </View>
+        </View>
+
+        {/* ✅ NEW: 100% Growth Guarantee Card */}
+        <View style={{ paddingHorizontal: 20, marginTop: 25 }}>
+          <Surface style={styles.guaranteeCard} elevation={2}>
+            <View style={styles.guaranteeHeader}>
+              <MaterialCommunityIcons name="shield-star" size={28} color="#004AAD" />
+              <Text style={styles.guaranteeTitle}>100% Growth Guarantee</Text>
+            </View>
+            <Text style={styles.guaranteeText}>
+              If you do not achieve business growth within the financial year with Prochem, we guarantee a full refund of your fees.
+            </Text>
+            <TouchableOpacity onPress={() => setShowTnCModal(true)} style={{ alignSelf: 'flex-start' }}>
+              <Text style={styles.guaranteeLink}>*Terms & Conditions Apply</Text>
+            </TouchableOpacity>
+          </Surface>
         </View>
 
         {/* Plan Selection */}
@@ -685,12 +694,56 @@ function SalesPitchUI() {
         </Button>
       </Surface>
 
-      {/* Upgrade Payment Modal */}
       <UpgradePaymentModal
         visible={showUpgradeModal}
         plan={selectedPlan ? PLANS[selectedPlan] : null}
         onClose={() => setShowUpgradeModal(false)}
       />
+
+      {/* ✅ NEW: Terms & Conditions Modal */}
+      <Portal>
+        <Modal visible={showTnCModal} onDismiss={() => setShowTnCModal(false)} contentContainerStyle={styles.tcModalContent}>
+          <Text variant="titleLarge" style={{ fontWeight: 'bold', color: '#1E293B', marginBottom: 15 }}>
+            Refund Guarantee Terms
+          </Text>
+          <Text style={{ color: '#475569', fontSize: 14, marginBottom: 15, lineHeight: 20 }}>
+            To qualify for the full refund guarantee, your business must maintain the following standards throughout the financial year:
+          </Text>
+
+          <View style={styles.tcPoint}>
+            <MaterialCommunityIcons name="check-circle" size={20} color="#004AAD" style={{ marginTop: 2, marginRight: 10 }} />
+            <Text style={styles.tcPointText}>
+              <Text style={{ fontWeight: 'bold' }}>Active Usage Required:</Text> Consistent engagement with the platform and market leads.
+            </Text>
+          </View>
+
+          <View style={styles.tcPoint}>
+            <MaterialCommunityIcons name="check-circle" size={20} color="#004AAD" style={{ marginTop: 2, marginRight: 10 }} />
+            <Text style={styles.tcPointText}>
+              <Text style={{ fontWeight: 'bold' }}>Complete Product Listing:</Text> Accurate, detailed, and up-to-date inventory and specifications.
+            </Text>
+          </View>
+
+          <View style={styles.tcPoint}>
+            <MaterialCommunityIcons name="check-circle" size={20} color="#004AAD" style={{ marginTop: 2, marginRight: 10 }} />
+            <Text style={styles.tcPointText}>
+              <Text style={{ fontWeight: 'bold' }}>Timely Response:</Text> Inquiries and RFQs must be addressed within a 24–48 hour window.
+            </Text>
+          </View>
+
+          <View style={styles.tcPoint}>
+            <MaterialCommunityIcons name="check-circle" size={20} color="#004AAD" style={{ marginTop: 2, marginRight: 10 }} />
+            <Text style={styles.tcPointText}>
+              <Text style={{ fontWeight: 'bold' }}>Competitive Pricing:</Text> Rates offered must align with current live market standards.
+            </Text>
+          </View>
+
+          <Button mode="contained" onPress={() => setShowTnCModal(false)} style={{ marginTop: 25, backgroundColor: '#004AAD' }}>
+            I Understand
+          </Button>
+        </Modal>
+      </Portal>
+
     </SafeAreaView>
   );
 }
@@ -724,6 +777,19 @@ const styles = StyleSheet.create({
   featureText: { fontSize: 15, color: '#334155', lineHeight: 22, fontWeight: '500' },
   comingSoonBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4, alignSelf: 'flex-start' },
   comingSoonText: { color: '#D97706', fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+  
+  // ✅ Guarantee Card Styles
+  guaranteeCard: { backgroundColor: '#F0F9FF', borderRadius: 16, padding: 20, borderColor: '#BAE6FD', borderWidth: 1 },
+  guaranteeHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  guaranteeTitle: { fontSize: 18, fontWeight: 'bold', color: '#004AAD', marginLeft: 8 },
+  guaranteeText: { fontSize: 14, color: '#334155', lineHeight: 22, marginBottom: 12 },
+  guaranteeLink: { fontSize: 12, color: '#004AAD', fontWeight: 'bold', textDecorationLine: 'underline' },
+  
+  // ✅ T&C Modal Styles
+  tcModalContent: { backgroundColor: 'white', padding: 24, margin: 20, borderRadius: 16, elevation: 10 },
+  tcPoint: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  tcPointText: { flex: 1, fontSize: 14, color: '#334155', lineHeight: 20 },
+
   pricingSection: { paddingHorizontal: 20, marginTop: 30, marginBottom: 20 },
   pricingHeader: { fontWeight: 'bold', textAlign: 'center', color: '#1E293B', marginBottom: 20 },
   pricingCard: { backgroundColor: 'white', marginBottom: 16, borderColor: '#E2E8F0', borderRadius: 16 },

@@ -1,9 +1,11 @@
+// src/screens/NegotiationRoomScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView, Keyboard } from 'react-native';
 import { Text, TextInput, IconButton, Avatar, Button, Card, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { doc, collection, query, where, onSnapshot, updateDoc, addDoc } from 'firebase/firestore'; 
+// ✅ ADDED getDocs to find and close the associated broadcast lead
+import { doc, collection, query, where, onSnapshot, updateDoc, addDoc, getDoc, getDocs } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { RFQ, NegotiationMessage } from '../types';
@@ -15,7 +17,6 @@ export default function NegotiationRoomScreen() {
   const { user, viewMode } = useAppStore();
   
   const rfqId = route.params?.rfqId;
-  // ✅ FIXED: Detect if Admin is monitoring
   const isAdminView = route.params?.isAdminView || user?.userType === 'admin';
 
   const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
@@ -28,6 +29,9 @@ export default function NegotiationRoomScreen() {
   const [offerPrice, setOfferPrice] = useState('');
   const [offerQuantity, setOfferQuantity] = useState('');
   const [offerModalVisible, setOfferModalVisible] = useState(false);
+
+  // ✅ NEW STATE: Store the actual fetched names and numbers for Admin visibility
+  const [participantsInfo, setParticipantsInfo] = useState<{buyerName: string, sellerName: string, buyerPhone?: string, sellerPhone?: string}>({ buyerName: 'Buyer', sellerName: 'Supplier' });
 
   useEffect(() => {
     if (!rfqId) return;
@@ -50,6 +54,49 @@ export default function NegotiationRoomScreen() {
       unsubMessages();
     };
   }, [rfqId]);
+
+  // ✅ NEW EFFECT: If Admin is viewing, fetch the actual User profiles to get Names & Phones
+  useEffect(() => {
+    if (!activeRfq || !isAdminView) return;
+
+    const fetchParticipants = async () => {
+      try {
+        let bName = activeRfq.buyerName || 'Buyer';
+        let sName = activeRfq.sellerName || 'Supplier';
+        let bPhone = '';
+        let sPhone = '';
+
+        if (activeRfq.buyerId) {
+          const bSnap = await getDoc(doc(db, 'users', activeRfq.buyerId));
+          if (bSnap.exists()) {
+            const data = bSnap.data();
+            bName = data.companyName || data.businessName || data.name || bName;
+            bPhone = data.phone || data.phoneNumber || '';
+          }
+        }
+
+        if (activeRfq.sellerId) {
+          const sSnap = await getDoc(doc(db, 'users', activeRfq.sellerId));
+          if (sSnap.exists()) {
+            const data = sSnap.data();
+            sName = data.companyName || data.businessName || data.name || sName;
+            sPhone = data.phone || data.phoneNumber || '';
+          }
+        }
+
+        setParticipantsInfo({
+          buyerName: bName,
+          sellerName: sName,
+          buyerPhone: bPhone,
+          sellerPhone: sPhone
+        });
+      } catch (error) {
+        console.error("Error fetching participant info:", error);
+      }
+    };
+
+    fetchParticipants();
+  }, [activeRfq?.id, isAdminView]);
 
   if (loading) {
     return (
@@ -174,6 +221,27 @@ export default function NegotiationRoomScreen() {
         updatedAt: new Date().toISOString()
       });
 
+      // ✅ NEW: Close the Live Market Lead NOW that the buyer has officially accepted
+      try {
+        const leadsRef = collection(db, 'broadcastLeads');
+        
+        // Check for matches where it was linked via originalOrderId
+        const q1 = query(leadsRef, where('originalOrderId', '==', activeRfq.id), where('status', '==', 'OPEN'));
+        const snap1 = await getDocs(q1);
+        snap1.forEach(async (d) => {
+          await updateDoc(doc(db, 'broadcastLeads', d.id), { status: 'CLOSED' });
+        });
+        
+        // Check for matches where it was linked via rfqId
+        const q2 = query(leadsRef, where('rfqId', '==', activeRfq.id), where('status', '==', 'OPEN'));
+        const snap2 = await getDocs(q2);
+        snap2.forEach(async (d) => {
+          await updateDoc(doc(db, 'broadcastLeads', d.id), { status: 'CLOSED' });
+        });
+      } catch (leadError) {
+        console.error("Error closing broadcast lead:", leadError);
+      }
+
       const negotiatedItem = {
         id: `${activeRfq.productId}_rfq`,
         productId: activeRfq.productId,
@@ -221,7 +289,6 @@ export default function NegotiationRoomScreen() {
     const isMe = item.senderId === user?.uid;
     const isSystem = item.senderId === 'system';
     
-    // ✅ NEW ADMIN UI: If admin is viewing, group Buyer to left and Seller to Right, keeping names visible.
     const alignRight = isAdminView ? (!item.isBuyer && !isSystem) : isMe;
     
     let bubbleStyle: any = styles.msgBubbleThem;
@@ -251,10 +318,12 @@ export default function NegotiationRoomScreen() {
         {!alignRight && <Avatar.Icon size={32} icon={isSystem ? "robot-outline" : (item.isBuyer ? "account" : "store")} style={{marginRight: 8, backgroundColor: '#E2E8F0'}} color="#64748B" />}
         
         <View style={[styles.msgBubble, bubbleStyle]}>
-          {/* ✅ FIXED: Inject Real Buyer/Supplier Identity for Admin */}
+          {/* ✅ UPDATED: Inject Fetched Real Buyer/Supplier Identity and Phone for Admin */}
           {isAdminView && !isSystem && (
             <Text style={{ fontSize: 10, fontWeight: 'bold', color: item.isBuyer ? '#1D4ED8' : '#15803D', marginBottom: 2 }}>
-              {item.isBuyer ? (activeRfq.buyerName || 'Buyer') : (activeRfq.sellerName || 'Supplier')}
+              {item.isBuyer 
+                ? `${participantsInfo.buyerName} ${participantsInfo.buyerPhone ? `(${participantsInfo.buyerPhone})` : ''}` 
+                : `${participantsInfo.sellerName} ${participantsInfo.sellerPhone ? `(${participantsInfo.sellerPhone})` : ''}`}
             </Text>
           )}
 
@@ -263,8 +332,9 @@ export default function NegotiationRoomScreen() {
           {item.isOffer && (item.proposedPrice || item.proposedQty) && (
              <Card style={{marginTop: 10, backgroundColor: (!isAdminView && isMe) ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
                <Card.Content style={{padding: 10}}>
+                 {/* ✅ UPDATED: Clarify to the admin exactly WHO made the offer */}
                  <Text style={{fontWeight: 'bold', color: (!isAdminView && isMe) ? 'white' : '#0F172A'}}>
-                   {isAdminView ? 'Proposed Offer:' : (isMe ? 'You Offered:' : 'Custom Offer:')} 
+                   {isAdminView ? `Offer by ${item.isBuyer ? participantsInfo.buyerName : participantsInfo.sellerName}:` : (isMe ? 'You Offered:' : 'Custom Offer:')} 
                    {'\n'}{item.proposedQty || activeRfq.targetQuantity} {activeRfq.unit} at ₹{item.proposedPrice} / {activeRfq.unit}
                  </Text>
                  
@@ -295,10 +365,10 @@ export default function NegotiationRoomScreen() {
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={{flex: 1}}>
            <Text variant="titleMedium" style={{fontWeight: 'bold'}}>{activeRfq.productName}</Text>
-           {/* ✅ FIXED: Header unmasks the true users when Admin is viewing */}
+           {/* ✅ UPDATED: Header also strictly uses fetched Real Names */}
            <Text style={{fontSize: 12, color: '#666'}}>
              {isAdminView 
-                ? `Buyer: ${activeRfq.buyerName || 'User'}  •  Supplier: ${activeRfq.sellerName || 'Supplier'}`
+                ? `Buyer: ${participantsInfo.buyerName}  •  Supplier: ${participantsInfo.sellerName}`
                 : `Chat with ${viewMode === 'buyer' ? 'Prochem Supplier' : 'Verified Buyer'}`
              }
            </Text>
