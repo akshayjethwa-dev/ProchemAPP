@@ -41,5 +41,11 @@ yarn-error.*
 /android
 
 # Security
+.env.production
+.env.staging
 .env
 google-services.json
+
+# Firebase
+firebase-debug.log
+firebase-debug.*.log
