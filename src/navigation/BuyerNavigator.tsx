@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, Badge, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
-import { db } from '../config/firebase'; 
+import { db, auth } from '../config/firebase'; // Ensure auth is imported
 import { useAppStore } from '../store/appStore';
 
 import BuyerHome from '../screens/BuyerHome';
@@ -58,7 +58,9 @@ function BuyerTabs() {
   const [quotedRequirements, setQuotedRequirements] = useState(0);
 
   useEffect(() => {
-    if (!user?.uid) return;
+    // Wait until Firebase Auth actually confirms the user is logged in
+    const currentUser = auth.currentUser;
+    if (!user?.uid || !currentUser) return;
 
     // 1. Listen for standard RFQ negotiations
     const qRfq = query(
@@ -67,9 +69,15 @@ function BuyerTabs() {
       where('status', '==', 'NEGOTIATING') 
     );
 
-    const unsubRfq = onSnapshot(qRfq, (snapshot) => {
-      setActiveNegotiations(snapshot.docs.length);
-    });
+    const unsubRfq = onSnapshot(
+      qRfq, 
+      (snapshot) => {
+        setActiveNegotiations(snapshot.docs.length);
+      },
+      (error: any) => {
+        console.warn("RFQ Snapshot Error (Check Rules):", error.message);
+      }
+    );
 
     // 2. Listen for Custom Requirements that have received a Quote
     const qReq = query(
@@ -78,9 +86,15 @@ function BuyerTabs() {
       where('status', '==', 'QUOTED') 
     );
 
-    const unsubReq = onSnapshot(qReq, (snapshot) => {
-      setQuotedRequirements(snapshot.docs.length);
-    });
+    const unsubReq = onSnapshot(
+      qReq, 
+      (snapshot) => {
+        setQuotedRequirements(snapshot.docs.length);
+      },
+      (error: any) => {
+        console.warn("Requirements Snapshot Error (Check Rules):", error.message);
+      }
+    );
 
     return () => {
       unsubRfq();

@@ -7,17 +7,15 @@ import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, writeBat
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 
-// Updated Types to include 'admin_broadcast' and 'imageUrl'
 interface Notification {
   id: string;
-  userId: string; 
-  type: 'ORDER' | 'PAYMENT' | 'SYSTEM' | 'PROMO' | 'ALERT' | 'admin_broadcast'; // ✅ Added
+  userId: string;
+  type: 'ORDER' | 'PAYMENT' | 'SYSTEM' | 'PROMO' | 'ALERT';
   title: string;
   message: string;
   read: boolean;
-  createdAt: string; 
-  data?: any; 
-  imageUrl?: string; // ✅ Added
+  createdAt: string;
+  data?: any;
 }
 
 export default function NotificationScreen() {
@@ -38,13 +36,22 @@ export default function NotificationScreen() {
       orderBy('createdAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
-      setNotifications(data);
-      setLoading(false);
-    });
+    // ✅ ADDED ERROR HANDLING TO LISTENER
+    const unsubscribe = onSnapshot(
+      q, 
+      (snapshot) => {
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+        setNotifications(data);
+        setLoading(false);
+      },
+      (error) => {
+        // This catches the permission-denied error so the app doesn't crash!
+        console.warn("Notification Snapshot Error:", error.message);
+        setLoading(false);
+      }
+    );
 
-    return unsubscribe;
+    return () => unsubscribe();
   }, [user]);
 
   const markAllRead = async () => {
@@ -52,7 +59,7 @@ export default function NotificationScreen() {
     try {
       const batch = writeBatch(db);
       notifications.forEach(n => {
-        if (!n.read && n.userId !== 'ALL') {
+        if (!n.read && n.userId !== 'ALL') { 
            const ref = doc(db, 'notifications', n.id);
            batch.update(ref, { read: true });
         }
@@ -64,18 +71,11 @@ export default function NotificationScreen() {
   };
 
   const handleNotificationPress = (item: Notification) => {
-    // 1. Mark as read (only if it's a specific user notification)
     if (!item.read && item.userId !== 'ALL') {
-      updateDoc(doc(db, 'notifications', item.id), { read: true });
+      updateDoc(doc(db, 'notifications', item.id), { read: true }).catch(err => console.warn(err));
     }
-
-    // 2. Navigate based on type
     if (item.type === 'ORDER' && item.data?.orderId) {
        navigation.navigate('OrderTracking', { orderId: item.data.orderId });
-    } 
-    // ✅ NEW: Handle Admin Broadcasts or Generic Messages
-    else if (item.type === 'admin_broadcast' || item.type === 'PROMO' || item.type === 'SYSTEM') {
-       navigation.navigate('NotificationDetail', { notification: item });
     }
   };
 
@@ -83,9 +83,8 @@ export default function NotificationScreen() {
     switch (type) {
       case 'ORDER': return { icon: 'package-variant', color: '#2196F3', bg: '#E3F2FD' };
       case 'PAYMENT': return { icon: 'credit-card-check', color: '#4CAF50', bg: '#E8F5E9' };
-      case 'ALERT': return { icon: 'alert-circle', color: '#F44336', bg: '#FFEBEE' }; 
+      case 'ALERT': return { icon: 'alert-circle', color: '#F44336', bg: '#FFEBEE' };
       case 'PROMO': return { icon: 'ticket-percent', color: '#9C27B0', bg: '#F3E5F5' };
-      case 'admin_broadcast': return { icon: 'bullhorn', color: '#FF9800', bg: '#FFF3E0' }; // ✅ New Icon
       case 'SYSTEM': return { icon: 'cog', color: '#607D8B', bg: '#ECEFF1' };
       default: return { icon: 'bell', color: '#004AAD', bg: '#E3F2FD' };
     }
@@ -173,7 +172,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'white'
   },
-  unreadItem: { backgroundColor: '#F0F9FF' },
+  unreadItem: {
+    backgroundColor: '#F0F9FF' 
+  },
   iconBox: {
     width: 48,
     height: 48,

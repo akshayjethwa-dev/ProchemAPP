@@ -52,18 +52,22 @@ export const RootNavigator = () => {
             const userData = userDoc.data();
             setUser({ uid: u.uid, email: u.email || '', ...userData } as any);
           } else {
+            console.warn("User authenticated but document not found in Firestore.");
             setUser(null);
           }
-        } catch (error) {
-          console.error("Auth Error:", error);
+        } catch (error: any) {
+          console.warn("Firestore access denied when fetching user:", error.message);
           setUser(null);
+        } finally {
+          if (initializing) setInitializing(false);
         }
       } else {
         setUser(null);
+        if (initializing) setInitializing(false);
       }
-      if (initializing) setInitializing(false);
     });
-    return unsubscribe;
+    
+    return () => unsubscribe();
   }, []);
 
   if (initializing) {

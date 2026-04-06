@@ -58,23 +58,29 @@ export default function App() {
 
   // 🚀 Register for Push Notifications AND Sync to Firebase User
   const setupPushNotifications = async () => {
-    const token = await registerForPushNotificationsAsync();
-    
-    if (token) {
-      const auth = getAuth();
-      // Listen for when the user logs in, so we can save their specific token
-      onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          try {
-            await updateDoc(doc(db, 'users', user.uid), {
-              expoPushToken: token
-            });
-            console.log("Push token saved to user profile!");
-          } catch (error) {
-            console.error("Failed to save push token to user:", error);
+    try {
+      const token = await registerForPushNotificationsAsync();
+      
+      if (token) {
+        const auth = getAuth();
+        // Listen for when the user logs in, so we can save their specific token
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            try {
+              await updateDoc(doc(db, 'users', user.uid), {
+                expoPushToken: token
+              });
+              console.log("Push token saved to user profile!");
+            } catch (error: any) {
+              console.warn("Failed to save push token to user (Check Firestore Rules):", error.message);
+            }
           }
-        }
-      });
+        });
+        
+        return () => unsubscribe();
+      }
+    } catch (err) {
+      console.warn("Push notification setup failed:", err);
     }
   };
 
@@ -136,9 +142,11 @@ export default function App() {
           setStoreUrl(data.playStoreUrl || '');
         }
       }
-    } catch (error) {
-      console.error("Failed to check app version:", error);
+    } catch (error: any) {
+      // ⚠️ Caught the permission error so it won't crash the app
+      console.warn("Skipping version check (Firestore Permission Denied or Not Found):", error.message);
     } finally {
+      // Always stop the loading state so the app actually opens
       setCheckingVersion(false);
     }
   };
