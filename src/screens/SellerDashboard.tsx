@@ -1,21 +1,21 @@
 // src/screens/SellerDashboard.tsx
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, Dimensions, TouchableOpacity, Share, Alert } from 'react-native';
 import { Text, Card, ActivityIndicator, Button, useTheme, Avatar, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, getDocs, onSnapshot, limit, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, limit, orderBy, doc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { logoutUser } from '../services/authService';
-import { BroadcastLead } from '../types'; // Ensure this type is in your types/index.ts
+import { BroadcastLead } from '../types';
 
 const { width } = Dimensions.get('window');
 
 export default function SellerDashboard() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
-  const { user } = useAppStore();
+  const { user, updateUserCredits } = useAppStore();
   
   const [stats, setStats] = useState({ 
     activeOrders: 0, 
@@ -23,13 +23,15 @@ export default function SellerDashboard() {
     totalRevenue: 0 
   });
   const [loading, setLoading] = useState(true);
-  const [recentLeads, setRecentLeads] = useState<BroadcastLead[]>([]); // 🔥 State for Live Widget
+  const [recentLeads, setRecentLeads] = useState<BroadcastLead[]>([]);
+
+  // Check if the user is a Premium client
+  const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
 
   useEffect(() => {
     if (user) {
       loadSellerStats();
       
-      // 🔥 Real-time listener for the Live Market Widget (Top 3 recent leads)
       const leadsQuery = query(
         collection(db, 'broadcastLeads'), 
         where('status', '==', 'OPEN'),
@@ -49,11 +51,9 @@ export default function SellerDashboard() {
   const loadSellerStats = async () => {
     if (!user) return;
     try {
-      // 1. Count My Products
       const productsQ = query(collection(db, 'products'), where('sellerId', '==', user.uid));
       const productsSnap = await getDocs(productsQ);
       
-      // 2. Count My Active Orders & Revenue
       const ordersQ = query(collection(db, 'orders'), where('sellerId', '==', user.uid));
       const ordersSnap = await getDocs(ordersQ);
 
@@ -83,9 +83,46 @@ export default function SellerDashboard() {
     }
   };
 
+  const handleInviteSupplier = async () => {
+    try {
+      const result = await Share.share({
+        message: `Grow your chemical business on Prochem! Access live market requirements and get genuine buyers. Register as a supplier today: https://play.google.com/store/apps/details?id=com.prochem.app`,
+      });
+      
+      if (result.action === Share.sharedAction) {
+        if (user?.uid) {
+          // Only reward credits if the user is NOT premium
+          if (!isPremium) {
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+              liveQuoteCredits: increment(1)
+            });
+            
+            updateUserCredits({ 
+              // Fallback to 3 if undefined, since 3 is your free baseline
+              liveQuoteCredits: (user.liveQuoteCredits || 3) + 1 
+            });
+            
+            Alert.alert(
+              "Reward Unlocked! 🚀", 
+              "Thanks for sharing! You've earned 1 extra FREE Live Market Quote."
+            );
+          } else {
+            // Generic thank you for premium users
+            Alert.alert(
+              "Thank You! 🙏", 
+              "Thanks for helping grow the Prochem network!"
+            );
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error(error.message);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={{flex: 1}}>
           <Text variant="headlineSmall" style={{color:'white', fontWeight:'bold'}}>Dashboard</Text>
@@ -111,13 +148,13 @@ export default function SellerDashboard() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        
         <Text variant="titleMedium" style={styles.sectionTitle}>Overview</Text>
         
         {loading ? (
           <ActivityIndicator size="large" color="#004AAD" style={{marginVertical: 20}} />
         ) : (
           <View style={styles.grid}>
-            {/* Active Orders Card */}
             <Card style={styles.card} onPress={() => navigation.navigate('Orders')}>
               <Card.Content style={{alignItems:'center'}}>
                 <Text variant="displayMedium" style={{color: '#E65100', fontWeight:'bold'}}>{stats.activeOrders}</Text>
@@ -125,7 +162,6 @@ export default function SellerDashboard() {
               </Card.Content>
             </Card>
 
-            {/* Listings Card */}
             <Card style={styles.card} onPress={() => navigation.navigate('MyListings')}>
               <Card.Content style={{alignItems:'center'}}>
                 <Text variant="displayMedium" style={{color: '#004AAD', fontWeight:'bold'}}>{stats.totalProducts}</Text>
@@ -133,7 +169,6 @@ export default function SellerDashboard() {
               </Card.Content>
             </Card>
 
-            {/* Revenue Card (Full Width) */}
             <Card style={[styles.card, {width: '100%'}]}>
               <Card.Title 
                 title="Total Earnings" 
@@ -150,7 +185,6 @@ export default function SellerDashboard() {
           </View>
         )}
 
-        {/* 🔥 NEW: LIVE MARKET WIDGET 🔥 */}
         <View style={styles.sectionHeader}>
           <Text variant="titleMedium" style={styles.sectionTitle}>🔥 Live Market Requirements</Text>
           <Button 
@@ -216,6 +250,27 @@ export default function SellerDashboard() {
            </Card>
         </View>
 
+        {/* 🚀 Banner moved to the end, after Quick Actions */}
+        <View style={styles.inviteBanner}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            {isPremium ? (
+              <>
+                 <Text style={styles.inviteTitle}>Grow the Network</Text>
+                 <Text style={styles.inviteText}>Invite other suppliers to join the Prochem marketplace.</Text>
+              </>
+            ) : (
+              <>
+                 <Text style={styles.inviteTitle}>Grow the Network</Text>
+                 <Text style={styles.inviteText}>Invite a supplier and get 1 extra FREE Live Market quote!</Text>
+                 <Text style={styles.creditsText}>Live Quotes Available: <Text style={{fontWeight: 'bold'}}>{user?.liveQuoteCredits || 3}</Text></Text>
+              </>
+            )}
+          </View>
+          <TouchableOpacity style={styles.inviteBtn} onPress={handleInviteSupplier}>
+            <Text style={styles.inviteBtnText}>Share</Text>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -259,5 +314,13 @@ const styles = StyleSheet.create({
   },
   actionGrid: { flexDirection: 'row', gap: 12 },
   actionCard: { flex: 1, elevation: 3, borderRadius: 16 },
-  actionContent: { alignItems:'center', paddingVertical: 20 }
+  actionContent: { alignItems:'center', paddingVertical: 20 },
+  
+  // Banner styles added back in to match the Buyer Dashboard's design language
+  inviteBanner: { flexDirection: 'row', backgroundColor: '#F3E8FF', padding: 16, borderRadius: 16, marginTop: 24, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#D8B4FE' },
+  inviteTitle: { color: '#7E22CE', fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
+  inviteText: { color: '#6B21A8', fontSize: 12, marginBottom: 6 },
+  creditsText: { color: '#9333EA', fontSize: 12, marginTop: 4 },
+  inviteBtn: { backgroundColor: '#9333EA', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  inviteBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 }
 });

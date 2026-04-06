@@ -1,9 +1,10 @@
+// src/screens/BuyerHome.tsx
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Dimensions, RefreshControl } from 'react-native';
+import { View, ScrollView, StyleSheet, Dimensions, RefreshControl, Share, Alert, TouchableOpacity } from 'react-native';
 import { Text, Searchbar, IconButton, Card, Button, useTheme, ActivityIndicator, Badge, Chip } from 'react-native-paper'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
+import { collection, query, where, onSnapshot, doc, updateDoc, increment } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { getProducts } from '../services/productService';
@@ -14,14 +15,16 @@ export default function BuyerHome() {
   const navigation = useNavigation<any>();
   const theme = useTheme();
   
-  const { user, products, setProducts } = useAppStore();
-  // Fetching cart/favorites count from the global store
+  const { user, products, setProducts, updateUserCredits } = useAppStore();
   const cartCount = useAppStore(state => state.cart?.length || 0);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0); 
+
+  // Check if the user is a Premium client
+  const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
 
   useEffect(() => {
     loadData();
@@ -56,11 +59,46 @@ export default function BuyerHome() {
     }
   };
 
-  // ✅ UPDATED: Boost products from Premium Sellers
+  const handleInviteBuyer = async () => {
+    try {
+      const result = await Share.share({
+        message: `Join Prochem - The ultimate B2B chemical marketplace! Get better prices and genuine suppliers. Sign up here: https://prochem.app/invite/${user?.uid}`,
+      });
+      
+      if (result.action === Share.sharedAction) {
+        if (user?.uid) {
+          // Only reward credits if the user is NOT premium
+          if (!isPremium) {
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+              premiumNegotiationCredits: increment(1)
+            });
+            
+            updateUserCredits({ 
+              premiumNegotiationCredits: (user.premiumNegotiationCredits || 0) + 1 
+            });
+            
+            Alert.alert(
+              "Reward Unlocked! 🎉", 
+              "Thanks for sharing! You've earned 1 FREE Premium Negotiation credit."
+            );
+          } else {
+            // Generic thank you for premium users
+            Alert.alert(
+              "Thank You! 🙏", 
+              "Thanks for helping grow the Prochem network!"
+            );
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error(error.message);
+    }
+  };
+
   const displayProducts = [...products]
     .filter(p => p.name?.toLowerCase().includes(searchQuery.toLowerCase()) && p.sellerId !== user?.uid)
     .sort((a, b) => {
-      // Products with sellerTier === 'GROWTH_PACKAGE' will sort to the top (1 vs 0)
       const aIsPremium = (a as any).sellerTier === 'GROWTH_PACKAGE' ? 1 : 0;
       const bIsPremium = (b as any).sellerTier === 'GROWTH_PACKAGE' ? 1 : 0;
       return bIsPremium - aIsPremium;
@@ -80,9 +118,7 @@ export default function BuyerHome() {
           </View>
           <View style={{flex:1}} />
           
-          {/* Action Icons: Favorites & Notifications */}
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {/* New Cart/Favorites Icon */}
             <View>
               <IconButton 
                 icon="heart-outline" 
@@ -96,7 +132,6 @@ export default function BuyerHome() {
               )}
             </View>
 
-            {/* Existing Notification Icon */}
             <View>
               <IconButton 
                 icon="bell" 
@@ -125,6 +160,7 @@ export default function BuyerHome() {
         contentContainerStyle={{paddingBottom: 20}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
       >
+
         <View style={styles.sectionHeader}>
           <Text variant="titleMedium" style={{fontWeight:'bold'}}>Trending Stock</Text>
           <Button mode="text" compact onPress={() => navigation.navigate('Categories')}>View All</Button>
@@ -135,7 +171,6 @@ export default function BuyerHome() {
         ) : displayProducts.length === 0 ? (
           <View style={{padding: 20, alignItems:'center'}}>
             <Text style={{color:'#999', marginBottom: 10}}>No products found matching "{searchQuery}".</Text>
-            {/* ✅ Show prompt immediately if they search for something we don't have */}
             <Button mode="contained" onPress={() => navigation.navigate('PostRequirement')} style={{marginTop: 10}}>
               Post Custom Requirement
             </Button>
@@ -156,7 +191,6 @@ export default function BuyerHome() {
                     ₹{p.pricePerUnit || p.price}/{p.unit || 'kg'}
                   </Text>
                   
-                  {/* ✅ FOMO VISUAL: Premium Badge for Dashboard */}
                   {p.readyToDispatch && (
                     <Chip 
                       compact 
@@ -173,7 +207,6 @@ export default function BuyerHome() {
           </View>
         )}
 
-        {/* ✅ Global "Post Requirement" Banner Lead Gen */}
         <Card style={styles.requirementCard} mode="contained" onPress={() => navigation.navigate('PostRequirement')}>
           <Card.Content style={styles.requirementContent}>
              <View style={{flex: 1}}>
@@ -188,6 +221,27 @@ export default function BuyerHome() {
           </Card.Content>
         </Card>
 
+        {/* 🚀 Banner moved below the Requirement Card */}
+        <View style={styles.inviteBanner}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            {isPremium ? (
+              <>
+                 <Text style={styles.inviteTitle}>Grow the Network</Text>
+                 <Text style={styles.inviteText}>Invite other buyers to join the Prochem marketplace.</Text>
+              </>
+            ) : (
+              <>
+                 <Text style={styles.inviteTitle}>Invite & Earn</Text>
+                 <Text style={styles.inviteText}>Invite a buyer and get 1 FREE negotiation on Premium Products.</Text>
+                 <Text style={styles.creditsText}>Available Credits: <Text style={{fontWeight: 'bold'}}>{user?.premiumNegotiationCredits || 0}</Text></Text>
+              </>
+            )}
+          </View>
+          <TouchableOpacity style={styles.inviteBtn} onPress={handleInviteBuyer}>
+            <Text style={styles.inviteBtnText}>Share</Text>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -198,7 +252,8 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#004AAD', padding: 16, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   searchBar: { height: 45, backgroundColor: 'white', borderRadius: 10 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 20 },
+  
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, justifyContent: 'space-between' },
   card: { width: '48%', marginBottom: 16, backgroundColor: 'white' },
   cardContent: { padding: 12, alignItems: 'center' },
@@ -219,5 +274,13 @@ const styles = StyleSheet.create({
   reqButton: {
     marginLeft: 10,
     borderRadius: 8
-  }
+  },
+
+  // Banner styles
+  inviteBanner: { flexDirection: 'row', backgroundColor: '#ECFDF5', padding: 16, borderRadius: 16, marginHorizontal: 16, marginTop: 20, alignItems: 'center', borderWidth: 1, borderColor: '#A7F3D0' },
+  inviteTitle: { color: '#047857', fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
+  inviteText: { color: '#065F46', fontSize: 12, marginBottom: 6 },
+  creditsText: { color: '#059669', fontSize: 12, marginTop: 4 },
+  inviteBtn: { backgroundColor: '#10B981', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  inviteBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 }
 });

@@ -45,6 +45,9 @@ export interface User {
   subscriptionTier?: SubscriptionTier; 
   subscriptionExpiry?: string | Date | null; // Can be a Firebase Timestamp string/Date
   paymentHistory?: string[]; // Array of transaction/reference IDs
+
+  premiumNegotiationCredits?: number; 
+  liveQuoteCredits?: number;
 }
 
 export interface UserProfile {

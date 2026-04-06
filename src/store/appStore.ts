@@ -39,6 +39,9 @@ interface AppState {
   stopImpersonating: () => void;
 
   upgradeUserToPremium: (expiryDate: string | Date, paymentRef: string) => void;
+  
+  // 🚀 THIS FIXES THE ERROR: Explicitly declaring the function in the AppState interface
+  updateUserCredits: (updates: Partial<User>) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -81,12 +84,10 @@ export const useAppStore = create<AppState>()(
       })),
       addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
 
-      // ✅ UPDATED: Dynamic Compare Limit based on Subscription Tier
       addToCompare: (product) => set((state) => {
         if (state.compareList.find((p) => p.id === product.id)) return state; 
         const newList = [...state.compareList, product];
         
-        // Feature Gate Check
         const maxItems = state.user?.subscriptionTier === 'GROWTH_PACKAGE' ? 5 : 3;
         
         if (newList.length > maxItems) newList.shift(); 
@@ -124,6 +125,12 @@ export const useAppStore = create<AppState>()(
             paymentHistory: [...(state.user.paymentHistory || []), paymentRef]
           }
         };
+      }),
+
+      // 🚀 The implementation of the function
+      updateUserCredits: (updates) => set((state) => {
+        if (!state.user) return state;
+        return { user: { ...state.user, ...updates } };
       }),
     }),
     {

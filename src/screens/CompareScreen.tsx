@@ -1,7 +1,10 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
+// src/screens/CompareScreen.tsx
+import React, { useState } from 'react';
+import { View, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
 import { Text, Button, IconButton, useTheme, Card, Divider } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
 
@@ -11,8 +14,8 @@ export default function CompareScreen() {
   const navigation = useNavigation<any>();
   const theme = useTheme();
   
-  // ✅ Fetch user to check premium status
-  const { compareList, removeFromCompare, addToCart, clearCompare, user } = useAppStore();
+  const { compareList, removeFromCompare, clearCompare, user, addRfq } = useAppStore();
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
   const maxCompare = isPremium ? 5 : 3;
@@ -31,16 +34,49 @@ export default function CompareScreen() {
     );
   }
 
-  const handleBuy = (product: Product) => {
-    addToCart({
-      ...product, 
-      id: product.id || '',
-      quantity: product.moq || 1,
-      pricePerUnit: product.pricePerUnit || product.price || 0,
-      unit: product.unit || 'kg',
-      sellerId: product.sellerId || 'unknown'
-    });
-    navigation.navigate('BuyerTabs', { screen: 'Cart' });
+  // 🚀 NEW: Instantly start a chat room for negotiation
+  const handleNegotiate = async (product: Product) => {
+    if (!user) {
+      Alert.alert("Error", "Please login to start negotiating.");
+      return;
+    }
+
+    setProcessingId(product.id);
+
+    try {
+      // 1. Create a Pending RFQ document to bind the chat room
+      const rfqData = {
+        productId: product.id,
+        productName: product.name,
+        buyerId: user.uid,
+        buyerName: user.companyName || user.businessName || 'Buyer',
+        sellerId: product.sellerId || 'unknown',
+        sellerName: product.sellerName || 'Supplier',
+        targetQuantity: product.moq || 1, // Default to MOQ or 1
+        targetPrice: product.pricePerUnit || product.price || 0, // Default to listed price
+        unit: product.unit || 'kg',
+        deliveryPincode: user.pincode || '',
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // 2. Add to Firestore
+      const docRef = await addDoc(collection(db, 'rfqs'), rfqData);
+      
+      // 3. Update local state
+      addRfq({ id: docRef.id, ...rfqData } as any);
+
+      setProcessingId(null);
+      
+      // 4. Navigate directly to the newly created chat room
+      navigation.navigate('NegotiationRoom', { rfqId: docRef.id });
+
+    } catch (error) {
+      console.error("Error creating negotiation room: ", error);
+      Alert.alert("Error", "Could not start negotiation. Please check your connection and try again.");
+      setProcessingId(null);
+    }
   };
 
   return (
@@ -67,8 +103,18 @@ export default function CompareScreen() {
               <Text style={[styles.productPrice, {color: theme.colors.primary}]}>
                 ₹{product.pricePerUnit || product.price} <Text style={{fontSize:12, color:'#64748B'}}>/{product.unit}</Text>
               </Text>
-              <Button mode="contained" compact style={{marginTop: 12, width: '100%'}} onPress={() => handleBuy(product)}>
-                Buy Now
+              
+              {/* 🚀 CHANGED TO NEGOTIATE BUTTON */}
+              <Button 
+                mode="contained" 
+                icon="handshake"
+                loading={processingId === product.id}
+                disabled={processingId !== null}
+                style={{marginTop: 12, width: '100%', backgroundColor: '#10B981'}} 
+                labelStyle={{fontSize: 13}}
+                onPress={() => handleNegotiate(product)}
+              >
+                Negotiate Live Price
               </Button>
             </View>
 
@@ -93,7 +139,6 @@ export default function CompareScreen() {
               </View>
               <View style={styles.specRow}>
                 <Text style={styles.specLabel}>Supplier</Text>
-                {/* Check if the product belongs to a Premium Seller */}
                 <Text style={[styles.specValue, {color: (product as any).sellerTier === 'GROWTH_PACKAGE' ? '#D97706' : '#16A34A', fontWeight: 'bold'}]}>
                   {(product as any).sellerTier === 'GROWTH_PACKAGE' ? '👑 Premium Seller' : '✓ Verified'}
                 </Text>
@@ -102,7 +147,6 @@ export default function CompareScreen() {
           </Card>
         ))}
 
-        {/* ✅ Dynamic Add Card based on Tier */}
         {compareList.length < maxCompare && (
            <Card style={styles.addCard} onPress={() => navigation.navigate('BuyerTabs', { screen: 'Categories' })}>
               <IconButton icon="plus-circle-outline" size={40} iconColor={theme.colors.primary} />
@@ -111,7 +155,6 @@ export default function CompareScreen() {
            </Card>
         )}
 
-        {/* ✅ Upsell Card if they hit the limit of 3 and are FREE */}
         {!isPremium && compareList.length === 3 && (
            <Card style={styles.upsellCard} onPress={() => navigation.navigate('BusinessGrowth')}>
               <IconButton icon="crown" size={40} iconColor="#D97706" />
