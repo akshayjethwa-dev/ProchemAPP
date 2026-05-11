@@ -1,8 +1,10 @@
+// src/screens/BusinessGrowthScreen.tsx
+
 import React, { useState, useEffect } from 'react';
 import {
   View, ScrollView, StyleSheet, TouchableOpacity, Dimensions,
   ActivityIndicator, FlatList, Alert, Linking, Modal as RNModal,
-  Platform // ✅ IMPORT PLATFORM
+  Platform
 } from 'react-native';
 import {
   Text, Card, Button, useTheme, Surface, Avatar, Chip,
@@ -367,21 +369,23 @@ function UpgradePaymentModal({
       const app = getApp();
       const functions = getFunctions(app, 'asia-south1'); 
       
-      // 1. Fetch Order ID from Backend
-      const createOrder = httpsCallable(functions, 'createUpgradeOrder');
-      const { data: orderData } = await createOrder({ 
+      // 1. Create the order on the backend
+      const createUpgradeOrder = httpsCallable(functions, 'createUpgradeOrder');
+      const orderResponse = await createUpgradeOrder({ 
         amount: plan.amountRaw, 
         planId: plan.key 
-      }) as { data: any };
+      });
+      const { id: orderId, amount: orderAmount, key } = orderResponse.data as any;
 
+      // 2. Configure Razorpay Options
       const options = {
         description: `Upgrade to ${plan.title}`,
-        image: 'https://prochem.app/logo.png', // Or your icon URL
-        currency: orderData.currency,
-        key: orderData.key,
-        amount: orderData.amount,
-        name: 'Prochem',
-        order_id: orderData.id,
+        image: 'https://prochem.app/logo.png', // Optional
+        currency: 'INR',
+        key: key, 
+        amount: orderAmount,
+        name: 'Prochem Marketplace',
+        order_id: orderId,
         prefill: {
           email: user?.email || '',
           contact: user?.phone || '',
@@ -390,7 +394,7 @@ function UpgradePaymentModal({
         theme: { color: '#004AAD' }
       };
 
-      // 2A. WEB IMPLEMENTATION
+      // 3A. WEB IMPLEMENTATION
       if (Platform.OS === 'web') {
         const script = document.createElement('script');
         script.src = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -431,28 +435,43 @@ function UpgradePaymentModal({
         };
         document.body.appendChild(script);
 
-      // 2B. MOBILE (ANDROID/IOS) IMPLEMENTATION
+      // 3B. MOBILE (ANDROID/IOS) IMPLEMENTATION
       } else {
-        RazorpayCheckout.open(options).then(async (data: any) => {
-          const verifyPayment = httpsCallable(functions, 'verifyUpgradePayment');
-          await verifyPayment({
-            paymentId: data.razorpay_payment_id,
-            orderId: data.razorpay_order_id,
-            signature: data.razorpay_signature,
-            planId: plan.key
+        RazorpayCheckout.open(options)
+          .then(async (data: any) => {
+            // ✅ THIS BLOCK ONLY RUNS IF PAYMENT IS SUCCESSFUL
+            try {
+              // 4. Verify Payment with Firebase Backend
+              const verifyPayment = httpsCallable(functions, 'verifyUpgradePayment');
+              await verifyPayment({
+                orderId: data.razorpay_order_id,
+                paymentId: data.razorpay_payment_id,
+                signature: data.razorpay_signature,
+                planId: plan.key
+              });
+
+              // 5. Grant Access UI Update Only after Backend Confirms
+              Alert.alert("Success!", "You have been upgraded to Premium.");
+              setIsProcessing(false);
+              onClose();
+
+            } catch (verifyError) {
+              Alert.alert("Verification Failed", "Payment received but account upgrade failed. Please contact support.");
+              setIsProcessing(false);
+            }
+          })
+          .catch((error: any) => {
+            // ❌ THIS BLOCK RUNS IF PAYMENT FAILS, USER CANCELS, OR UPI ERRORS OUT
+            console.log("Payment Failed or Cancelled:", error);
+            // DO NOT update the user's premium status here!
+            Alert.alert("Payment Cancelled", "Transaction failed. You have not been charged.");
+            setIsProcessing(false);
           });
-          Alert.alert('Payment Successful! 🎉', 'Your account has been upgraded.');
-          setIsProcessing(false);
-          onClose();
-        }).catch((error: any) => {
-          Alert.alert('Payment Failed', error.description || 'Transaction cancelled or failed.');
-          setIsProcessing(false);
-        });
       }
 
     } catch (error: any) {
       console.error(error);
-      Alert.alert('Error', error.message || 'Could not initiate payment. Try again.');
+      Alert.alert("Error", "Could not initialize payment. Try again.");
       setIsProcessing(false);
     }
   };
@@ -568,7 +587,7 @@ function SalesPitchUI() {
   const [activeTab, setActiveTab] = useState<'buyers' | 'sellers'>('buyers');
   const [selectedPlan, setSelectedPlan] = useState<keyof typeof PLANS | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [showTnCModal, setShowTnCModal] = useState(false); // ✅ State for T&C Modal
+  const [showTnCModal, setShowTnCModal] = useState(false); 
 
   const buyerFeatures = [
     { title: 'Compare products with 5+ verified companies', isReady: true },
