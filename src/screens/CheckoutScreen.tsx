@@ -14,11 +14,10 @@ import { Address, User } from '../types';
 
 // 🏦 BANK DETAILS CONFIGURATION
 const BANK_DETAILS = {
-  accountName: "AAPA CAPITAL PRIVATE LIMITED",
-  accountNumber: "0052572593",
-  ifscCode: "KKBK0000832",
-  bankName: "Kotak Mahindra Bank",
-  Branch: "Anand - Vallabh Vidyanagar" 
+  accountName: "PROCHEM MARKETPLACE PRIVATE LIMITED",
+  accountNumber: "183205016827",
+  ifscCode: "ICIC0001832",
+  bankName: "ICICI Bank" 
 };
 
 export default function CheckoutScreen() {

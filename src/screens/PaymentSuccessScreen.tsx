@@ -77,7 +77,7 @@ export default function PaymentSuccessScreen() {
                     <tr>
                         <td style="vertical-align: top;">
                             <h1 class="company-name">PROCHEM</h1>
-                            <p class="company-sub">By AAPA Capital Private Limited</p>
+                            <p class="company-sub">By Prochem Marketplace Private Limited</p>
                             <p class="company-address">Anand - Vallabh Vidyanagar, Gujarat, India</p>
                         </td>
                         <td style="text-align: right; vertical-align: top;">
@@ -134,7 +134,7 @@ export default function PaymentSuccessScreen() {
                 <div class="terms">
                     <h4>Terms & Conditions</h4>
                     <ul>
-                        <li>This receipt acknowledges the submission of your payment reference. The order will be officially confirmed upon successful realization of funds in AAPA Capital Private Limited's bank account.</li>
+                        <li>This receipt acknowledges the submission of your payment reference. The order will be officially confirmed upon successful realization of funds in Prochem Marketplace Private Limited's bank account.</li>
                         <li>Logistics and freight charges are not included in this payment and will be billed separately prior to dispatch.</li>
                         <li>For any discrepancies regarding this transaction, please notify us within 24 hours.</li>
                         <li>All disputes are subject to the exclusive jurisdiction of the courts in Anand, Gujarat.</li>
