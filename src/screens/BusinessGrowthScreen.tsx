@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, ScrollView, StyleSheet, TouchableOpacity, Dimensions,
-  ActivityIndicator, FlatList, Alert, Linking, Modal as RNModal
+  ActivityIndicator, FlatList, Alert, Linking, Modal as RNModal,
+  Platform // ✅ IMPORT PLATFORM
 } from 'react-native';
 import {
   Text, Card, Button, useTheme, Surface, Avatar, Chip,
@@ -13,13 +14,17 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   collection, query, where, onSnapshot, addDoc, serverTimestamp
 } from 'firebase/firestore';
+import { getApp } from 'firebase/app';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+// @ts-ignore
+import RazorpayCheckout from 'react-native-razorpay'; 
+
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
 
 const { width } = Dimensions.get('window');
 
-const RAZORPAY_LINK = 'https://razorpay.me/@aapacapitalprivatelimited';
 const WHATSAPP_NUMBER = '917984856652'; 
 
 const PLANS = {
@@ -337,7 +342,7 @@ function PremiumSellerHubContent() {
 }
 
 // ==========================================
-// 3. UPGRADE PAYMENT MODAL
+// 3. UPGRADE PAYMENT MODAL (Automated Flow)
 // ==========================================
 function UpgradePaymentModal({
   visible,
@@ -349,48 +354,133 @@ function UpgradePaymentModal({
   onClose: () => void;
 }) {
   const { user } = useAppStore();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   if (!plan) return null;
 
-  const handlePayNow = () => {
-    Linking.openURL(RAZORPAY_LINK).catch(() =>
-      Alert.alert('Error', 'Could not open payment link. Please try again.')
-    );
+  const handlePayNow = async () => {
+    if (!user) return;
+    
+    try {
+      setIsProcessing(true);
+      
+      const app = getApp();
+      const functions = getFunctions(app, 'asia-south1'); 
+      
+      // 1. Fetch Order ID from Backend
+      const createOrder = httpsCallable(functions, 'createUpgradeOrder');
+      const { data: orderData } = await createOrder({ 
+        amount: plan.amountRaw, 
+        planId: plan.key 
+      }) as { data: any };
+
+      const options = {
+        description: `Upgrade to ${plan.title}`,
+        image: 'https://prochem.app/logo.png', // Or your icon URL
+        currency: orderData.currency,
+        key: orderData.key,
+        amount: orderData.amount,
+        name: 'Prochem',
+        order_id: orderData.id,
+        prefill: {
+          email: user?.email || '',
+          contact: user?.phone || '',
+          name: user?.companyName || user?.businessName || 'Prochem User'
+        },
+        theme: { color: '#004AAD' }
+      };
+
+      // 2A. WEB IMPLEMENTATION
+      if (Platform.OS === 'web') {
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onerror = () => {
+          Alert.alert('Error', 'Razorpay SDK failed to load. Are you offline?');
+          setIsProcessing(false);
+        };
+        script.onload = async () => {
+          try {
+            const rzp = new (window as any).Razorpay({
+              ...options,
+              handler: async function (response: any) {
+                try {
+                  const verifyPayment = httpsCallable(functions, 'verifyUpgradePayment');
+                  await verifyPayment({
+                    paymentId: response.razorpay_payment_id,
+                    orderId: response.razorpay_order_id,
+                    signature: response.razorpay_signature,
+                    planId: plan.key
+                  });
+                  Alert.alert('Payment Successful! 🎉', 'Your account has been upgraded.');
+                  setIsProcessing(false);
+                  onClose();
+                } catch (err: any) {
+                  Alert.alert('Verification Failed', err.message);
+                  setIsProcessing(false);
+                }
+              }
+            });
+            rzp.on('payment.failed', function (response: any) {
+              Alert.alert('Payment Failed', response.error.description);
+              setIsProcessing(false);
+            });
+            rzp.open();
+          } catch (e) {
+            setIsProcessing(false);
+          }
+        };
+        document.body.appendChild(script);
+
+      // 2B. MOBILE (ANDROID/IOS) IMPLEMENTATION
+      } else {
+        RazorpayCheckout.open(options).then(async (data: any) => {
+          const verifyPayment = httpsCallable(functions, 'verifyUpgradePayment');
+          await verifyPayment({
+            paymentId: data.razorpay_payment_id,
+            orderId: data.razorpay_order_id,
+            signature: data.razorpay_signature,
+            planId: plan.key
+          });
+          Alert.alert('Payment Successful! 🎉', 'Your account has been upgraded.');
+          setIsProcessing(false);
+          onClose();
+        }).catch((error: any) => {
+          Alert.alert('Payment Failed', error.description || 'Transaction cancelled or failed.');
+          setIsProcessing(false);
+        });
+      }
+
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert('Error', error.message || 'Could not initiate payment. Try again.');
+      setIsProcessing(false);
+    }
   };
 
   const handleSendReceipt = () => {
     const userId = user?.uid || 'N/A';
     const userName = user?.companyName || user?.businessName || 'User';
-
     const userEmail = user?.email || 'N/A';
     const phone = user?.phone || 'N/A';
-    const message =
-      `Hi Prochem Team,\n\n` +
-      `I have completed the payment for the *${plan.title}* (₹${plan.amount} / ${plan.duration}).\n\n` +
-      `Please find the payment screenshot attached above.\n\n` +
-      `--- My Account Details ---\n` +
-      `Name: ${userName}\n` +
-      `User ID: ${userId}\n` +
-      `Email: ${userEmail}\n` +
-      `Phone: ${phone}\n` +
-      `Plan: ${plan.title}\n` +
-      `Amount: ₹${plan.amount}\n\n` +
-      `Kindly activate my account. Thank you!`;
-
+    
+    const message = `Hi Prochem Team,\n\nI need help with upgrading to the *${plan.title}*.\n\nUser ID: ${userId}\nName: ${userName}\nEmail: ${userEmail}\nPhone: ${phone}`;
+    
     const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
     Linking.openURL(whatsappUrl).catch(() =>
-      Alert.alert('Error', 'Could not open WhatsApp. Please send receipt manually.')
+      Alert.alert('Error', 'Could not open WhatsApp.')
     );
   };
 
   return (
-    <RNModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <RNModal visible={visible} animationType="slide" transparent onRequestClose={!isProcessing ? onClose : undefined}>
       <View style={upgradeStyles.overlay}>
         <View style={upgradeStyles.sheet}>
           <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-            <TouchableOpacity style={upgradeStyles.closeBtn} onPress={onClose}>
-              <MaterialCommunityIcons name="close" size={20} color="#64748B" />
-            </TouchableOpacity>
+            {!isProcessing && (
+              <TouchableOpacity style={upgradeStyles.closeBtn} onPress={onClose}>
+                <MaterialCommunityIcons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            )}
 
             <View style={{ alignItems: 'center', marginBottom: 16 }}>
               <View style={upgradeStyles.shieldIcon}>
@@ -418,44 +508,46 @@ function UpgradePaymentModal({
             <View style={upgradeStyles.noteBox}>
               <MaterialCommunityIcons name="information-outline" size={18} color="#004AAD" style={{ marginTop: 2 }} />
               <Text style={upgradeStyles.noteText}>
-                <Text style={{ fontWeight: '700' }}>Note: </Text>
-                Prochem is proudly developed and run by{' '}
-                <Text style={{ fontWeight: '800', color: '#1E293B' }}>Aapa Capital Private Limited</Text>.
-                Your payment will be securely processed under this company name on the Razorpay checkout page.
-              </Text>
-            </View>
-
-            <View style={[upgradeStyles.stepBox, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
-              <Text style={[upgradeStyles.stepLabel, { color: '#16A34A' }]}>STEP 2 — Before You Pay</Text>
-              <Text style={upgradeStyles.stepDescription}>
-                📸 After paying, you'll need to send us your payment screenshot to activate your plan.
-                Don't close the payment page before taking a screenshot!
+                <Text style={{ fontWeight: '700' }}>Secure Checkout: </Text>
+                Your payment will be securely processed by Razorpay under Prochem Marketplace Private Limited.
               </Text>
             </View>
 
             <View style={upgradeStyles.stepBox}>
-              <Text style={upgradeStyles.stepLabel}>STEP 1</Text>
+              <Text style={upgradeStyles.stepLabel}>AUTO ACTIVATION</Text>
               <Text style={upgradeStyles.stepDescription}>
-                Click below to pay securely via Razorpay. An invoice will be sent to your email.
+                Pay securely online. Your Premium features will unlock instantly upon successful payment.
               </Text>
-              <TouchableOpacity style={upgradeStyles.payButton} onPress={handlePayNow} activeOpacity={0.85}>
-                <MaterialCommunityIcons name="open-in-new" size={18} color="white" style={{ marginRight: 8 }} />
-                <Text style={upgradeStyles.payButtonText}>Pay ₹{plan.amount} Securely</Text>
+              <TouchableOpacity 
+                style={[upgradeStyles.payButton, isProcessing && { backgroundColor: '#64748B' }]} 
+                onPress={handlePayNow} 
+                activeOpacity={0.85}
+                disabled={isProcessing}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="shield-lock" size={18} color="white" style={{ marginRight: 8 }} />
+                    <Text style={upgradeStyles.payButtonText}>Pay ₹{plan.amount} Securely</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
 
             <View style={[upgradeStyles.stepBox, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
-              <Text style={[upgradeStyles.stepLabel, { color: '#16A34A' }]}>STEP 2</Text>
+              <Text style={[upgradeStyles.stepLabel, { color: '#16A34A' }]}>MANUAL ASSISTANCE</Text>
               <Text style={upgradeStyles.stepDescription}>
-                After successful payment, send us your receipt screenshot to activate your plan.
+                Facing issues with online payment? Reach out to us directly for a manual NEFT/RTGS transfer link.
               </Text>
               <TouchableOpacity
                 style={[upgradeStyles.payButton, { backgroundColor: '#16A34A' }]}
                 onPress={handleSendReceipt}
                 activeOpacity={0.85}
+                disabled={isProcessing}
               >
                 <MaterialCommunityIcons name="whatsapp" size={18} color="white" style={{ marginRight: 8 }} />
-                <Text style={upgradeStyles.payButtonText}>Send Receipt via WhatsApp</Text>
+                <Text style={upgradeStyles.payButtonText}>Contact Support</Text>
               </TouchableOpacity>
             </View>
 
