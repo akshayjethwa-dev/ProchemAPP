@@ -221,7 +221,6 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        
       </ScrollView>
     </SafeAreaView>
   );
