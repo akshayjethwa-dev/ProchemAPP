@@ -13,11 +13,11 @@ export default function NegotiationsListScreen() {
   const route = useRoute<any>();
   const theme = useTheme();
   
-  // Check if we are in Admin Monitoring mode
-  const isAdminView = route.params?.isAdminView || false;
-
   const { user, viewMode } = useAppStore();
   const isBuyer = viewMode === 'buyer';
+
+  // ✅ FIXED: Native check for admin or sub_admin alongside the route parameter
+  const isAdminView = route.params?.isAdminView || user?.userType === 'admin' || user?.userType === 'sub_admin';
 
   // REAL-TIME STATE
   const [rfqsList, setRfqsList] = useState<RFQ[]>([]);

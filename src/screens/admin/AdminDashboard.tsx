@@ -8,6 +8,9 @@ import { logoutUser } from '../../services/authService';
 import { collection, query, onSnapshot, where } from 'firebase/firestore'; 
 import { db } from '../../config/firebase';
 
+// ✅ FIXED: Using useAppStore instead of useAuthStore
+import { useAppStore } from '../../store/appStore'; 
+
 export default function AdminDashboard() {
   const theme = useTheme();
   const navigation = useNavigation<any>(); 
@@ -19,8 +22,12 @@ export default function AdminDashboard() {
   const [activeNegotiations, setActiveNegotiations] = useState(0);
   const [pendingBids, setPendingBids] = useState(0);
 
-  // ✅ NEW: State for the one-time migration script
+  // State for the one-time migration script
   const [isBackfilling, setIsBackfilling] = useState(false);
+
+  // ✅ Get the current user from the correct store
+  const user = useAppStore((state) => state.user);
+  const isSubAdmin = user?.userType === 'sub_admin';
 
   useEffect(() => {
     loadStats();
@@ -58,7 +65,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✅ NEW: Handler function for backfilling users
   const handleBackfillUsers = async () => {
     Alert.alert(
       "Confirm Migration",
@@ -87,7 +93,9 @@ export default function AdminDashboard() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text variant="headlineSmall" style={{color:'white', fontWeight:'bold'}}>Admin Console</Text>
+        <Text variant="headlineSmall" style={{color:'white', fontWeight:'bold'}}>
+          {isSubAdmin ? 'Sub-Admin Console' : 'Admin Console'}
+        </Text>
         <Button 
           mode="text" 
           compact={true} 
@@ -103,18 +111,26 @@ export default function AdminDashboard() {
         
         {loading ? <ActivityIndicator size="large" color={theme.colors.primary} /> : (
           <View style={styles.grid}>
-            <Card style={styles.card}>
-              <Card.Content>
-                <Text variant="displaySmall" style={{color: theme.colors.primary, fontWeight:'bold'}}>{stats.totalUsers}</Text>
-                <Text variant="bodySmall">Registered Users</Text>
-              </Card.Content>
-            </Card>
-            <Card style={styles.card}>
-              <Card.Content>
-                <Text variant="displaySmall" style={{color: '#E65100', fontWeight:'bold'}}>{stats.totalProducts}</Text>
-                <Text variant="bodySmall">Total Listings</Text>
-              </Card.Content>
-            </Card>
+            
+            {/* 🛑 HIDE: Remove Total Users and Total Products for sub_admin */}
+            {!isSubAdmin && (
+              <>
+                <Card style={styles.card}>
+                  <Card.Content>
+                    <Text variant="displaySmall" style={{color: theme.colors.primary, fontWeight:'bold'}}>{stats.totalUsers}</Text>
+                    <Text variant="bodySmall">Registered Users</Text>
+                  </Card.Content>
+                </Card>
+                <Card style={styles.card}>
+                  <Card.Content>
+                    <Text variant="displaySmall" style={{color: '#E65100', fontWeight:'bold'}}>{stats.totalProducts}</Text>
+                    <Text variant="bodySmall">Total Listings</Text>
+                  </Card.Content>
+                </Card>
+              </>
+            )}
+
+            {/* ✅ KEEP: Sub_admin only sees Total Orders in the platform overview */}
             <Card style={styles.card}>
               <Card.Content>
                 <Text variant="displaySmall" style={{color: '#2E7D32', fontWeight:'bold'}}>{stats.totalOrders}</Text>
@@ -189,37 +205,42 @@ export default function AdminDashboard() {
           />
         </Card>
 
-        <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Finance & Actions</Text>
-        
-        <Card 
-          style={{marginBottom: 12, backgroundColor: 'white'}} 
-          onPress={() => navigation.navigate('Payments')} 
-        >
-          <Card.Title 
-            title="Seller Payouts" 
-            subtitle="Manage pending payments and release funds" 
-            left={(props) => <IconButton icon="cash-multiple" iconColor={theme.colors.primary} size={28} />}
-            right={(props) => <IconButton icon="chevron-right" {...props} />}
-          />
-        </Card>
+        {/* 🛑 HIDE ALL BELOW: Remove Finance, Payouts, Notifications, and System Health for sub_admin */}
+        {!isSubAdmin && (
+          <>
+            <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Finance & Actions</Text>
+            
+            <Card 
+              style={{marginBottom: 12, backgroundColor: 'white'}} 
+              onPress={() => navigation.navigate('Payments')} 
+            >
+              <Card.Title 
+                title="Seller Payouts" 
+                subtitle="Manage pending payments and release funds" 
+                left={(props) => <IconButton icon="cash-multiple" iconColor={theme.colors.primary} size={28} />}
+                right={(props) => <IconButton icon="chevron-right" {...props} />}
+              />
+            </Card>
 
-        <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Quick Actions</Text>
-        <Card style={{marginBottom: 20}} onPress={() => navigation.navigate('SendNotification')}>
-          <Card.Title 
-            title="Send Broadcast Notification" 
-            subtitle="Send alerts or promos to all users"
-            left={(props) => <Button icon="bell-ring" mode="contained" onPress={() => navigation.navigate('SendNotification')}>Send</Button>}
-          />
-        </Card>
+            <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Quick Actions</Text>
+            <Card style={{marginBottom: 20}} onPress={() => navigation.navigate('SendNotification')}>
+              <Card.Title 
+                title="Send Broadcast Notification" 
+                subtitle="Send alerts or promos to all users"
+                left={(props) => <Button icon="bell-ring" mode="contained" onPress={() => navigation.navigate('SendNotification')}>Send</Button>}
+              />
+            </Card>
 
-        <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold'}}>System Health</Text>
-        <Card style={{backgroundColor:'#E3F2FD', marginBottom: 20}}>
-          <Card.Title 
-            title="GST API Status" 
-            subtitle="Operational • Latency 120ms" 
-            left={(props) => <Text style={{fontSize:24}}>🟢</Text>} 
-          />
-        </Card>
+            <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold'}}>System Health</Text>
+            <Card style={{backgroundColor:'#E3F2FD', marginBottom: 20}}>
+              <Card.Title 
+                title="GST API Status" 
+                subtitle="Operational • Latency 120ms" 
+                left={(props) => <Text style={{fontSize:24}}>🟢</Text>} 
+              />
+            </Card>
+          </>
+        )}
 
       </ScrollView>
     </SafeAreaView>

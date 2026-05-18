@@ -435,13 +435,13 @@ function UpgradePaymentModal({
         };
         document.body.appendChild(script);
 
-      // 3B. MOBILE (ANDROID/IOS) IMPLEMENTATION
+      // 3B. MOBILE (ANDROID/IOS) IMPLEMENTATION - NATIVE CHECKOUT
       } else {
         RazorpayCheckout.open(options)
           .then(async (data: any) => {
-            // ✅ THIS BLOCK ONLY RUNS IF PAYMENT IS SUCCESSFUL
+            // ✅ SUCCESS CALLBACK
             try {
-              // 4. Verify Payment with Firebase Backend
+              // Verify Payment with Firebase Backend
               const verifyPayment = httpsCallable(functions, 'verifyUpgradePayment');
               await verifyPayment({
                 orderId: data.razorpay_order_id,
@@ -450,21 +450,20 @@ function UpgradePaymentModal({
                 planId: plan.key
               });
 
-              // 5. Grant Access UI Update Only after Backend Confirms
-              Alert.alert("Success!", "You have been upgraded to Premium.");
+              Alert.alert("Success!", `Payment processed! Payment ID: ${data.razorpay_payment_id}`);
               setIsProcessing(false);
               onClose();
 
             } catch (verifyError) {
+              console.error("Verification Error:", verifyError);
               Alert.alert("Verification Failed", "Payment received but account upgrade failed. Please contact support.");
               setIsProcessing(false);
             }
           })
           .catch((error: any) => {
-            // ❌ THIS BLOCK RUNS IF PAYMENT FAILS, USER CANCELS, OR UPI ERRORS OUT
+            // ❌ FAILURE CALLBACK
             console.log("Payment Failed or Cancelled:", error);
-            // DO NOT update the user's premium status here!
-            Alert.alert("Payment Cancelled", "Transaction failed. You have not been charged.");
+            Alert.alert(`Payment Failed`, `Code: ${error.code} | Description: ${error.description}`);
             setIsProcessing(false);
           });
       }

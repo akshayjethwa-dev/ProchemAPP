@@ -1,6 +1,6 @@
 // src/screens/NegotiationRoomScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView, Keyboard } from 'react-native';
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView, Keyboard, Linking } from 'react-native';
 import { Text, TextInput, IconButton, Avatar, Button, Card, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -16,7 +16,7 @@ export default function NegotiationRoomScreen() {
   const { user, viewMode } = useAppStore();
   
   const rfqId = route.params?.rfqId;
-  const isAdminView = route.params?.isAdminView || user?.userType === 'admin';
+  const isAdminView = route.params?.isAdminView || user?.userType === 'admin' || user?.userType === 'sub_admin';
 
   const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
   const [roomMessages, setRoomMessages] = useState<NegotiationMessage[]>([]);
@@ -249,7 +249,6 @@ export default function NegotiationRoomScreen() {
 
       setIsProcessing(false);
       
-      // ✅ FIX: Navigate to 'Checkout' instead of 'OrderSummary' to match BuyerNavigator
       navigation.navigate('Checkout', { negotiatedItem });
 
     } catch (error) {
@@ -372,6 +371,28 @@ export default function NegotiationRoomScreen() {
            </Text>
         </Chip>
       </View>
+
+      {/* ✅ Action Bar added explicitly for Admin / Sub_admin to contact users instantly */}
+      {isAdminView && (
+         <View style={{ flexDirection: 'row', justifyContent: 'space-around', backgroundColor: 'white', paddingBottom: 10, borderBottomWidth: 1, borderColor: '#E2E8F0' }}>
+            <Button 
+               icon="phone" 
+               mode="text" 
+               textColor="#1D4ED8"
+               onPress={() => participantsInfo.buyerPhone ? Linking.openURL(`tel:${participantsInfo.buyerPhone}`) : Alert.alert('Error', 'No buyer phone number')}
+            >
+               Call Buyer
+            </Button>
+            <Button 
+               icon="phone" 
+               mode="text" 
+               textColor="#15803D"
+               onPress={() => participantsInfo.sellerPhone ? Linking.openURL(`tel:${participantsInfo.sellerPhone}`) : Alert.alert('Error', 'No seller phone number')}
+            >
+               Call Seller
+            </Button>
+         </View>
+      )}
 
       {adminOffer && viewMode === 'buyer' && activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
         <Card style={{ margin: 10, backgroundColor: '#ECFDF5', borderColor: '#10B981', borderWidth: 1 }}>

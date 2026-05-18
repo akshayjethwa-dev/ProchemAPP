@@ -1,7 +1,7 @@
 // src/types/index.ts
 
 // ✅ User Types
-export type UserRole = 'buyer' | 'seller' | 'transporter' | 'dual' | 'admin';
+export type UserRole = 'buyer' | 'seller' | 'transporter' | 'dual' | 'admin' | 'sub_admin';
 export type VerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type OrderStatus = 
   | 'PENDING_SELLER'   

@@ -3,19 +3,20 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList, ActivityIndicator, Linking, Alert } from 'react-native';
 import { Text, Card, Chip, IconButton, Button, useTheme } from 'react-native-paper';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigation } from '@react-navigation/native';
 
 interface Requirement {
   id: string;
-  buyerName: string;
-  buyerPhone: string;
+  buyerId: string; // ✅ Ensure buyerId is here to fetch profile
+  buyerName?: string;
+  buyerPhone?: string;
   productName: string;
   quantity: string;
   unit: string;
-  targetPrice: string;
-  description: string;
+  targetPrice?: string;
+  description?: string;
   status: 'PENDING' | 'RESOLVED' | 'REJECTED' | 'QUOTED' | 'FULFILLED';
   createdAt: string;
 }
@@ -25,9 +26,11 @@ export default function AdminCustomRequirementsScreen() {
   const navigation = useNavigation();
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // ✅ Cache to hold dynamically fetched user details
+  const [userCache, setUserCache] = useState<Record<string, { phone: string, name: string }>>({});
 
   useEffect(() => {
-    // ✅ FIXED: Changed collection name to camelCase to match the new rules and submission format
     const q = query(collection(db, 'customRequirements'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Requirement));
@@ -38,9 +41,43 @@ export default function AdminCustomRequirementsScreen() {
     return unsubscribe;
   }, []);
 
+  // ✅ New useEffect: Fetch user profiles for any requirements missing phone numbers
+  useEffect(() => {
+    // Find unique buyer IDs that we haven't fetched yet
+    const missingIds = [...new Set(requirements.map(r => r.buyerId).filter(id => id && !userCache[id]))];
+    
+    if (missingIds.length === 0) return;
+
+    const fetchMissingUsers = async () => {
+      const newCache: Record<string, { phone: string, name: string }> = {};
+      
+      for (const id of missingIds) {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', id));
+          if (userSnap.exists()) {
+            const uData = userSnap.data();
+            newCache[id] = {
+              phone: uData.phone || uData.phoneNumber || '',
+              name: uData.companyName || uData.businessName || uData.name || ''
+            };
+          } else {
+            // Document doesn't exist, store empty to prevent infinite retries
+            newCache[id] = { phone: '', name: '' }; 
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${id}:`, error);
+          newCache[id] = { phone: '', name: '' };
+        }
+      }
+      
+      setUserCache(prev => ({ ...prev, ...newCache }));
+    };
+
+    fetchMissingUsers();
+  }, [requirements]);
+
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      // ✅ FIXED: Changed collection name to camelCase
       await updateDoc(doc(db, 'customRequirements', id), {
         status: newStatus
       });
@@ -52,7 +89,7 @@ export default function AdminCustomRequirementsScreen() {
 
   const handleCallBuyer = (phone: string) => {
     if (!phone) {
-      Alert.alert('No Number', 'Buyer did not provide a phone number.');
+      Alert.alert('No Number', 'Buyer did not provide a phone number in their profile.');
       return;
     }
     Linking.openURL(`tel:${phone}`);
@@ -60,6 +97,10 @@ export default function AdminCustomRequirementsScreen() {
 
   const renderItem = ({ item }: { item: Requirement }) => {
     const isPending = item.status === 'PENDING';
+    
+    // ✅ Determine final phone and name (Fallback to cache if not in item)
+    const finalPhone = item.buyerPhone || userCache[item.buyerId]?.phone || '';
+    const finalName = item.buyerName || userCache[item.buyerId]?.name || 'Unknown Buyer';
     
     return (
       <Card style={[styles.card, isPending && { borderColor: theme.colors.error, borderWidth: 1 }]}>
@@ -82,7 +123,11 @@ export default function AdminCustomRequirementsScreen() {
           <View style={styles.detailsBox}>
              <View style={styles.row}><Text style={styles.label}>Quantity:</Text><Text style={styles.value}>{item.quantity} {item.unit}</Text></View>
              {item.targetPrice ? <View style={styles.row}><Text style={styles.label}>Target Price:</Text><Text style={styles.value}>₹{item.targetPrice}</Text></View> : null}
-             <View style={styles.row}><Text style={styles.label}>Buyer:</Text><Text style={styles.value}>{item.buyerName}</Text></View>
+             
+             {/* ✅ Use the dynamically fetched Name & Phone */}
+             <View style={styles.row}><Text style={styles.label}>Buyer Name:</Text><Text style={styles.value}>{finalName}</Text></View>
+             <View style={styles.row}><Text style={styles.label}>Contact No:</Text><Text style={styles.value}>{finalPhone || 'N/A'}</Text></View>
+             
              {item.description ? (
                 <View style={{marginTop: 8}}>
                   <Text style={styles.label}>Notes:</Text>
@@ -92,10 +137,11 @@ export default function AdminCustomRequirementsScreen() {
           </View>
 
           <View style={styles.actionRow}>
+            {/* ✅ Pass dynamically fetched phone to call button */}
             <Button 
                mode="contained-tonal" 
                icon="phone" 
-               onPress={() => handleCallBuyer(item.buyerPhone)}
+               onPress={() => handleCallBuyer(finalPhone)}
                style={{flex: 1, marginRight: 10}}
             >
               Call Buyer

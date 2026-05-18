@@ -17,12 +17,12 @@
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_FIREBASE_API_KEY":"AIzaSyC0cRo4vmdwsbNkdiIKwStxGsxJhuhRpYo",
-        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN":"prochemapp-dev.firebaseapp.com",
-        "EXPO_PUBLIC_FIREBASE_PROJECT_ID":"prochemapp-dev",
-        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET":"prochemapp-dev.firebasestorage.app",
-        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID":"193158013078",
-        "EXPO_PUBLIC_FIREBASE_APP_ID":"1:193158013078:web:af1b9968ab61a561a662b7"
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC0cRo4vmdwsbNkdiIKwStxGsxJhuhRpYo",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "prochemapp-dev.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "prochemapp-dev",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "prochemapp-dev.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "193158013078",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:193158013078:web:af1b9968ab61a561a662b7"
       }
     }
   },

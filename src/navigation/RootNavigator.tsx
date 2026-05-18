@@ -113,8 +113,8 @@ export const RootNavigator = () => {
           ) : (
             <Stack.Group>
               
-              {/* 🛡️ ADMIN CHECK: Only show AdminApp if NOT impersonating */}
-              {(user.userType === 'admin' && !adminImpersonating) ? (
+              {/* ✅ ADMIN & SUB-ADMIN CHECK: Allow both admin and sub_admin into the AdminApp */}
+              {((user.userType === 'admin' || user.userType === 'sub_admin') && !adminImpersonating) ? (
                 <Stack.Screen name="AdminApp" component={AdminNavigator} />
               
               /* 🏭 SELLER CHECK */

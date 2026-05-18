@@ -1,6 +1,6 @@
 // src/screens/admin/AdminBroadcastBidsScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet, Alert } from 'react-native';
+import { View, FlatList, StyleSheet, Alert, Linking } from 'react-native';
 import { Text, Card, Button, useTheme, Portal, Modal, TextInput } from 'react-native-paper';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore'; 
 import { db } from '../../config/firebase';
@@ -13,6 +13,9 @@ export default function AdminBroadcastBidsScreen() {
   const [adminFinalPrice, setAdminFinalPrice] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // ✅ Cache to dynamically hold supplier contact info
+  const [userCache, setUserCache] = useState<Record<string, { phone: string }>>({});
+
   useEffect(() => {
     const q = query(collection(db, 'supplierQuotes'), where('status', '==', 'PENDING'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -21,6 +24,38 @@ export default function AdminBroadcastBidsScreen() {
     });
     return () => unsubscribe();
   }, []);
+
+  // ✅ Fetch user profiles for any suppliers missing phone numbers in our cache
+  useEffect(() => {
+    const missingIds = [...new Set(quotes.map(q => q.supplierId).filter(id => id && !userCache[id]))];
+    
+    if (missingIds.length === 0) return;
+
+    const fetchMissingUsers = async () => {
+      const newCache: Record<string, { phone: string }> = {};
+      
+      for (const id of missingIds) {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', id));
+          if (userSnap.exists()) {
+            const uData = userSnap.data();
+            newCache[id] = {
+              phone: uData.phone || uData.phoneNumber || ''
+            };
+          } else {
+            newCache[id] = { phone: '' }; 
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${id}:`, error);
+          newCache[id] = { phone: '' };
+        }
+      }
+      
+      setUserCache(prev => ({ ...prev, ...newCache }));
+    };
+
+    fetchMissingUsers();
+  }, [quotes]);
 
   const confirmAcceptQuote = async () => {
     if (!adminFinalPrice) {
@@ -76,24 +111,68 @@ export default function AdminBroadcastBidsScreen() {
     }
   };
 
-  const renderQuote = ({ item }: { item: SupplierQuote }) => (
-    <Card style={styles.card} mode="outlined">
-      <Card.Content>
-        <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{item.productName}</Text>
-        <View style={styles.supplierBox}>
-          <Text variant="bodyMedium">Supplier: <Text style={{fontWeight: 'bold'}}>{item.supplierName}</Text></Text>
-          <Text variant="bodyMedium">Supplier Price: <Text style={{fontWeight: 'bold', color: theme.colors.primary}}>₹{item.pricePerUnit} / unit</Text></Text>
-          <Text variant="bodyMedium">Can Supply: {item.availableQuantity}</Text>
-          <Text variant="bodyMedium">Dispatch In: {item.dispatchDays}</Text>
-        </View>
-      </Card.Content>
-      <Card.Actions>
-        <Button mode="contained" onPress={() => { setSelectedQuote(item); setAdminFinalPrice(item.pricePerUnit.toString()); }} buttonColor="#10B981">
-          Accept & Set Price
-        </Button>
-      </Card.Actions>
-    </Card>
-  );
+  const handleCallSupplier = (phone: string) => {
+    if (!phone) {
+      Alert.alert('No Number', 'Supplier did not provide a phone number in their profile.');
+      return;
+    }
+    Linking.openURL(`tel:${phone}`);
+  };
+
+  const renderQuote = ({ item }: { item: SupplierQuote }) => {
+    // Determine the phone number from our cache
+    const finalPhone = userCache[item.supplierId]?.phone || '';
+
+    return (
+      <Card style={styles.card} mode="outlined">
+        <Card.Content>
+          <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{item.productName}</Text>
+          <View style={styles.supplierBox}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+               <Text variant="bodyMedium" style={{ color: '#64748B' }}>Supplier:</Text>
+               <Text variant="bodyMedium" style={{ fontWeight: 'bold' }}>{item.supplierName}</Text>
+            </View>
+            {/* ✅ Added Contact Details visually */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+               <Text variant="bodyMedium" style={{ color: '#64748B' }}>Contact No:</Text>
+               <Text variant="bodyMedium" style={{ fontWeight: 'bold' }}>{finalPhone || 'N/A'}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+               <Text variant="bodyMedium" style={{ color: '#64748B' }}>Supplier Price:</Text>
+               <Text variant="bodyMedium" style={{ fontWeight: 'bold', color: theme.colors.primary }}>₹{item.pricePerUnit} / unit</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+               <Text variant="bodyMedium" style={{ color: '#64748B' }}>Can Supply:</Text>
+               <Text variant="bodyMedium" style={{ fontWeight: 'bold' }}>{item.availableQuantity}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+               <Text variant="bodyMedium" style={{ color: '#64748B' }}>Dispatch In:</Text>
+               <Text variant="bodyMedium" style={{ fontWeight: 'bold' }}>{item.dispatchDays}</Text>
+            </View>
+          </View>
+        </Card.Content>
+        <Card.Actions style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 16 }}>
+          {/* ✅ Call Supplier Button Added */}
+          <Button 
+            mode="contained-tonal" 
+            icon="phone" 
+            onPress={() => handleCallSupplier(finalPhone)}
+            style={{ flex: 1, marginRight: 10 }}
+          >
+            Call
+          </Button>
+          <Button 
+            mode="contained" 
+            onPress={() => { setSelectedQuote(item); setAdminFinalPrice(item.pricePerUnit.toString()); }} 
+            buttonColor="#10B981"
+            style={{ flex: 1 }}
+          >
+            Accept Quote
+          </Button>
+        </Card.Actions>
+      </Card>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -105,6 +184,7 @@ export default function AdminBroadcastBidsScreen() {
         keyExtractor={(item) => item.id!}
         renderItem={renderQuote}
         ListEmptyComponent={<Text style={styles.emptyText}>No pending bids from suppliers.</Text>}
+        contentContainerStyle={{ paddingBottom: 20 }}
       />
 
       <Portal>
@@ -135,7 +215,7 @@ const styles = StyleSheet.create({
   pageTitle: { fontWeight: 'bold', color: '#1E293B' },
   subtitle: { color: '#64748B', marginBottom: 15 },
   card: { marginBottom: 12, backgroundColor: 'white' },
-  supplierBox: { marginTop: 10, backgroundColor: '#FFFBEB', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A' },
+  supplierBox: { marginTop: 10, backgroundColor: '#F1F5F9', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   emptyText: { textAlign: 'center', marginTop: 50, color: 'gray' },
   modalContent: { backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 10 },
 });

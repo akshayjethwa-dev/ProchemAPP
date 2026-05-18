@@ -4,6 +4,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// ✅ FIXED: Using useAppStore instead of useAuthStore
+import { useAppStore } from '../store/appStore';
+
 // Screens
 import AdminDashboard from '../screens/admin/AdminDashboard';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
@@ -16,11 +19,9 @@ import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationS
 import AdminPayment from '../screens/admin/AdminPayment';
 import AdminCustomRequirementsScreen from '../screens/admin/AdminCustomRequirementsScreen';
 
-// ✅ Import Negotiation Screens
+// Negotiation Screens
 import NegotiationsListScreen from '../screens/NegotiationsListScreen';
 import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
-
-// 🚀 NEW: Import Admin Broadcast Bids Screen
 import AdminBroadcastBidsScreen from '../screens/admin/AdminBroadcastBidsScreen';
 
 export type AdminStackParamList = {
@@ -32,7 +33,7 @@ export type AdminStackParamList = {
   AdminCustomRequirements: undefined;
   AdminNegotiations: { isAdminView: boolean }; 
   NegotiationRoom: { negotiationId: string; title: string }; 
-  AdminBroadcastBids: undefined; // 🚀 ADDED
+  AdminBroadcastBids: undefined; 
 };
 
 const Tab = createBottomTabNavigator();
@@ -55,7 +56,6 @@ function DashboardStackNavigator() {
       <Stack.Screen name="SendNotification" component={AdminSendNotificationScreen} />
       <Stack.Screen name="AdminCustomRequirements" component={AdminCustomRequirementsScreen} />
       
-      {/* Admin Negotiation Monitoring Screens */}
       <Stack.Screen 
         name="AdminNegotiations" 
         component={NegotiationsListScreen} 
@@ -67,7 +67,6 @@ function DashboardStackNavigator() {
         options={{ headerShown: true, title: 'Price Discussion' }}
       />
 
-      {/* 🚀 NEW: Admin Supplier Bids Screen */}
       <Stack.Screen 
         name="AdminBroadcastBids" 
         component={AdminBroadcastBidsScreen} 
@@ -79,6 +78,10 @@ function DashboardStackNavigator() {
 
 export default function AdminNavigator() {
   const insets = useSafeAreaInsets();
+  
+  // ✅ Get user from appStore to accurately check sub_admin role
+  const user = useAppStore((state) => state.user);
+  const isSubAdmin = user?.userType === 'sub_admin';
 
   return (
     <Tab.Navigator
@@ -104,22 +107,29 @@ export default function AdminNavigator() {
         }} 
       />
       
-      <Tab.Screen 
-        name="Users" 
-        component={UserStackNavigator} 
-        options={{ 
-          tabBarIcon: ({color}) => <IconButton icon="account-group" iconColor={color} size={24} /> 
-        }} 
-      />
+      {/* 🛑 HIDE: Do not show Users tab for sub_admin */}
+      {!isSubAdmin && (
+        <Tab.Screen 
+          name="Users" 
+          component={UserStackNavigator} 
+          options={{ 
+            tabBarIcon: ({color}) => <IconButton icon="account-group" iconColor={color} size={24} /> 
+          }} 
+        />
+      )}
       
-      <Tab.Screen 
-        name="Moderation" 
-        component={AdminProductsScreen} 
-        options={{ 
-          tabBarIcon: ({color}) => <IconButton icon="shield-check" iconColor={color} size={24} /> 
-        }} 
-      />
+      {/* 🛑 HIDE: Do not show Modification tab for sub_admin */}
+      {!isSubAdmin && (
+        <Tab.Screen 
+          name="Moderation" 
+          component={AdminProductsScreen} 
+          options={{ 
+            tabBarIcon: ({color}) => <IconButton icon="shield-check" iconColor={color} size={24} /> 
+          }} 
+        />
+      )}
       
+      {/* ✅ KEEP: Order management (Verification Tab) */}
       <Tab.Screen 
         name="Orders" 
         component={AdminOrderVerification} 
@@ -129,22 +139,28 @@ export default function AdminNavigator() {
         }} 
       />
 
-      <Tab.Screen 
-        name="NAPayments" 
-        component={AdminPaymentsScreen} 
-        options={{
-          tabBarLabel: 'Finance',
-          tabBarIcon: ({ color }) => <IconButton icon="finance" iconColor={color} size={24} />
-        }} 
-      />
-      <Tab.Screen 
-        name="Payments"
-        component={AdminPayment} 
-        options={{
-          tabBarLabel: 'Finance',
-          tabBarIcon: ({ color }) => <IconButton icon="cash-multiple" iconColor={color} size={24} />
-        }} 
-      />
+      {/* 🛑 HIDE: Remove Finance tabs for sub_admin */}
+      {!isSubAdmin && (
+        <Tab.Screen 
+          name="NAPayments" 
+          component={AdminPaymentsScreen} 
+          options={{
+            tabBarLabel: 'Finance',
+            tabBarIcon: ({ color }) => <IconButton icon="finance" iconColor={color} size={24} />
+          }} 
+        />
+      )}
+      
+      {!isSubAdmin && (
+        <Tab.Screen 
+          name="Payments"
+          component={AdminPayment} 
+          options={{
+            tabBarLabel: 'Finance',
+            tabBarIcon: ({ color }) => <IconButton icon="cash-multiple" iconColor={color} size={24} />
+          }} 
+        />
+      )}
     </Tab.Navigator>
   );
 }
