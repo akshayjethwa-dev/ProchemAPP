@@ -297,3 +297,36 @@ exports.sendWhatsAppTest = functions
     res.status(500).send(`Failed to send message. Error: ${error.message}`);
   }
 });
+
+// ==========================================
+// 🚀 INBOUND WHATSAPP WEBHOOK (TWILIO)
+// ==========================================
+
+exports.whatsappWebhook = functions
+  .region("asia-south1")
+  .https.onRequest(async (req, res) => {
+  
+  // Twilio sends a POST request when a message is received
+  if (req.method !== 'POST') {
+     return res.status(405).send('Method Not Allowed');
+  }
+
+  try {
+    // Extract incoming message details from Twilio's payload
+    const { From, To, Body, WaId, ProfileName } = req.body;
+    
+    // Log the message to Firebase console so you can verify it works
+    console.log(`📥 Incoming WhatsApp message from ${ProfileName || WaId} (${From}): ${Body}`);
+
+    // TODO in future tasks: 
+    // 1. Map the 'WaId' (WhatsApp ID) or 'From' number to a Prochem user record.
+    // 2. Save the 'Body' text to a Firestore conversations collection.
+    
+    // You MUST send a 200 OK response to Twilio so they know the message was received successfully
+    res.status(200).send('OK');
+    
+  } catch (error) {
+    console.error('❌ Error processing incoming WhatsApp webhook:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
