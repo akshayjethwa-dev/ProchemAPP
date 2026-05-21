@@ -1,3 +1,4 @@
+// File: src/services/authService.ts
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
@@ -27,6 +28,7 @@ interface RegisterData {
   gstin: string;
   gstVerified?: boolean;
   verificationStatus?: string;
+  whatsappOptIn?: boolean; // 🚀 Added Opt-In property
 }
 
 export const loginUser = async (email: string, password: string): Promise<any> => {
@@ -44,7 +46,9 @@ export const loginUser = async (email: string, password: string): Promise<any> =
   }
 };
 
-export const registerUser = async ({ email, password, companyName, phoneNumber, userType, gstin, verificationStatus }: RegisterData): Promise<any> => {
+export const registerUser = async ({ 
+  email, password, companyName, phoneNumber, userType, gstin, verificationStatus, whatsappOptIn 
+}: RegisterData): Promise<any> => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
@@ -62,10 +66,12 @@ export const registerUser = async ({ email, password, companyName, phoneNumber, 
       documents: { gstin: false, shopLicense: false, udyogAadhar: false },
       createdAt: new Date().toISOString(),
       
-      // ✅ NEW: Default subscription fields for all new users
       subscriptionTier: 'FREE',
       subscriptionExpiry: null,
       paymentHistory: [],
+      
+      // 🚀 Save the WhatsApp Opt-In status
+      whatsappOptIn: whatsappOptIn ?? true, 
     };
 
     // 1. Save User to Firestore

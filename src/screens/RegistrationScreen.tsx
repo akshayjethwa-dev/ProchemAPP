@@ -1,3 +1,4 @@
+// File: src/screens/RegistrationScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -21,12 +22,11 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { registerUser } from '../services/authService';
 
-// ✅ Add navigation types
 type RootStackParamList = {
   Login: undefined;
   Registration: { role?: string } | undefined;
-  LegalPages: undefined; // ✅ Added LegalPages to type definition
-  AboutProchem: undefined; // ✅ ADDED: About Prochem to type definition
+  LegalPages: undefined; 
+  AboutProchem: undefined; 
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -36,7 +36,6 @@ export default function RegistrationScreen() {
   const route = useRoute();
   const theme = useTheme();
 
-  // Get params if available, otherwise default
   const { role } = (route.params as { role?: string }) || { role: 'buyer' };
 
   const [loading, setLoading] = useState(false);
@@ -49,8 +48,9 @@ export default function RegistrationScreen() {
   const [gstin, setGstin] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
 
-  // Terms & Conditions
+  // Terms & Conditions & Opt-ins
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [whatsappOptIn, setWhatsappOptIn] = useState(true); // 🚀 NEW: Default to true
 
   // Error States
   const [errors, setErrors] = useState({
@@ -62,7 +62,6 @@ export default function RegistrationScreen() {
     terms: '',
   });
 
-  // ✅ HELPER: Web-Compatible Alert
   const showAlert = (title: string, message: string, onOk?: () => void) => {
     if (Platform.OS === 'web') {
       window.alert(`${title}\n\n${message}`);
@@ -99,7 +98,6 @@ export default function RegistrationScreen() {
       newErrors.password = 'Password must be at least 6 characters';
       isValid = false;
     }
-    // Manual GST check (Length must be 15)
     if (!gstin || gstin.length !== 15) {
       newErrors.gstin = 'Enter a valid 15-digit GST Number';
       isValid = false;
@@ -113,9 +111,6 @@ export default function RegistrationScreen() {
     return isValid;
   };
 
-  /**
-   * Handle User Registration
-   */
   const handleRegister = async () => {
     if (!validate()) {
       if (!acceptTerms) {
@@ -135,7 +130,8 @@ export default function RegistrationScreen() {
         gstin: gstin.toUpperCase(),
         gstVerified: false, 
         verificationStatus: 'PENDING',
-        address: '', 
+        address: '',
+        whatsappOptIn, // 🚀 NEW: Pass this to backend
       };
 
       await registerUser(registrationData);
@@ -152,7 +148,6 @@ export default function RegistrationScreen() {
     }
   };
 
-  // ✅ UPDATED: Navigates to the actual Legal Pages screen
   const openTerms = () => {
     navigation.navigate('LegalPages');
   };
@@ -169,7 +164,6 @@ export default function RegistrationScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
           <View style={styles.headerContainer}>
             <Text variant="headlineMedium" style={{ fontWeight: 'bold', color: '#1E293B' }}>
               Create Account
@@ -181,7 +175,6 @@ export default function RegistrationScreen() {
 
           <View style={styles.formContainer}>
             
-            {/* --- COMPANY DETAILS --- */}
             <TextInput
               label="Company Name"
               value={companyName}
@@ -196,7 +189,6 @@ export default function RegistrationScreen() {
             />
             <HelperText type="error" visible={!!errors.companyName}>{errors.companyName}</HelperText>
 
-            {/* GST SECTION (Manual Entry) */}
             <TextInput
               label="GST Number (GSTIN)"
               value={gstin}
@@ -268,6 +260,18 @@ export default function RegistrationScreen() {
             />
             <HelperText type="error" visible={!!errors.password}>{errors.password}</HelperText>
 
+            {/* 🚀 NEW: WHATSAPP OPT-IN CHECKBOX */}
+            <View style={styles.optInContainer}>
+              <Checkbox.Android
+                status={whatsappOptIn ? 'checked' : 'unchecked'}
+                onPress={() => setWhatsappOptIn(!whatsappOptIn)}
+                color="#25D366" // WhatsApp Green
+              />
+              <Text style={{ flex: 1, color: '#333', marginLeft: 8 }}>
+                Receive order updates and market alerts on WhatsApp from Prochem.
+              </Text>
+            </View>
+
             {/* TERMS CHECKBOX */}
             <View style={styles.termsContainer}>
               <Checkbox.Android
@@ -292,7 +296,6 @@ export default function RegistrationScreen() {
               <HelperText type="error" visible={true} style={{ marginBottom: 5 }}>{errors.terms}</HelperText>
             ) : null}
 
-            {/* Register Button */}
             <Button
               mode="contained"
               onPress={handleRegister}
@@ -304,7 +307,6 @@ export default function RegistrationScreen() {
               Create Account
             </Button>
 
-            {/* ✅ ADDED: What is Prochem button */}
             <Button 
               mode="outlined" 
               icon="information-outline" 
@@ -315,7 +317,6 @@ export default function RegistrationScreen() {
               What is Prochem?
             </Button>
 
-            {/* Footer */}
             <View style={styles.footer}>
               <Text>Already have an account? </Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -336,6 +337,7 @@ const styles = StyleSheet.create({
   formContainer: { width: '100%' },
   input: { backgroundColor: 'white', fontSize: 15, marginBottom: 2 },
   btn: { marginTop: 16, borderRadius: 8, backgroundColor: '#004AAD' },
-  termsContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 5, marginTop: 5 },
+  termsContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 5, marginTop: 10 },
+  optInContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 5, marginTop: 5, backgroundColor: '#f0fdf4', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#bbf7d0' },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, marginBottom: 20 },
 });

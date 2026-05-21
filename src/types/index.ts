@@ -48,6 +48,9 @@ export interface User {
 
   premiumNegotiationCredits?: number; 
   liveQuoteCredits?: number;
+
+  // 🚀 NEW: WhatsApp Integration
+  whatsappOptIn?: boolean;
 }
 
 export interface UserProfile {

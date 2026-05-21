@@ -1,3 +1,4 @@
+// File: functions/index.js
 const functions = require("firebase-functions/v1"); 
 const { onDocumentCreated } = require("firebase-functions/v2/firestore"); 
 const admin = require("firebase-admin");
@@ -5,6 +6,9 @@ const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const { Expo } = require("expo-server-sdk"); 
 const twilio = require("twilio"); 
+
+// Import the reusable WhatsApp service
+const { sendWhatsApp } = require("./whatsappService");
 
 admin.initializeApp();
 const expo = new Expo();
@@ -97,7 +101,6 @@ exports.createRazorpayOrder = functions
   }
 
   try {
-    // 🔒 SECURE & DEPLOY-SAFE: Initialize Razorpay INSIDE the function
     const razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET,
@@ -162,6 +165,7 @@ exports.verifyRazorpayPayment = functions
   }
 
   try {
+    // 1. Update order status in Firestore
     await admin.firestore().collection("orders").doc(orderId).update({
       status: "PENDING_SELLER", 
       paymentStatus: "PAID",
@@ -171,6 +175,28 @@ exports.verifyRazorpayPayment = functions
         paidAt: admin.firestore.FieldValue.serverTimestamp(),
       }
     });
+
+    // ==========================================
+    // 🚀 NEW: WHATSAPP OPT-IN CHECK & NOTIFICATION
+    // ==========================================
+    try {
+      const userId = context.auth.uid;
+      const userDoc = await admin.firestore().collection("users").doc(userId).get();
+      const userData = userDoc.data();
+
+      // Check the exact opt-in boolean and ensure they provided a phone number
+      if (userData && userData.whatsappOptIn === true && userData.phoneNumber) {
+        await sendWhatsApp(
+          userData.phoneNumber, 
+          `🎉 Prochem Alert: Your payment for order #${orderId.substring(0, 6)} was successful. The seller has been notified!`
+        );
+      } else {
+        console.log(`Skipped WhatsApp for ${userId} - Opt-in is false or phone missing`);
+      }
+    } catch (waError) {
+      console.error("Error sending WhatsApp notification:", waError);
+      // We catch the error so the payment verification still completes successfully even if Twilio fails
+    }
 
     return { success: true, message: "Payment verified and order updated." };
     
@@ -195,7 +221,6 @@ exports.createUpgradeOrder = functions
   }
 
   try {
-    // 🔒 SECURE & DEPLOY-SAFE: Initialize Razorpay INSIDE the function
     const razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET,
@@ -259,6 +284,24 @@ exports.verifyUpgradePayment = functions
       subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
+    // ==========================================
+    // 🚀 NEW: WHATSAPP OPT-IN CHECK FOR UPGRADES
+    // ==========================================
+    try {
+      const userId = context.auth.uid;
+      const userDoc = await admin.firestore().collection("users").doc(userId).get();
+      const userData = userDoc.data();
+
+      if (userData && userData.whatsappOptIn === true && userData.phoneNumber) {
+        await sendWhatsApp(
+          userData.phoneNumber, 
+          `🚀 Prochem Alert: Your account has been upgraded to the ${planId} plan successfully! Enjoy your new features.`
+        );
+      }
+    } catch (waError) {
+      console.error("Error sending upgrade WhatsApp notification:", waError);
+    }
+
     return { success: true, message: "Account upgraded successfully." };
 
   } catch (error) {
@@ -266,7 +309,6 @@ exports.verifyUpgradePayment = functions
     throw new functions.https.HttpsError("internal", "Failed to update account status.");
   }
 });
-
 
 // ==========================================
 // 🚀 TWILIO WHATSAPP INTEGRATION 
@@ -276,25 +318,20 @@ exports.sendWhatsAppTest = functions
   .region("asia-south1") 
   .https.onRequest(async (req, res) => {
   
-  // 🔒 SECURE & DEPLOY-SAFE: Initialize Twilio INSIDE the function
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-    return res.status(500).send("Twilio credentials not configured in .env yet.");
+  if (!process.env.MY_PERSONAL_WHATSAPP) {
+    return res.status(500).send("MY_PERSONAL_WHATSAPP is not configured in .env yet.");
   }
 
   try {
-    const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const messageSid = await sendWhatsApp(
+      process.env.MY_PERSONAL_WHATSAPP, 
+      "Hello! This is a test message from the new Prochem reusable WhatsApp module."
+    );
 
-    const message = await twilioClient.messages.create({
-      body: "Hello! This is a test message from the Prochem backend.",
-      from: process.env.TWILIO_PHONE_NUMBER, 
-      to: process.env.MY_PERSONAL_WHATSAPP   
-    });
-
-    res.status(200).send(`Message sent successfully! Message ID: ${message.sid}`);
+    res.status(200).send(`Message sent successfully! Message SID: ${messageSid}`);
     
   } catch (error) {
-    console.error("Error sending WhatsApp message:", error);
-    res.status(500).send(`Failed to send message. Error: ${error.message}`);
+    res.status(500).send(`Failed to send message. Check Firebase logs for details. Error: ${error.message}`);
   }
 });
 
@@ -306,23 +343,54 @@ exports.whatsappWebhook = functions
   .region("asia-south1")
   .https.onRequest(async (req, res) => {
   
-  // Twilio sends a POST request when a message is received
   if (req.method !== 'POST') {
      return res.status(405).send('Method Not Allowed');
   }
 
   try {
-    // Extract incoming message details from Twilio's payload
     const { From, To, Body, WaId, ProfileName } = req.body;
-    
-    // Log the message to Firebase console so you can verify it works
     console.log(`📥 Incoming WhatsApp message from ${ProfileName || WaId} (${From}): ${Body}`);
-
-    // TODO in future tasks: 
-    // 1. Map the 'WaId' (WhatsApp ID) or 'From' number to a Prochem user record.
-    // 2. Save the 'Body' text to a Firestore conversations collection.
     
-    // You MUST send a 200 OK response to Twilio so they know the message was received successfully
+    // ==========================================
+    // 🚀 NEW: INBOUND PROFILE LINKING (Task 2.2)
+    // ==========================================
+    if (From && WaId) {
+      // Remove 'whatsapp:' prefix to match phone formats in DB
+      const incomingNumber = From.replace('whatsapp:', '');
+      
+      // Handle India country code format just in case it was saved differently
+      let localNumber = incomingNumber;
+      if (incomingNumber.startsWith('+91')) {
+        localNumber = incomingNumber.substring(3);
+      }
+
+      const usersRef = admin.firestore().collection("users");
+      
+      // Check if user exists with local (10-digit) or international number
+      let snapshot = await usersRef.where("phoneNumber", "==", localNumber).get();
+      if (snapshot.empty) {
+        snapshot = await usersRef.where("phoneNumber", "==", incomingNumber).get();
+      }
+
+      if (!snapshot.empty) {
+        snapshot.forEach(async (doc) => {
+          const userData = doc.data();
+          
+          // If we haven't saved their WaId yet, save it now
+          if (!userData.whatsappWaId) {
+            await doc.ref.update({
+              whatsappWaId: WaId,
+              // If they messaged us directly, we can assume they implicitly opted in to chat
+              whatsappOptIn: true 
+            });
+            console.log(`✅ Linked WhatsApp WaId ${WaId} to existing user ${doc.id}`);
+          }
+        });
+      } else {
+        console.log(`ℹ️ Received message from unrecognized number: ${incomingNumber}`);
+      }
+    }
+
     res.status(200).send('OK');
     
   } catch (error) {
