@@ -1,19 +1,12 @@
-const functions = require("firebase-functions/v1"); // 🚀 FIX: Explicitly require v1 here
+const functions = require("firebase-functions/v1"); 
 const { onDocumentCreated } = require("firebase-functions/v2/firestore"); 
 const admin = require("firebase-admin");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const { Expo } = require("expo-server-sdk"); 
+const twilio = require("twilio"); 
 
 admin.initializeApp();
-
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: "rzp_live_SnwvCwNukKeeTk",
-  key_secret: "4EU9V8Ms362d696xpVuoeYrf",
-});
-
-// Create a new Expo SDK client
 const expo = new Expo();
 
 // ==========================================
@@ -22,7 +15,7 @@ const expo = new Expo();
 exports.sendPushNotification = onDocumentCreated(
   {
     document: "notifications/{docId}",
-    region: "asia-south1" // Mumbai, India
+    region: "asia-south1" 
   }, 
   async (event) => {
     const snap = event.data;
@@ -86,11 +79,11 @@ exports.sendPushNotification = onDocumentCreated(
 });
 
 // ==========================================
-// EXISTING RAZORPAY FUNCTIONS (Gen 1 - INDIA REGION)
+// EXISTING RAZORPAY FUNCTIONS
 // ==========================================
 
 exports.createRazorpayOrder = functions
-  .region("asia-south1") // Mumbai, India
+  .region("asia-south1")
   .https.onCall(async (data, context) => {
   
   if (!context.auth) {
@@ -104,6 +97,12 @@ exports.createRazorpayOrder = functions
   }
 
   try {
+    // 🔒 SECURE & DEPLOY-SAFE: Initialize Razorpay INSIDE the function
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+
     const options = {
       amount: amount * 100, 
       currency: "INR",
@@ -133,7 +132,7 @@ exports.createRazorpayOrder = functions
       id: order.id,
       currency: order.currency,
       amount: order.amount,
-      key: "rzp_live_SnwvCwNukKeeTk"
+      key: process.env.RAZORPAY_KEY_ID 
     };
 
   } catch (error) {
@@ -143,7 +142,7 @@ exports.createRazorpayOrder = functions
 });
 
 exports.verifyRazorpayPayment = functions
-  .region("asia-south1") // Mumbai, India
+  .region("asia-south1")
   .https.onCall(async (data, context) => {
   
   if (!context.auth) {
@@ -154,7 +153,7 @@ exports.verifyRazorpayPayment = functions
 
   const body = razorpayOrderId + "|" + paymentId;
   const expectedSignature = crypto
-    .createHmac("sha256", "4EU9V8Ms362d696xpVuoeYrf") 
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET) 
     .update(body.toString())
     .digest("hex");
 
@@ -181,9 +180,6 @@ exports.verifyRazorpayPayment = functions
   }
 });
 
-// ==========================================
-// UPGRADE TO PREMIUM PLANS (RAZORPAY)
-// ==========================================
 
 exports.createUpgradeOrder = functions
   .region("asia-south1")
@@ -199,6 +195,12 @@ exports.createUpgradeOrder = functions
   }
 
   try {
+    // 🔒 SECURE & DEPLOY-SAFE: Initialize Razorpay INSIDE the function
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+
     const options = {
       amount: amount * 100, 
       currency: "INR",
@@ -212,7 +214,7 @@ exports.createUpgradeOrder = functions
       id: order.id,
       currency: order.currency,
       amount: order.amount,
-      key: "rzp_live_SnwvCwNukKeeTk" // Ensure your real key is here
+      key: process.env.RAZORPAY_KEY_ID 
     };
 
   } catch (error) {
@@ -230,10 +232,9 @@ exports.verifyUpgradePayment = functions
 
   const { orderId, paymentId, signature, planId } = data;
 
-  // Verify Signature
   const body = orderId + "|" + paymentId;
   const expectedSignature = crypto
-    .createHmac("sha256", "4EU9V8Ms362d696xpVuoeYrf") // Ensure real secret is here
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET) 
     .update(body.toString())
     .digest("hex");
 
@@ -242,7 +243,6 @@ exports.verifyUpgradePayment = functions
   }
 
   try {
-    // 1. Log the transaction in a new collection
     await admin.firestore().collection("transactions").add({
       userId: context.auth.uid,
       type: "SUBSCRIPTION_UPGRADE",
@@ -253,7 +253,6 @@ exports.verifyUpgradePayment = functions
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // 2. Automatically Upgrade the User's Profile
     await admin.firestore().collection("users").doc(context.auth.uid).update({
       subscriptionTier: "GROWTH_PACKAGE",
       subscriptionPlan: planId,
@@ -265,5 +264,36 @@ exports.verifyUpgradePayment = functions
   } catch (error) {
     console.error("Verification Error:", error);
     throw new functions.https.HttpsError("internal", "Failed to update account status.");
+  }
+});
+
+
+// ==========================================
+// 🚀 TWILIO WHATSAPP INTEGRATION 
+// ==========================================
+
+exports.sendWhatsAppTest = functions
+  .region("asia-south1") 
+  .https.onRequest(async (req, res) => {
+  
+  // 🔒 SECURE & DEPLOY-SAFE: Initialize Twilio INSIDE the function
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    return res.status(500).send("Twilio credentials not configured in .env yet.");
+  }
+
+  try {
+    const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+    const message = await twilioClient.messages.create({
+      body: "Hello! This is a test message from the Prochem backend.",
+      from: process.env.TWILIO_PHONE_NUMBER, 
+      to: process.env.MY_PERSONAL_WHATSAPP   
+    });
+
+    res.status(200).send(`Message sent successfully! Message ID: ${message.sid}`);
+    
+  } catch (error) {
+    console.error("Error sending WhatsApp message:", error);
+    res.status(500).send(`Failed to send message. Error: ${error.message}`);
   }
 });
