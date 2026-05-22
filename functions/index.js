@@ -9,6 +9,11 @@ const { Expo } = require("expo-server-sdk");
 // Import the reusable WhatsApp service
 const { sendWhatsApp } = require("./whatsappService");
 
+const { defineSecret } = require("firebase-functions/params");
+const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
+const TWILIO_AUTH_TOKEN   = defineSecret("TWILIO_AUTH_TOKEN");
+const TWILIO_PHONE_NUMBER = defineSecret("TWILIO_PHONE_NUMBER");
+
 admin.initializeApp();
 const expo = new Expo();
 
@@ -87,7 +92,8 @@ exports.sendPushNotification = onDocumentCreated(
 exports.onRequirementCreated = onDocumentCreated(
   {
     document: "customRequirements/{docId}",
-    region: "asia-south1" 
+    region: "asia-south1",
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER]
   }, 
   async (event) => {
     const snap = event.data;
@@ -152,7 +158,10 @@ exports.onRequirementCreated = onDocumentCreated(
 // Triggered when a Buyer creates a specific direct RFQ
 // ==========================================
 exports.onDirectRfqCreated = onDocumentCreated(
-  { document: "rfqs/{rfqId}", region: "asia-south1" },
+  { document: "rfqs/{rfqId}", 
+    region: "asia-south1",
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER]
+  },
   async (event) => {
     const rfqData = event.data.data();
     const rfqId = event.params.rfqId;
@@ -571,7 +580,8 @@ exports.whatsappWebhook = functions
 exports.onAppMessageCreated = onDocumentCreated(
   {
     document: "conversations/{conversationId}/messages/{messageId}",
-    region: "asia-south1" 
+    region: "asia-south1",
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER]
   },
   async (event) => {
     const snap = event.data;
@@ -669,7 +679,10 @@ exports.onAppMessageCreated = onDocumentCreated(
 // Triggered when RFQ status changes to CONVERTED
 // ==========================================
 exports.onRfqUpdated = onDocumentUpdated(
-  { document: "rfqs/{rfqId}", region: "asia-south1" },
+  { document: "rfqs/{rfqId}", 
+    region: "asia-south1",
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER]
+  },
   async (event) => {
      const before = event.data.before.data();
      const after = event.data.after.data();
@@ -717,7 +730,8 @@ exports.onRfqUpdated = onDocumentUpdated(
 exports.onUserCreated = onDocumentCreated(
   { 
     document: "users/{userId}", 
-    region: "asia-south1" 
+    region: "asia-south1",
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER]
   },
   async (event) => {
     const snap = event.data;
