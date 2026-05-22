@@ -16,10 +16,12 @@ export default function NegotiationRoomScreen() {
   const { user, viewMode } = useAppStore();
   
   const rfqId = route.params?.rfqId;
+  const passedConversationId = route.params?.conversationId;
   const isAdminView = route.params?.isAdminView || user?.userType === 'admin' || user?.userType === 'sub_admin';
 
   const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
-  const [roomMessages, setRoomMessages] = useState<NegotiationMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(passedConversationId || null);
+  const [roomMessages, setRoomMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -31,6 +33,7 @@ export default function NegotiationRoomScreen() {
 
   const [participantsInfo, setParticipantsInfo] = useState<{buyerName: string, sellerName: string, buyerPhone?: string, sellerPhone?: string}>({ buyerName: 'Buyer', sellerName: 'Supplier' });
 
+  // Fetch RFQ
   useEffect(() => {
     if (!rfqId) return;
 
@@ -40,18 +43,59 @@ export default function NegotiationRoomScreen() {
       }
     });
 
-    const q = query(collection(db, 'messages'), where('rfqId', '==', rfqId));
+    return () => unsubRfq();
+  }, [rfqId]);
+
+  // Setup Conversation dynamically if not passed in via routing
+  useEffect(() => {
+    if (!activeRfq || !user || conversationId) return;
+
+    const setupConversation = async () => {
+      try {
+        const q = query(collection(db, 'conversations'), where('rfqId', '==', activeRfq.id));
+        const snap = await getDocs(q);
+        
+        if (!snap.empty) {
+          setConversationId(snap.docs[0].id);
+        } else if (!isAdminView) {
+          const newConvRef = await addDoc(collection(db, 'conversations'), {
+            buyerUserId: activeRfq.buyerId,
+            sellerUserId: activeRfq.sellerId,
+            rfqId: activeRfq.id,
+            status: 'open',
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          });
+          setConversationId(newConvRef.id);
+        }
+      } catch (err) {
+        console.error("Error setting up conversation", err);
+      }
+    };
+
+    setupConversation();
+  }, [activeRfq, user, conversationId, isAdminView]);
+
+  // Subscribe to new message subcollection
+  useEffect(() => {
+    if (!conversationId) {
+       setLoading(false);
+       return;
+    }
+
+    const q = query(collection(db, 'conversations', conversationId, 'messages'));
     const unsubMessages = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as NegotiationMessage));
-      setRoomMessages(msgs.sort((a, b) => a.timestamp - b.timestamp));
+      const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setRoomMessages(msgs.sort((a: any, b: any) => {
+         const timeA = a.timestamp?.seconds ? a.timestamp.seconds * 1000 : a.timestamp;
+         const timeB = b.timestamp?.seconds ? b.timestamp.seconds * 1000 : b.timestamp;
+         return timeA - timeB;
+      }));
       setLoading(false);
     });
 
-    return () => {
-      unsubRfq();
-      unsubMessages();
-    };
-  }, [rfqId]);
+    return () => unsubMessages();
+  }, [conversationId]);
 
   useEffect(() => {
     if (!activeRfq || !isAdminView) return;
@@ -126,7 +170,7 @@ export default function NegotiationRoomScreen() {
   };
 
   const sendChatMessage = async () => {
-    if (!messageText.trim() || !user) return;
+    if (!messageText.trim() || !user || !conversationId) return;
     
     const safeTextToSend = maskSensitiveInfo(messageText);
     
@@ -140,15 +184,24 @@ export default function NegotiationRoomScreen() {
     setMessageText(''); 
     
     try {
-      await addDoc(collection(db, 'messages'), {
+      const senderRole = viewMode === 'buyer' ? 'buyer' : 'seller';
+      const direction = viewMode === 'buyer' ? 'toSeller' : 'toBuyer';
+
+      await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
         rfqId: activeRfq.id,
-        text: safeTextToSend,
+        text: safeTextToSend, 
+        body: safeTextToSend, 
         senderId: user.uid,
+        senderRole: senderRole,
+        direction: direction,
+        source: 'app', 
         timestamp: Date.now(),
         isBuyer: viewMode === 'buyer',
         isOffer: false
       });
       
+      await updateDoc(doc(db, 'conversations', conversationId), { updatedAt: Date.now() });
+
       if (activeRfq.status === 'PENDING') {
          await updateDoc(doc(db, 'rfqs', activeRfq.id), {
             status: 'NEGOTIATING',
@@ -166,7 +219,7 @@ export default function NegotiationRoomScreen() {
     const price = parseFloat(offerPrice);
     const qty = parseInt(offerQuantity, 10);
 
-    if (isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0 || !user) {
+    if (isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0 || !user || !conversationId) {
         Alert.alert("Invalid Input", "Please enter a valid price and quantity.");
         return;
     }
@@ -176,10 +229,16 @@ export default function NegotiationRoomScreen() {
     setOfferModalVisible(false); 
     
     try {
-      await addDoc(collection(db, 'messages'), {
+      const offerText = `Sent a Custom Offer: ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}`;
+
+      await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
         rfqId: activeRfq.id,
-        text: `Sent a Custom Offer: ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}`,
+        text: offerText, 
+        body: offerText, 
         senderId: user.uid,
+        senderRole: 'seller',
+        direction: 'toBuyer',
+        source: 'app',
         timestamp: Date.now(),
         isBuyer: false,
         isOffer: true,
@@ -187,6 +246,8 @@ export default function NegotiationRoomScreen() {
         proposedQty: qty 
       });
       
+      await updateDoc(doc(db, 'conversations', conversationId), { updatedAt: Date.now() });
+
       await updateDoc(doc(db, 'rfqs', activeRfq.id), {
         status: 'NEGOTIATING',
         updatedAt: new Date().toISOString()
@@ -200,11 +261,20 @@ export default function NegotiationRoomScreen() {
   const proceedToCheckout = async (price: number, qty: number, overrideSellerId?: string) => {
     setIsProcessing(true);
     try {
-      if (overrideSellerId) {
-        await addDoc(collection(db, 'messages'), {
+      if (conversationId) {
+        // 🚀 TASK 5.5: Close conversation due to success
+        await updateDoc(doc(db, 'conversations', conversationId), {
+          status: 'won',
+          updatedAt: Date.now()
+        });
+
+        await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
           rfqId: activeRfq.id,
           text: `System: This requirement has been successfully fulfilled and closed. Thank you for participating.`,
+          body: `System: This requirement has been successfully fulfilled and closed. Thank you for participating.`,
           senderId: 'system',
+          senderRole: 'system',
+          source: 'app',
           timestamp: Date.now(),
           isBuyer: false,
           isOffer: false
@@ -220,7 +290,6 @@ export default function NegotiationRoomScreen() {
 
       try {
         const leadsRef = collection(db, 'broadcastLeads');
-        
         const q1 = query(leadsRef, where('originalOrderId', '==', activeRfq.id), where('status', '==', 'OPEN'));
         const snap1 = await getDocs(q1);
         snap1.forEach(async (d) => {
@@ -248,7 +317,6 @@ export default function NegotiationRoomScreen() {
       };
 
       setIsProcessing(false);
-      
       navigation.navigate('Checkout', { negotiatedItem });
 
     } catch (error) {
@@ -280,9 +348,57 @@ export default function NegotiationRoomScreen() {
     ]);
   };
 
-  const renderMessage = ({ item }: { item: NegotiationMessage }) => {
+  // 🚀 TASK 5.5: Manual Close Action
+  const closeNegotiation = async () => {
+    Alert.alert(
+      "End Negotiation",
+      "Are you sure you want to close this negotiation? Both parties will no longer be able to send messages.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Close Chat", 
+          style: "destructive",
+          onPress: async () => {
+            setIsProcessing(true);
+            try {
+              if (conversationId) {
+                await updateDoc(doc(db, 'conversations', conversationId), {
+                  status: 'closed',
+                  updatedAt: Date.now()
+                });
+
+                await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+                  rfqId: activeRfq.id,
+                  text: `System: This negotiation was closed by the ${viewMode === 'buyer' ? 'Buyer' : 'Supplier'}.`,
+                  body: `System: This negotiation was closed by the ${viewMode === 'buyer' ? 'Buyer' : 'Supplier'}.`,
+                  senderId: 'system',
+                  senderRole: 'system',
+                  source: 'app',
+                  timestamp: Date.now(),
+                  isBuyer: false,
+                  isOffer: false
+                });
+              }
+
+              await updateDoc(doc(db, 'rfqs', activeRfq.id), {
+                status: 'REJECTED',
+                updatedAt: new Date().toISOString()
+              });
+            } catch (err) {
+              console.error("Error closing negotiation:", err);
+              Alert.alert("Error", "Could not close the chat.");
+            } finally {
+              setIsProcessing(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const renderMessage = ({ item }: { item: any }) => {
     const isMe = item.senderId === user?.uid;
-    const isSystem = item.senderId === 'system';
+    const isSystem = item.senderId === 'system' || item.senderRole === 'system';
     
     const alignRight = isAdminView ? (!item.isBuyer && !isSystem) : isMe;
     
@@ -312,26 +428,27 @@ export default function NegotiationRoomScreen() {
       <View style={[styles.msgWrapper, alignRight ? styles.msgRight : styles.msgLeft]}>
         {!alignRight && <Avatar.Icon size={32} icon={isSystem ? "robot-outline" : (item.isBuyer ? "account" : "store")} style={{marginRight: 8, backgroundColor: '#E2E8F0'}} color="#64748B" />}
         
-        <View style={[styles.msgBubble, bubbleStyle]}>
-          {isAdminView && !isSystem && (
-            <Text style={{ fontSize: 10, fontWeight: 'bold', color: item.isBuyer ? '#1D4ED8' : '#15803D', marginBottom: 2 }}>
-              {item.isBuyer 
-                ? `${participantsInfo.buyerName} ${participantsInfo.buyerPhone ? `(${participantsInfo.buyerPhone})` : ''}` 
-                : `${participantsInfo.sellerName} ${participantsInfo.sellerPhone ? `(${participantsInfo.sellerPhone})` : ''}`}
-            </Text>
-          )}
+        <View>
+          <View style={[styles.msgBubble, bubbleStyle]}>
+            {isAdminView && !isSystem && (
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: item.isBuyer ? '#1D4ED8' : '#15803D', marginBottom: 2 }}>
+                {item.isBuyer 
+                  ? `${participantsInfo.buyerName} ${participantsInfo.buyerPhone ? `(${participantsInfo.buyerPhone})` : ''}` 
+                  : `${participantsInfo.sellerName} ${participantsInfo.sellerPhone ? `(${participantsInfo.sellerPhone})` : ''}`}
+              </Text>
+            )}
 
-          <Text style={textStyle}>{item.text}</Text>
-          
-          {item.isOffer && (item.proposedPrice || item.proposedQty) && (
-             <Card style={{marginTop: 10, backgroundColor: (!isAdminView && isMe) ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
-               <Card.Content style={{padding: 10}}>
-                 <Text style={{fontWeight: 'bold', color: (!isAdminView && isMe) ? 'white' : '#0F172A'}}>
-                   {isAdminView ? `Offer by ${item.isBuyer ? participantsInfo.buyerName : participantsInfo.sellerName}:` : (isMe ? 'You Offered:' : 'Custom Offer:')} 
-                   {'\n'}{item.proposedQty || activeRfq.targetQuantity} {activeRfq.unit} at ₹{item.proposedPrice} / {activeRfq.unit}
-                 </Text>
-                 
-                 {!isAdminView && !isMe && viewMode === 'buyer' && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
+            <Text style={textStyle}>{item.text || item.body}</Text>
+            
+            {item.isOffer && (item.proposedPrice || item.proposedQty) && (
+              <Card style={{marginTop: 10, backgroundColor: (!isAdminView && isMe) ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
+                <Card.Content style={{padding: 10}}>
+                  <Text style={{fontWeight: 'bold', color: (!isAdminView && isMe) ? 'white' : '#0F172A'}}>
+                    {isAdminView ? `Offer by ${item.isBuyer ? participantsInfo.buyerName : participantsInfo.sellerName}:` : (isMe ? 'You Offered:' : 'Custom Offer:')} 
+                    {'\n'}{item.proposedQty || activeRfq.targetQuantity} {activeRfq.unit} at ₹{item.proposedPrice} / {activeRfq.unit}
+                  </Text>
+                  
+                  {!isAdminView && !isMe && viewMode === 'buyer' && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
                     <Button 
                       mode="contained" 
                       compact 
@@ -343,10 +460,15 @@ export default function NegotiationRoomScreen() {
                     >
                       {isProcessing ? 'Processing...' : 'Accept & Checkout'}
                     </Button>
-                 )}
-               </Card.Content>
-             </Card>
-          )}
+                  )}
+                </Card.Content>
+              </Card>
+            )}
+          </View>
+          
+          <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 4, textAlign: alignRight ? 'right' : 'left' }}>
+            {item.source === 'whatsapp' ? '📱 via WhatsApp' : (isSystem ? '' : '💻 via App')}
+          </Text>
         </View>
       </View>
     );
@@ -357,7 +479,7 @@ export default function NegotiationRoomScreen() {
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={{flex: 1}}>
-           <Text variant="titleMedium" style={{fontWeight: 'bold'}}>{activeRfq.productName}</Text>
+           <Text variant="titleMedium" style={{fontWeight: 'bold'}}>{activeRfq?.productName}</Text>
            <Text style={{fontSize: 12, color: '#666'}}>
              {isAdminView 
                 ? `Buyer: ${participantsInfo.buyerName}  •  Supplier: ${participantsInfo.sellerName}`
@@ -365,14 +487,24 @@ export default function NegotiationRoomScreen() {
              }
            </Text>
         </View>
-        <Chip style={{backgroundColor: activeRfq.status === 'CONVERTED' ? '#DCFCE7' : '#FEF9C3'}}>
-           <Text style={{fontSize: 10, color: activeRfq.status === 'CONVERTED' ? '#166534' : '#854D0E'}}>
-              {activeRfq.status}
+        <Chip style={{backgroundColor: activeRfq?.status === 'CONVERTED' ? '#DCFCE7' : (activeRfq?.status === 'REJECTED' ? '#FEE2E2' : '#FEF9C3'), marginRight: 5}}>
+           <Text style={{fontSize: 10, color: activeRfq?.status === 'CONVERTED' ? '#166534' : (activeRfq?.status === 'REJECTED' ? '#991B1B' : '#854D0E')}}>
+              {activeRfq?.status}
            </Text>
         </Chip>
+
+        {/* 🚀 TASK 5.5: Close Chat Icon in Header */}
+        {!isAdminView && activeRfq?.status !== 'CONVERTED' && activeRfq?.status !== 'REJECTED' && (
+          <IconButton 
+            icon="close-circle-outline" 
+            iconColor="#EF4444" 
+            size={24} 
+            onPress={closeNegotiation} 
+            disabled={isProcessing}
+          />
+        )}
       </View>
 
-      {/* ✅ Action Bar added explicitly for Admin / Sub_admin to contact users instantly */}
       {isAdminView && (
          <View style={{ flexDirection: 'row', justifyContent: 'space-around', backgroundColor: 'white', paddingBottom: 10, borderBottomWidth: 1, borderColor: '#E2E8F0' }}>
             <Button 
@@ -394,7 +526,7 @@ export default function NegotiationRoomScreen() {
          </View>
       )}
 
-      {adminOffer && viewMode === 'buyer' && activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
+      {adminOffer && viewMode === 'buyer' && activeRfq?.status !== 'CONVERTED' && activeRfq?.status !== 'REJECTED' && (
         <Card style={{ margin: 10, backgroundColor: '#ECFDF5', borderColor: '#10B981', borderWidth: 1 }}>
            <Card.Content style={{ padding: 12 }}>
              <View style={{flexDirection: 'row', alignItems: 'center'}}>
@@ -435,7 +567,7 @@ export default function NegotiationRoomScreen() {
           inverted={false} 
         />
 
-        {!isAdminView && activeRfq.status !== 'CONVERTED' && activeRfq.status !== 'REJECTED' && (
+        {!isAdminView && activeRfq?.status !== 'CONVERTED' && activeRfq?.status !== 'REJECTED' && (
           <View>
             {viewMode === 'seller' && (
               <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
@@ -472,6 +604,7 @@ export default function NegotiationRoomScreen() {
                 iconColor="white" 
                 onPress={sendChatMessage} 
                 style={{marginTop: 8}} 
+                disabled={!conversationId}
               />
             </View>
           </View>
@@ -495,7 +628,7 @@ export default function NegotiationRoomScreen() {
                <TextInput
                   mode="outlined"
                   keyboardType="numeric"
-                  label={`Quantity Offered (${activeRfq.unit})`}
+                  label={`Quantity Offered (${activeRfq?.unit})`}
                   value={offerQuantity}
                   onChangeText={setOfferQuantity}
                   style={{backgroundColor: 'white', marginBottom: 15}}
@@ -505,7 +638,7 @@ export default function NegotiationRoomScreen() {
                <TextInput
                   mode="outlined"
                   keyboardType="numeric"
-                  label={`Final Agreed Price (₹ / ${activeRfq.unit})`}
+                  label={`Final Agreed Price (₹ / ${activeRfq?.unit})`}
                   value={offerPrice}
                   onChangeText={setOfferPrice}
                   style={{backgroundColor: 'white', marginBottom: 20}}

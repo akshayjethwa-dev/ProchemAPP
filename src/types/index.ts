@@ -158,6 +158,29 @@ export interface RFQ {
   updatedAt: string;
 }
 
+// 🚀 NEW: Masked Negotiation Conversation Schema (Task 5.1)
+export interface Conversation {
+  id?: string;
+  buyerUserId: string;
+  sellerUserId: string;
+  rfqId: string;
+  status: 'open' | 'closed';
+  createdAt?: any; // Uses Firebase serverTimestamp
+  updatedAt?: any; // Uses Firebase serverTimestamp
+}
+
+// 🚀 NEW: Masked Negotiation Message Schema (Task 5.1)
+// This will live in a subcollection: conversations/{conversationId}/messages
+export interface ConversationMessage {
+  id?: string;
+  conversationId?: string; // Helpful reference
+  senderRole: 'buyer' | 'seller' | 'system';
+  direction: 'toBuyer' | 'toSeller' | 'both'; 
+  body: string;
+  source: 'whatsapp' | 'app';
+  timestamp?: any; // Uses Firebase serverTimestamp
+}
+
 // 🚀 UPDATED: Negotiation Message Schema (for the chat room)
 export interface NegotiationMessage {
   id: string;
