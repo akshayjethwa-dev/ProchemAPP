@@ -709,3 +709,46 @@ exports.onRfqUpdated = onDocumentUpdated(
      return null;
   }
 );
+
+// ==========================================
+// 🚀 WELCOME WHATSAPP MESSAGE ON SIGNUP
+// Triggered when a new user creates an account
+// ==========================================
+exports.onUserCreated = onDocumentCreated(
+  { 
+    document: "users/{userId}", 
+    region: "asia-south1" 
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return null;
+
+    const userData = snap.data();
+    const userId = event.params.userId;
+
+    // Ensure the user has a phone number and opted in
+    if (userData.phoneNumber && userData.whatsappOptIn) {
+      try {
+        const companyName = userData.companyName || "Valued User";
+        
+        // Exact formatting matching your template, mapping companyName to {{1}}
+        const msg = `Welcome to Prochem, ${companyName}. Your account is created. Start by browsing market requirements now.`;
+        
+        // Use "marketing" for Twilio/WhatsApp category routing
+        await sendWhatsApp(userData.phoneNumber, msg, null, {
+          templateName: "prochem_welcome", // Change this if your template has a specific name in Twilio
+          type: "marketing", 
+          userId: userId
+        });
+        
+        console.log(`✅ Welcome WhatsApp sent to ${userData.phoneNumber}`);
+        return true;
+      } catch (err) {
+        console.error("❌ Error sending welcome WhatsApp:", err);
+        return null;
+      }
+    }
+    
+    return null;
+  }
+);
