@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl, Linking } from 'react-native'; // ✅ Added Linking
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
@@ -8,11 +8,9 @@ import { getBuyerOrders } from '../services/orderService';
 import { logoutUser } from '../services/authService';
 
 export default function BuyerDashboard() {
-  // ✅ FIX: Use 'any' to allow navigation to Tabs (Categories, Orders) which are not in RootStackParamList
   const navigation = useNavigation<any>();
-  const isFocused = useIsFocused(); // ✅ Triggers update when screen is focused
+  const isFocused = useIsFocused();
   
-  // ✅ Use Global State for products
   const { user, products, setProducts } = useAppStore();
   
   const [orders, setOrders] = useState<any[]>([]);
@@ -21,13 +19,11 @@ export default function BuyerDashboard() {
 
   const loadData = useCallback(async () => {
     try {
-      // 1. Fetch products and save to GLOBAL store
       const prods = await getProducts();
       setProducts(prods);
 
-      // 2. Fetch orders for local state
       if (user) {
-        const buyerId = user.uid; // Use UID for consistency
+        const buyerId = user.uid; 
         const buyerOrders = await getBuyerOrders(buyerId);
         setOrders(buyerOrders || []);
       }
@@ -39,7 +35,6 @@ export default function BuyerDashboard() {
     }
   }, [user, setProducts]);
 
-  // ✅ Auto-refresh when screen comes into focus (e.g., after login)
   useEffect(() => {
     if (isFocused) {
       loadData();
@@ -85,7 +80,6 @@ export default function BuyerDashboard() {
         <View style={styles.grid}>
           <TouchableOpacity 
             style={styles.card}
-            // ✅ FIX: Navigate to 'Categories' Tab (which replaced Marketplace)
             onPress={() => navigation.navigate('Categories')}
           >
             <Text style={styles.cardIcon}>🧪</Text>
@@ -97,7 +91,6 @@ export default function BuyerDashboard() {
 
           <TouchableOpacity 
             style={styles.card}
-            // ✅ FIX: Navigate to 'Orders' Tab
             onPress={() => navigation.navigate('Orders')}
           >
             <Text style={styles.cardIcon}>📦</Text>
@@ -115,7 +108,6 @@ export default function BuyerDashboard() {
           
           <TouchableOpacity 
             style={styles.listItem}
-            // ✅ FIX: Navigate to 'Orders' Tab
             onPress={() => navigation.navigate('Orders')}
           >
             <Text style={styles.listIcon}>📋</Text>
@@ -129,6 +121,22 @@ export default function BuyerDashboard() {
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 🚀 NEW: WhatsApp CTA Banner */}
+        <TouchableOpacity 
+          style={styles.waBanner} 
+          activeOpacity={0.9}
+          onPress={() => Linking.openURL('https://wa.me/918460852903?text=Hi%20Prochem!%20Please%20link%20my%20account.')}
+        >
+          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <Text style={{fontSize: 30, marginRight: 15}}>💬</Text>
+            <View style={{flex: 1}}>
+              <Text style={styles.waBannerTitle}>Get WhatsApp Alerts</Text>
+              <Text style={styles.waBannerText}>Tap here to say Hi and instantly link your number for order tracking.</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Bulk Buy Rewards</Text>
@@ -169,6 +177,11 @@ const styles = StyleSheet.create({
   listIcon: { fontSize: 20, marginRight: 16 },
   listText: { flex: 1, color: '#333', fontWeight: '600' },
   chevron: { color: '#ccc', fontSize: 20 },
+  // WA Banner styles
+  waBanner: { backgroundColor: '#E8F5E9', borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#A5D6A7' },
+  waBannerTitle: { color: '#1B5E20', fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
+  waBannerText: { color: '#2E7D32', fontSize: 12 },
+  
   banner: { backgroundColor: '#2E7D32', borderRadius: 16, padding: 20 },
   bannerTitle: { color: 'white', fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
   bannerText: { color: 'rgba(255,255,255,0.9)', fontSize: 12 },

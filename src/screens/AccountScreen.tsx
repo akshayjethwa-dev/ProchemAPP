@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Modal, ActivityIndicator, Dimensions, Alert } from 'react-native';
-import { Text, Avatar, List, Divider, Button, Chip, useTheme, Card, IconButton, Badge } from 'react-native-paper'; // ✅ Added Badge
+import { Text, Avatar, List, Divider, Button, Chip, useTheme, Card, IconButton, Badge, Switch } from 'react-native-paper'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, onSnapshot } from 'firebase/firestore'; // ✅ Added Firestore imports
-import { db } from '../config/firebase'; // ✅ Added db import
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore'; 
+import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { logoutUser, deleteUserAccount } from '../services/authService';
 
@@ -18,11 +18,20 @@ export default function AccountScreen() {
   const [showSwitchModal, setShowSwitchModal] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false); 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showWaPrefsModal, setShowWaPrefsModal] = useState(false); 
   const [switching, setSwitching] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // ✅ Track quoted custom requirements for the notification badge
   const [quotedReqsCount, setQuotedReqsCount] = useState(0);
+
+  // ✅ WhatsApp Preferences State
+  const [waPrefs, setWaPrefs] = useState({
+    general: true,
+    marketAlerts: true,
+    negotiations: true,
+    digest: true
+  });
 
   useEffect(() => {
     if (!user?.uid || viewMode !== 'buyer') return;
@@ -40,6 +49,18 @@ export default function AccountScreen() {
     
     return () => unsub();
   }, [user?.uid, viewMode]);
+
+  // ✅ Load initial preferences from user document (Clean TypeScript way)
+  useEffect(() => {
+    if (user?.whatsappPreferences) {
+      setWaPrefs({
+        general: user.whatsappPreferences.general ?? true,
+        marketAlerts: user.whatsappPreferences.marketAlerts ?? true,
+        negotiations: user.whatsappPreferences.negotiations ?? true,
+        digest: user.whatsappPreferences.digest ?? true,
+      });
+    }
+  }, [user]);
 
   const handleSupport = () => {
     setShowSupportModal(true);
@@ -77,8 +98,6 @@ export default function AccountScreen() {
       await deleteUserAccount();
       setShowDeleteModal(false);
       Alert.alert("Account Deleted", "Your account and data have been permanently removed.");
-      // Note: Firebase's auth state listener in your RootNavigator/App.tsx 
-      // will automatically detect the null user and redirect to LoginScreen.
     } catch (error: any) {
       setShowDeleteModal(false);
       Alert.alert("Deletion Failed", error.message);
@@ -87,9 +106,77 @@ export default function AccountScreen() {
     }
   };
 
+  // ✅ Function to toggle & save WA preference to Firestore
+  const toggleWaPref = async (key: keyof typeof waPrefs, value: boolean) => {
+    const newPrefs = { ...waPrefs, [key]: value };
+    setWaPrefs(newPrefs); // Optimistic UI update
+    
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { whatsappPreferences: newPrefs });
+      } catch (error) {
+        console.error("Failed to update WA preferences", error);
+        Alert.alert("Error", "Could not save preference.");
+        setWaPrefs({ ...waPrefs }); // Revert on failure
+      }
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       
+      {/* 🚀 WHATSAPP PREFS MODAL */}
+      <Modal transparent visible={showWaPrefsModal} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { padding: 0, overflow: 'hidden' }]}>
+            <View style={{backgroundColor: '#25D366', padding: 20, alignItems: 'center'}}>
+              <Avatar.Icon size={50} icon="whatsapp" style={{backgroundColor: 'white'}} color="#25D366" />
+              <Text variant="titleLarge" style={{fontWeight:'bold', color: 'white', marginTop: 10}}>
+                WhatsApp Notifications
+              </Text>
+            </View>
+            
+            <View style={{padding: 20}}>
+              <View style={styles.switchRow}>
+                <View style={{flex: 1}}>
+                  <Text style={styles.switchLabel}>General Updates</Text>
+                  <Text style={styles.switchSub}>Marketing, promos, and platform news.</Text>
+                </View>
+                <Switch value={waPrefs.general} onValueChange={(val) => toggleWaPref('general', val)} color="#25D366" />
+              </View>
+
+              <View style={styles.switchRow}>
+                <View style={{flex: 1}}>
+                  <Text style={styles.switchLabel}>Market Alerts</Text>
+                  <Text style={styles.switchSub}>Live buyer requirements and sourcing requests.</Text>
+                </View>
+                <Switch value={waPrefs.marketAlerts} onValueChange={(val) => toggleWaPref('marketAlerts', val)} color="#25D366" />
+              </View>
+
+              <View style={styles.switchRow}>
+                <View style={{flex: 1}}>
+                  <Text style={styles.switchLabel}>Negotiations & Orders</Text>
+                  <Text style={styles.switchSub}>Chat relays, quotes, and payment status.</Text>
+                </View>
+                <Switch value={waPrefs.negotiations} onValueChange={(val) => toggleWaPref('negotiations', val)} color="#25D366" />
+              </View>
+
+              <View style={[styles.switchRow, {borderBottomWidth: 0}]}>
+                <View style={{flex: 1}}>
+                  <Text style={styles.switchLabel}>Weekly Digest</Text>
+                  <Text style={styles.switchSub}>Weekly summary of your market activity.</Text>
+                </View>
+                <Switch value={waPrefs.digest} onValueChange={(val) => toggleWaPref('digest', val)} color="#25D366" />
+              </View>
+
+              <Button mode="contained" onPress={() => setShowWaPrefsModal(false)} style={{marginTop: 10, backgroundColor: '#1E293B'}}>
+                Done
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* 1. SWITCH MODE CONFIRMATION MODAL */}
       <Modal transparent visible={showSwitchModal} animationType="fade">
         <View style={styles.modalOverlay}>
@@ -307,7 +394,6 @@ export default function AccountScreen() {
               />
               <Divider style={{marginLeft: 60}} />
               
-              {/* ✅ ADDED: My Sourcing Requests with Notification Badge */}
               <List.Item 
                 title="My Sourcing Requests"
                 description="Track custom chemicals we are sourcing" 
@@ -335,6 +421,17 @@ export default function AccountScreen() {
             right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
             onPress={() => navigation.navigate('AddressList')} 
             style={styles.listItem}
+          />
+          <Divider style={{marginLeft: 60}} />
+
+           {/* 🚀 NEW: WhatsApp Preferences Button */}
+           <List.Item 
+            title="WhatsApp Preferences" 
+            description="Manage alerts and notifications"
+            left={() => <List.Icon icon="whatsapp" color="#25D366" />} 
+            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => setShowWaPrefsModal(true)} 
+            style={styles.listItem} 
           />
           <Divider style={{marginLeft: 60}} />
 
@@ -424,5 +521,9 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 20, width: '100%', maxWidth: 360, elevation: 10 },
   modalHeader: { alignItems: 'center', marginBottom: 10 },
   modalBody: { textAlign: 'center', color: '#64748B', marginBottom: 25, lineHeight: 20 },
-  modalActions: { flexDirection: 'row', justifyContent: 'space-between' }
+  modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
+  // WA switch row styles
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  switchLabel: { fontWeight: 'bold', fontSize: 16, color: '#1E293B' },
+  switchSub: { fontSize: 12, color: '#64748B', marginTop: 2 }
 });

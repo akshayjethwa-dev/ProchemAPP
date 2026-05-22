@@ -1,4 +1,5 @@
-import { collection, getDocs, doc, updateDoc, query, where, orderBy, getCountFromServer, writeBatch } from 'firebase/firestore';
+// File: src/services/adminService.ts
+import { collection, getDocs, doc, updateDoc, query, where, orderBy, getCountFromServer, writeBatch, limit } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { User, Product } from '../types';
 
@@ -112,6 +113,26 @@ export const backfillUserSubscriptions = async (): Promise<number> => {
 
   } catch (error) {
     console.error('Error backfilling user subscriptions:', error);
+    throw error;
+  }
+};
+
+/**
+ * NEW: Fetch WhatsApp Logs
+ * Fetches recent WhatsApp traffic logs for the admin dashboard
+ */
+export const getWhatsAppLogs = async (logLimit = 100) => {
+  try {
+    const logsRef = collection(db, 'whatsappLogs');
+    const q = query(logsRef, orderBy('timestamp', 'desc'), limit(logLimit));
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.error("Error fetching WhatsApp logs:", error);
     throw error;
   }
 };

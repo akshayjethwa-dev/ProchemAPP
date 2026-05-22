@@ -117,12 +117,18 @@ exports.onRequirementCreated = onDocumentCreated(
           (reqData.excludedSellerIds && reqData.excludedSellerIds.includes(userId)) || 
           userId === reqData.excludedSellerId;
 
-        if (isSeller && !isExcluded && userData.phoneNumber) {
+        const prefs = userData.whatsappPreferences || {};
+        const wantsMarketAlerts = prefs.marketAlerts !== false; // defaults to true
+
+        if (isSeller && !isExcluded && userData.phoneNumber && wantsMarketAlerts) {
           const msg = `🔔 *New Buyer Requirement — Prochem*\n\nA buyer is looking for:\n\n🧪 *Product:* ${productName}\n📦 *Quantity:* ${displayQty}\n💰 *Target Price:* ${displayPrice}\n\n*Requirement ID:* #${docId}\n\nReply *INTEREST ${docId}* to start negotiation via Prochem.\n\n_(This requirement is live — respond quickly to close the deal)_\n\n_Prochem Marketplace_`;
           
           sendPromises.push(
-            sendWhatsApp(userData.phoneNumber, msg)
-              .catch(err => console.error(`Failed to send alert to ${userData.phoneNumber}`, err))
+            sendWhatsApp(userData.phoneNumber, msg, null, {
+              templateName: "Broadcast_New_Requirement",
+              type: "marketing",
+              userId: userId
+            }).catch(err => console.error(`Failed to send alert to ${userData.phoneNumber}`, err))
           );
         }
       });
@@ -167,7 +173,11 @@ exports.onDirectRfqCreated = onDocumentCreated(
           // EXACT match for Twilio Template 1
           const msg = `🔔 *New Negotiation Request — Prochem*\n\nHi ${companyName},\n\nA verified buyer wants to negotiate on your product:\n\n🧪 *Product:* ${rfqData.productName}\n📦 *Qty Requested:* ${rfqData.targetQuantity} ${rfqData.unit}\n💰 *Buyer's Target Price:* ₹${targetPrice} / ${rfqData.unit}\n📍 *Delivery Location:* ${location}\n\n*Negotiation ID:* #${rfqId}\n\nThe buyer is waiting. \nYou can negotiate directly here on WhatsApp.\nAll conversations go through Prochem — your contact details stay private.\n\n_Reply to this message to begin negotiation._\n\n_Prochem Marketplace_`;
           
-          await sendWhatsApp(sellerData.phoneNumber, msg);
+          await sendWhatsApp(sellerData.phoneNumber, msg, null, {
+            templateName: "Template_1_New_Rfq",
+            type: "service",
+            userId: rfqData.sellerId
+          });
       }
       return true;
     } catch (err) {
@@ -238,7 +248,11 @@ exports.verifyRazorpayPayment = functions
       const userData = userDoc.data();
 
       if (userData && userData.whatsappOptIn === true && userData.phoneNumber) {
-        await sendWhatsApp(userData.phoneNumber, `🎉 Prochem Alert: Your payment for order #${orderId.substring(0, 6)} was successful. The seller has been notified!`);
+        await sendWhatsApp(userData.phoneNumber, `🎉 Prochem Alert: Your payment for order #${orderId.substring(0, 6)} was successful. The seller has been notified!`, null, {
+          templateName: "Payment_Success",
+          type: "transactional",
+          userId: userId
+        });
       }
     } catch (waError) {
       console.error("Error sending WhatsApp notification:", waError);
@@ -291,7 +305,11 @@ exports.verifyUpgradePayment = functions
       const userDoc = await admin.firestore().collection("users").doc(context.auth.uid).get();
       const userData = userDoc.data();
       if (userData && userData.whatsappOptIn === true && userData.phoneNumber) {
-        await sendWhatsApp(userData.phoneNumber, `🚀 Prochem Alert: Your account has been upgraded to the ${planId} plan successfully! Enjoy your new features.`);
+        await sendWhatsApp(userData.phoneNumber, `🚀 Prochem Alert: Your account has been upgraded to the ${planId} plan successfully! Enjoy your new features.`, null, {
+          templateName: "Subscription_Upgrade",
+          type: "transactional",
+          userId: context.auth.uid
+        });
       }
     } catch (waError) {
       console.error("Error sending upgrade WhatsApp notification:", waError);
@@ -311,7 +329,10 @@ exports.sendWhatsAppTest = functions
   .https.onRequest(async (req, res) => {
   if (!process.env.MY_PERSONAL_WHATSAPP) return res.status(500).send("MY_PERSONAL_WHATSAPP is not configured in .env yet.");
   try {
-    const messageSid = await sendWhatsApp(process.env.MY_PERSONAL_WHATSAPP, "Hello! This is a test message from the new Prochem reusable WhatsApp module.");
+    const messageSid = await sendWhatsApp(process.env.MY_PERSONAL_WHATSAPP, "Hello! This is a test message from the new Prochem reusable WhatsApp module.", null, {
+      templateName: "System_Test",
+      type: "service"
+    });
     res.status(200).send(`Message sent successfully! Message SID: ${messageSid}`);
   } catch (error) {
     res.status(500).send(`Failed to send message. Check Firebase logs for details. Error: ${error.message}`);
@@ -346,11 +367,25 @@ exports.whatsappWebhook = functions
       let snapshot = await usersRef.where("phoneNumber", "==", localNumber).get();
       if (snapshot.empty) snapshot = await usersRef.where("phoneNumber", "==", incomingNumber).get();
 
+      // 🚀 INBOUND LOGGING - Write incoming log first
+      let senderId = snapshot.empty ? null : snapshot.docs[0].id;
+      const db = admin.firestore();
+      const rawBody = Body.trim();
+
+      const incomingLogRef = await db.collection("whatsappLogs").add({
+         direction: "inbound",
+         fromNumber: incomingNumber,
+         messageSid: WaId,
+         body: rawBody,
+         senderUserId: senderId,
+         timestamp: admin.firestore.FieldValue.serverTimestamp(),
+         status: "received"
+      });
+
       if (!snapshot.empty) {
         const matchedDoc = snapshot.docs[0];
         const userData = matchedDoc.data();
-        const senderId = matchedDoc.id;
-
+        
         // Profile Linking
         snapshot.forEach(async (doc) => {
           const docData = doc.data();
@@ -359,7 +394,6 @@ exports.whatsappWebhook = functions
           }
         });
 
-        const rawBody = Body.trim();
         const upperCleanBody = rawBody.toUpperCase().replace(/\*/g, '');
         
         // ==========================================
@@ -369,21 +403,21 @@ exports.whatsappWebhook = functions
           const rfqId = upperCleanBody.split(" ")[1];
           
           if (rfqId) {
-            const rfqRef = admin.firestore().collection("rfqs").doc(rfqId);
+            const rfqRef = db.collection("rfqs").doc(rfqId);
             const rfqSnap = await rfqRef.get();
 
             if (rfqSnap.exists) {
               const rfqData = rfqSnap.data();
 
               if (rfqData.sellerId === senderId) {
-                const convQuery = await admin.firestore().collection("conversations")
+                const convQuery = await db.collection("conversations")
                   .where("rfqId", "==", rfqId)
                   .get();
 
                 let conversationId;
 
                 if (convQuery.empty) {
-                  const newConvRef = await admin.firestore().collection("conversations").add({
+                  const newConvRef = await db.collection("conversations").add({
                     buyerUserId: rfqData.buyerId,
                     sellerUserId: rfqData.sellerId,
                     rfqId: rfqId,
@@ -394,36 +428,43 @@ exports.whatsappWebhook = functions
                   conversationId = newConvRef.id;
                 } else {
                   conversationId = convQuery.docs[0].id;
-                  await admin.firestore().collection("conversations").doc(conversationId).update({
+                  await db.collection("conversations").doc(conversationId).update({
                     status: 'open',
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                   });
                 }
 
+                // Update inbound log with conversationId
+                await incomingLogRef.update({ conversationId: conversationId });
+
                 await sendWhatsApp(
                   incomingNumber, 
-                  `✅ Your interest is recorded. Negotiation started for ${rfqData.productName} (RFQ ID: ${rfqId}).\n\nSend your offer here to reply to the buyer.`
+                  `✅ Your interest is recorded. Negotiation started for ${rfqData.productName} (RFQ ID: ${rfqId}).\n\nSend your offer here to reply to the buyer.`,
+                  null,
+                  { templateName: "Interest_Recorded", type: "service", userId: senderId, conversationId: conversationId }
                 );
 
-                const buyerDoc = await admin.firestore().collection("users").doc(rfqData.buyerId).get();
+                const buyerDoc = await db.collection("users").doc(rfqData.buyerId).get();
                 if (buyerDoc.exists) {
                   const buyerData = buyerDoc.data();
                   if (buyerData.phoneNumber && buyerData.whatsappOptIn) {
                     const sellerName = userData.companyName || userData.businessName || "A supplier";
                     await sendWhatsApp(
                       buyerData.phoneNumber,
-                      `🔔 *Prochem Negotiation Alert*\n\n${sellerName} has responded to your requirement for ${rfqData.productName} (RFQ ID: ${rfqId}).\n\nReply here to negotiate via Prochem.`
+                      `🔔 *Prochem Negotiation Alert*\n\n${sellerName} has responded to your requirement for ${rfqData.productName} (RFQ ID: ${rfqId}).\n\nReply here to negotiate via Prochem.`,
+                      null,
+                      { templateName: "Seller_Interest_Alert", type: "service", userId: rfqData.buyerId, conversationId: conversationId }
                     );
                   }
                 }
 
               } else if (rfqData.buyerId === senderId) {
-                await sendWhatsApp(incomingNumber, `ℹ️ You are the buyer for this requirement (ID: ${rfqId}). Please wait for a supplier to initiate negotiation.`);
+                await sendWhatsApp(incomingNumber, `ℹ️ You are the buyer for this requirement (ID: ${rfqId}). Please wait for a supplier to initiate negotiation.`, null, { templateName: "System_Error", type: "service", userId: senderId });
               } else {
-                await sendWhatsApp(incomingNumber, `❌ You are not authorized to negotiate this RFQ (ID: ${rfqId}).`);
+                await sendWhatsApp(incomingNumber, `❌ You are not authorized to negotiate this RFQ (ID: ${rfqId}).`, null, { templateName: "System_Error", type: "service", userId: senderId });
               }
             } else {
-              await sendWhatsApp(incomingNumber, `❌ We couldn't find an RFQ with ID: ${rfqId}. It may have been fulfilled or expired.`);
+              await sendWhatsApp(incomingNumber, `❌ We couldn't find an RFQ with ID: ${rfqId}. It may have been fulfilled or expired.`, null, { templateName: "System_Error", type: "service", userId: senderId });
             }
           }
         } 
@@ -431,8 +472,6 @@ exports.whatsappWebhook = functions
         // 🚀 FLOW 2: RELAY ONGOING MESSAGES (TEMPLATE 2 & 3)
         // ==========================================
         else {
-          const db = admin.firestore();
-
           const buyerConvsSnap = await db.collection("conversations").where("buyerUserId", "==", senderId).get();
           const sellerConvsSnap = await db.collection("conversations").where("sellerUserId", "==", senderId).get();
 
@@ -452,6 +491,9 @@ exports.whatsappWebhook = functions
             if (openConversations.length > 0) {
               const currentConv = openConversations[0];
               const convId = currentConv.id;
+
+              // Update inbound log with conversationId
+              await incomingLogRef.update({ conversationId: convId });
 
               const isSenderBuyer = currentConv.buyerUserId === senderId;
               const senderRole = isSenderBuyer ? 'buyer' : 'seller';
@@ -483,23 +525,31 @@ exports.whatsappWebhook = functions
 
                 if (targetData.phoneNumber && targetData.whatsappOptIn) {
                   let outMsg = "";
+                  let templateUsed = "";
 
                   if (isSenderBuyer) {
                     // Send to Seller (Template 3 Format)
                     outMsg = `💬 *New Message — Prochem Negotiation*\n\n*Requirement:* ${rfqData.productName} (#${currentConv.rfqId})\n\n*Buyer says:*\n"${rawBody}"\n\n_Reply here to respond. Prochem securely relays your message to the buyer._`;
+                    templateUsed = "Template_3_Relay";
                   } else {
                     // Send to Buyer (Template 2 Format)
                     outMsg = `💬 *New Message — Prochem Negotiation*\n\n*Requirement:* ${rfqData.productName} (#${currentConv.rfqId})\n\n*Seller says:*\n"${rawBody}"\n\n_Reply here to respond. Prochem securely relays your message to the seller._`;
+                    templateUsed = "Template_2_Relay";
                   }
 
-                  await sendWhatsApp(targetData.phoneNumber, outMsg);
+                  await sendWhatsApp(targetData.phoneNumber, outMsg, null, {
+                    templateName: templateUsed,
+                    type: "service",
+                    userId: targetId,
+                    conversationId: convId
+                  });
                 }
               }
             } else {
-              await sendWhatsApp(incomingNumber, `🚫 This negotiation is closed. Start a new negotiation from the Prochem app.`);
+              await sendWhatsApp(incomingNumber, `🚫 This negotiation is closed. Start a new negotiation from the Prochem app.`, null, { templateName: "System_Error", type: "service", userId: senderId });
             }
           } else {
-            await sendWhatsApp(incomingNumber, `ℹ️ You don't have any active negotiations right now. If you're responding to an alert, please use the exact format: INTEREST <RFQ_ID>`);
+            await sendWhatsApp(incomingNumber, `ℹ️ You don't have any active negotiations right now. If you're responding to an alert, please use the exact format: INTEREST <RFQ_ID>`, null, { templateName: "System_Error", type: "service", userId: senderId });
           }
         }
       } else {
@@ -541,7 +591,6 @@ exports.onAppMessageCreated = onDocumentCreated(
 
       const convData = convDoc.data();
 
-      // Prevent forwarding messages if the conversation is closed.
       if (convData.status !== 'open') {
         console.log(`Conversation ${conversationId} is closed. Skipping WhatsApp forward.`);
         return null;
@@ -564,8 +613,12 @@ exports.onAppMessageCreated = onDocumentCreated(
         const targetUserData = targetUserDoc.data();
         const rfqData = rfqDoc.data();
         
-        if (targetUserData.phoneNumber && targetUserData.whatsappOptIn) {
+        const prefs = targetUserData.whatsappPreferences || {};
+        const wantsNegotiations = prefs.negotiations !== false; // defaults to true
+
+        if (targetUserData.phoneNumber && targetUserData.whatsappOptIn && wantsNegotiations) {
           let outMsg = "";
+          let templateUsed = "Message_Relay";
 
           // 🚀 TEMPLATE 4: FORMAL OFFER (Only if Seller creates an offer in-app)
           if (messageData.isOffer && messageData.senderRole === 'seller') {
@@ -573,6 +626,7 @@ exports.onAppMessageCreated = onDocumentCreated(
              const deepLink = `https://app.prochem.in/negotiation/${convData.rfqId}`;
              
              outMsg = `💰 *Formal Offer Received*\n_Prochem — Negotiation #${convData.rfqId}_\n\nThe supplier has sent you a confirmed offer:\n\n🧪 ${rfqData.productName}                  \n📦 Qty:    ${messageData.proposedQty} ${rfqData.unit}    \n💵 Price:  ₹${messageData.proposedPrice} / ${rfqData.unit} \n\n*Total Value: ₹${totalValue}* (excl. GST & platform fees)\nGo to the app, accept the offer, and make a payment to confirm your order.\n👉 Open in App: ${deepLink}`;
+             templateUsed = "Template_4_Formal_Offer";
           } 
           // 🚀 TEMPLATE 2 & 3: STANDARD CHAT MESSAGES
           else {
@@ -582,14 +636,21 @@ exports.onAppMessageCreated = onDocumentCreated(
              if (messageData.senderRole === 'buyer') {
                  // Send to Seller (Template 3 Format)
                  outMsg = `💬 *New Message — Prochem Negotiation*\n\n*Requirement:* ${rfqData.productName} (#${convData.rfqId})\n\n*Buyer says:*\n"${actualMsg}"\n\n_Reply here to respond. Prochem securely relays your message to the buyer._`;
+                 templateUsed = "Template_3_Relay";
              } else {
                  // Send to Buyer (Template 2 Format)
                  outMsg = `💬 *New Message — Prochem Negotiation*\n\n*Requirement:* ${rfqData.productName} (#${convData.rfqId})\n\n*Seller says:*\n"${actualMsg}"\n\n_Reply here to respond. Prochem securely relays your message to the seller._`;
+                 templateUsed = "Template_2_Relay";
              }
           }
 
           if (outMsg !== "") {
-            await sendWhatsApp(targetUserData.phoneNumber, outMsg);
+            await sendWhatsApp(targetUserData.phoneNumber, outMsg, null, {
+              templateName: templateUsed,
+              type: "service",
+              userId: targetUserId,
+              conversationId: conversationId
+            });
           }
         }
       }
@@ -633,7 +694,11 @@ exports.onRfqUpdated = onDocumentUpdated(
                  // EXACT match for Twilio Template 5
                  const msg = `🎉 *Buyer Accepted Your Offer!*\n_Prochem — Negotiation #${rfqId}_\n\n*Product:* ${after.productName}\n*Quantity:* ${after.agreedQuantity} ${after.unit}\n*Agreed Price:* ₹${after.agreedPrice} / ${after.unit}\n*Your Payout:* ₹${payoutAmount} _(after Prochem fees)_\n\nThe buyer is completing payment now.\nYou will receive a dispatch notification once payment is verified by Prochem.\n\nPlease keep stock ready.`;
                  
-                 await sendWhatsApp(sellerData.phoneNumber, msg);
+                 await sendWhatsApp(sellerData.phoneNumber, msg, null, {
+                   templateName: "Template_5_Offer_Accepted",
+                   type: "transactional",
+                   userId: after.sellerId
+                 });
              }
              return true;
          } catch (err) {

@@ -1,6 +1,6 @@
 // src/screens/SellerDashboard.tsx
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, Dimensions, TouchableOpacity, Share, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, Dimensions, TouchableOpacity, Share, Alert, Linking } from 'react-native'; // ✅ Added Linking
 import { Text, Card, ActivityIndicator, Button, useTheme, Avatar, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -250,7 +250,23 @@ export default function SellerDashboard() {
            </Card>
         </View>
 
-        {/* 🚀 Banner moved to the end, after Quick Actions */}
+        {/* 🚀 NEW: WhatsApp CTA Banner */}
+        <TouchableOpacity 
+          style={styles.waBanner} 
+          activeOpacity={0.9}
+          onPress={() => Linking.openURL('https://wa.me/918460852903?text=Hi%20Prochem!%20Please%20link%20my%20supplier%20account.')}
+        >
+          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <Text style={{fontSize: 30, marginRight: 15}}>💬</Text>
+            <View style={{flex: 1}}>
+              <Text style={styles.waBannerTitle}>Link WhatsApp</Text>
+              <Text style={styles.waBannerText}>Get live buyer leads and negotiation alerts sent directly to your phone.</Text>
+            </View>
+            <Text style={{color: '#ccc', fontSize: 24}}>›</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Banner moved to the end, after Quick Actions */}
         <View style={styles.inviteBanner}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             {isPremium ? (
@@ -316,7 +332,12 @@ const styles = StyleSheet.create({
   actionCard: { flex: 1, elevation: 3, borderRadius: 16 },
   actionContent: { alignItems:'center', paddingVertical: 20 },
   
-  // Banner styles added back in to match the Buyer Dashboard's design language
+  // WA Banner styles added
+  waBanner: { backgroundColor: '#DCFCE7', borderRadius: 16, padding: 16, marginTop: 24, borderWidth: 1, borderColor: '#86EFAC' },
+  waBannerTitle: { color: '#166534', fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
+  waBannerText: { color: '#15803D', fontSize: 12 },
+
+  // Banner styles
   inviteBanner: { flexDirection: 'row', backgroundColor: '#F3E8FF', padding: 16, borderRadius: 16, marginTop: 24, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#D8B4FE' },
   inviteTitle: { color: '#7E22CE', fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
   inviteText: { color: '#6B21A8', fontSize: 12, marginBottom: 6 },

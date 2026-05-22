@@ -1,3 +1,4 @@
+// File: src/screens/admin/AdminDashboard.tsx
 import React, { useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Text, Card, ActivityIndicator, Button, useTheme, IconButton, Badge } from 'react-native-paper';
@@ -231,7 +232,21 @@ export default function AdminDashboard() {
               />
             </Card>
 
-            <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold'}}>System Health</Text>
+            <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold'}}>System Health & Logs</Text>
+            
+            {/* ✅ NEW: WhatsApp Logs Navigation Card */}
+            <Card 
+              style={{backgroundColor:'#E8F5E9', marginBottom: 12}} 
+              onPress={() => navigation.navigate('AdminWhatsAppLogs')}
+            >
+              <Card.Title 
+                title="WhatsApp Traffic Logs" 
+                subtitle="Monitor inbound & outbound WhatsApp activity" 
+                left={(props) => <IconButton icon="whatsapp" iconColor="#25D366" size={28} style={{marginLeft: -8}} />}
+                right={(props) => <IconButton icon="chevron-right" {...props} />}
+              />
+            </Card>
+
             <Card style={{backgroundColor:'#E3F2FD', marginBottom: 20}}>
               <Card.Title 
                 title="GST API Status" 

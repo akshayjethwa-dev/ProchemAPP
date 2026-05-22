@@ -1,3 +1,4 @@
+// File: src/navigation/AdminNavigator.tsx
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -18,6 +19,7 @@ import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
 import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationScreen';
 import AdminPayment from '../screens/admin/AdminPayment';
 import AdminCustomRequirementsScreen from '../screens/admin/AdminCustomRequirementsScreen';
+import AdminWhatsAppLogsScreen from '../screens/admin/AdminWhatsAppLogsScreen'; // NEW: Import Logs Screen
 
 // Negotiation Screens
 import NegotiationsListScreen from '../screens/NegotiationsListScreen';
@@ -34,6 +36,7 @@ export type AdminStackParamList = {
   AdminNegotiations: { isAdminView: boolean }; 
   NegotiationRoom: { negotiationId: string; title: string }; 
   AdminBroadcastBids: undefined; 
+  AdminWhatsAppLogs: undefined; // NEW: Add to Param List
 };
 
 const Tab = createBottomTabNavigator();
@@ -71,6 +74,13 @@ function DashboardStackNavigator() {
         name="AdminBroadcastBids" 
         component={AdminBroadcastBidsScreen} 
         options={{ headerShown: true, title: 'Supplier Bids', headerBackTitle: 'Back' }}
+      />
+
+      {/* NEW: WhatsApp Logs Screen Route */}
+      <Stack.Screen 
+        name="AdminWhatsAppLogs" 
+        component={AdminWhatsAppLogsScreen} 
+        options={{ headerShown: true, title: 'WhatsApp Logs', headerBackTitle: 'Back' }}
       />
     </Stack.Navigator>
   );

@@ -51,6 +51,12 @@ export interface User {
 
   // 🚀 NEW: WhatsApp Integration
   whatsappOptIn?: boolean;
+  whatsappPreferences?: {
+    general?: boolean;
+    marketAlerts?: boolean;
+    negotiations?: boolean;
+    digest?: boolean;
+  };
 }
 
 export interface UserProfile {
