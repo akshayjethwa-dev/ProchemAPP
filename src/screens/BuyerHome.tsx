@@ -67,7 +67,6 @@ export default function BuyerHome() {
       
       if (result.action === Share.sharedAction) {
         if (user?.uid) {
-          // Only reward credits if the user is NOT premium
           if (!isPremium) {
             const userRef = doc(db, 'users', user.uid);
             await updateDoc(userRef, {
@@ -78,16 +77,9 @@ export default function BuyerHome() {
               premiumNegotiationCredits: (user.premiumNegotiationCredits || 0) + 1 
             });
             
-            Alert.alert(
-              "Reward Unlocked! 🎉", 
-              "Thanks for sharing! You've earned 1 FREE Premium Negotiation credit."
-            );
+            Alert.alert("Reward Unlocked! 🎉", "Thanks for sharing! You've earned 1 FREE Premium Negotiation credit.");
           } else {
-            // Generic thank you for premium users
-            Alert.alert(
-              "Thank You! 🙏", 
-              "Thanks for helping grow the Prochem network!"
-            );
+            Alert.alert("Thank You! 🙏", "Thanks for helping grow the Prochem network!");
           }
         }
       }
@@ -107,7 +99,7 @@ export default function BuyerHome() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Original Header Flow */}
       <View style={styles.header}>
         <View style={styles.locationRow}>
           <View>
@@ -120,24 +112,15 @@ export default function BuyerHome() {
           
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View>
-              <IconButton 
-                icon="heart-outline" 
-                iconColor="white" 
-                onPress={() => navigation.navigate('Cart')} 
-              />
+              <IconButton icon="heart-outline" iconColor="white" onPress={() => navigation.navigate('Cart')} />
               {cartCount > 0 && (
                 <Badge style={{ position: 'absolute', top: 5, right: 5, backgroundColor: theme.colors.error }} size={16}>
                   {cartCount}
                 </Badge>
               )}
             </View>
-
             <View>
-              <IconButton 
-                icon="bell" 
-                iconColor="white" 
-                onPress={() => navigation.navigate('Notifications')} 
-              />
+              <IconButton icon="bell" iconColor="white" onPress={() => navigation.navigate('Notifications')} />
               {unreadCount > 0 && (
                 <Badge style={{ position: 'absolute', top: 5, right: 5, backgroundColor: theme.colors.error }} size={16}>
                   {unreadCount}
@@ -176,33 +159,33 @@ export default function BuyerHome() {
             </Button>
           </View>
         ) : (
-          <View style={styles.grid}>
+          <View style={styles.listContainer}>
             {displayProducts.map((p) => (
-              <Card 
+              <TouchableOpacity 
                 key={p.id} 
-                style={[styles.card, p.readyToDispatch && { borderColor: '#FDE68A', borderWidth: 1 }]} 
+                style={[styles.denseCard, p.readyToDispatch && { borderColor: '#FDE68A', borderWidth: 1 }]} 
+                activeOpacity={0.7}
                 onPress={() => navigation.navigate('ProductDetail', { product: p })}
               >
-                <View style={styles.cardContent}>
-                  <View style={styles.imagePlaceholder}><Text style={{fontSize:30}}>🧪</Text></View>
-                  <Text numberOfLines={1} style={{fontWeight:'bold', marginTop:8}}>{p.name}</Text>
-                  <Text style={{fontSize:10, color:'#666'}}>{p.origin || 'India'}</Text>
-                  <Text style={{color: theme.colors.primary, fontWeight:'bold', marginTop:4}}>
-                    ₹{p.pricePerUnit || p.price}/{p.unit || 'kg'}
-                  </Text>
+                <View style={styles.imagePlaceholder}><Text style={{fontSize:24}}>🧪</Text></View>
+                
+                <View style={styles.cardInfo}>
+                  <Text numberOfLines={1} style={styles.productName}>{p.name}</Text>
+                  <Text style={styles.originText}>{p.origin || 'India'} • MOQ: {p.moq || 1}</Text>
                   
-                  {p.readyToDispatch && (
-                    <Chip 
-                      compact 
-                      icon="flash" 
-                      style={{backgroundColor: '#FEF3C7', marginTop: 6, height: 20}} 
-                      textStyle={{fontSize: 8, color: '#D97706', fontWeight: 'bold', marginVertical: 0}}
-                    >
-                      Premium Stock
-                    </Chip>
-                  )}
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceText}>
+                      ₹{p.pricePerUnit || p.price}<Text style={styles.unitText}>/{p.unit || 'kg'}</Text>
+                    </Text>
+                    
+                    {p.readyToDispatch && (
+                      <View style={styles.premiumBadge}>
+                        <Text style={styles.premiumBadgeText}>Premium Stock</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </Card>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -221,7 +204,7 @@ export default function BuyerHome() {
           </Card.Content>
         </Card>
 
-        {/* 🚀 Banner moved below the Requirement Card */}
+        {/* Banner moved below the Requirement Card */}
         <View style={styles.inviteBanner}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             {isPremium ? (
@@ -253,30 +236,34 @@ const styles = StyleSheet.create({
   locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   searchBar: { height: 45, backgroundColor: 'white', borderRadius: 10 },
   
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 10 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, justifyContent: 'space-between' },
-  card: { width: '48%', marginBottom: 16, backgroundColor: 'white' },
-  cardContent: { padding: 12, alignItems: 'center' },
-  imagePlaceholder: { width: 60, height: 60, backgroundColor: '#F1F5F9', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  requirementCard: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    backgroundColor: '#E0F2FE', 
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#BAE6FD'
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 10, marginBottom: 8 },
+  
+  // 🔥 DENSE HORIZONTAL CARD STYLES (Vertical Scroll)
+  listContainer: { paddingHorizontal: 16 },
+  denseCard: { 
+    flexDirection: 'row', 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 10, 
+    padding: 10, 
+    marginBottom: 10, 
+    elevation: 1,
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: {width:0, height:1}
   },
-  requirementContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  reqButton: {
-    marginLeft: 10,
-    borderRadius: 8
-  },
+  imagePlaceholder: { width: 56, height: 56, backgroundColor: '#F1F5F9', borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  cardInfo: { flex: 1, marginLeft: 12, justifyContent: 'center' },
+  productName: { fontWeight: 'bold', fontSize: 14, color: '#1E293B', marginBottom: 2 },
+  originText: { fontSize: 11, color: '#64748B', marginBottom: 4 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  priceText: { fontWeight: 'bold', fontSize: 14, color: '#004AAD' },
+  unitText: { fontSize: 11, color: '#64748B', fontWeight: 'normal' },
+  premiumBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  premiumBadgeText: { fontSize: 9, color: '#D97706', fontWeight: 'bold' },
 
-  // Banner styles
+  // Banners
+  requirementCard: { marginHorizontal: 16, marginTop: 10, backgroundColor: '#E0F2FE', borderRadius: 12, borderWidth: 1, borderColor: '#BAE6FD' },
+  requirementContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reqButton: { marginLeft: 10, borderRadius: 8 },
+
   inviteBanner: { flexDirection: 'row', backgroundColor: '#ECFDF5', padding: 16, borderRadius: 16, marginHorizontal: 16, marginTop: 20, alignItems: 'center', borderWidth: 1, borderColor: '#A7F3D0' },
   inviteTitle: { color: '#047857', fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
   inviteText: { color: '#065F46', fontSize: 12, marginBottom: 6 },

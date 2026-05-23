@@ -19,13 +19,7 @@ export default function Marketplace() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined);
 
-  const categories = [
-    'All Products',
-    'Industrial Acids',
-    'Alkalis', 
-    'Oxidizers',
-    'Salts'
-  ];
+  const categories = ['All Products', 'Industrial Acids', 'Alkalis', 'Oxidizers', 'Salts'];
 
   useEffect(() => {
     loadProducts();
@@ -63,7 +57,7 @@ export default function Marketplace() {
     }
   }, [searchTerm, products]);
 
-  // 🔥 HIGH-DENSITY HORIZONTAL LIST ITEM
+  // 🔥 ULTRA-DENSITY LIST ITEM
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
       style={styles.card} 
@@ -71,22 +65,19 @@ export default function Marketplace() {
       onPress={() => navigation.navigate('ProductDetail', { productId: item.id || '' })}
     >
       <View style={styles.imageContainer}>
-        <Text style={{fontSize: 32}}>🧪</Text>
+        <Text style={{fontSize: 24}}>🧪</Text>
       </View>
       
       <View style={styles.infoContainer}>
         <View>
           <Text numberOfLines={1} style={styles.productName}>{item.name}</Text>
-          <Text numberOfLines={1} style={styles.sellerText}>By: {item.sellerName || 'Verified Seller'}</Text>
+          <Text numberOfLines={1} style={styles.sellerText}>{item.sellerName || 'Verified Seller'} • MOQ: {item.moq || 1}</Text>
         </View>
         
         <View style={styles.bottomRow}>
-          <View>
-            <Text style={[styles.priceText, { color: theme.colors.primary }]}>
-              ₹{item.pricePerUnit || item.price || 0} <Text style={styles.unitText}>/{item.unit || 'unit'}</Text>
-            </Text>
-            <Text style={styles.moqText}>MOQ: {item.moq || 1}</Text>
-          </View>
+          <Text style={[styles.priceText, { color: theme.colors.primary }]}>
+            ₹{item.pricePerUnit || item.price || 0} <Text style={styles.unitText}>/{item.unit || 'unit'}</Text>
+          </Text>
           
           {item.verified && (
             <View style={styles.verifiedBadge}>
@@ -101,8 +92,8 @@ export default function Marketplace() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="titleLarge" style={{fontWeight:'bold'}}>Marketplace</Text>
+        <IconButton icon="arrow-left" size={20} onPress={() => navigation.goBack()} />
+        <Text variant="titleMedium" style={{fontWeight:'bold'}}>Marketplace</Text>
       </View>
 
       <View style={styles.searchContainer}>
@@ -111,7 +102,7 @@ export default function Marketplace() {
           onChangeText={setSearchTerm}
           value={searchTerm}
           style={styles.searchbar}
-          inputStyle={{minHeight: 40, padding: 0}}
+          inputStyle={{minHeight: 36, fontSize: 14}} // 🔥 Slimmer search bar
         />
       </View>
 
@@ -123,7 +114,7 @@ export default function Marketplace() {
               selected={selectedCategory === cat || (cat === 'All Products' && !selectedCategory)}
               onPress={() => setSelectedCategory(cat === 'All Products' ? undefined : cat)}
               style={[styles.chip, selectedCategory === cat && { backgroundColor: '#E3F2FD', borderColor: theme.colors.primary }]}
-              textStyle={{ fontSize: 12 }}
+              textStyle={{ fontSize: 11, marginVertical: 0 }}
               showSelectedOverlay
             >
               {cat}
@@ -133,9 +124,7 @@ export default function Marketplace() {
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
+        <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>
       ) : error ? (
         <View style={styles.center}>
           <Text style={{color:'red', marginBottom: 10}}>{error}</Text>
@@ -146,13 +135,8 @@ export default function Marketplace() {
           data={filteredProducts}
           renderItem={renderProduct}
           keyExtractor={(item, index) => item.id || index.toString()}
-          // 🔥 Removed numColumns to make it a single vertical list
           contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={{color: '#999'}}>No products found</Text>
-            </View>
-          }
+          ListEmptyComponent={<View style={styles.center}><Text style={{color: '#999'}}>No products found</Text></View>}
         />
       )}
     </SafeAreaView>
@@ -161,26 +145,28 @@ export default function Marketplace() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 4 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0, paddingBottom: 0 },
   searchContainer: { paddingHorizontal: 12, marginBottom: 8 },
-  searchbar: { backgroundColor: '#FFFFFF', borderRadius: 8, height: 44, borderWidth: 1, borderColor: '#E5E7EB', elevation: 0 },
-  catScroll: { paddingHorizontal: 12, paddingBottom: 12 },
-  chip: { marginRight: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', height: 32, elevation: 0 },
+  // 🔥 REDUCED search bar height
+  searchbar: { backgroundColor: '#FFFFFF', borderRadius: 8, height: 40, borderWidth: 1, borderColor: '#E5E7EB', elevation: 0 },
+  catScroll: { paddingHorizontal: 12, paddingBottom: 8 },
+  // 🔥 SLIMMER chips
+  chip: { marginRight: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', height: 28, elevation: 0, alignItems: 'center' },
   list: { paddingHorizontal: 12, paddingBottom: 20 },
   
-  // 🔥 HIGH-DENSITY CARD STYLES
   card: { 
     flexDirection: 'row', 
     backgroundColor: '#FFFFFF', 
     borderWidth: 1, 
     borderColor: '#E5E7EB', 
     borderRadius: 8, 
-    padding: 8, // Compact padding
-    marginBottom: 8 // Tight vertical spacing allows more items per screen
+    padding: 8, 
+    marginBottom: 6 // 🔥 Tighter gaps between products
   },
+  // 🔥 REDUCED Image from 80px to 56px
   imageContainer: { 
-    width: 80, 
-    height: 80, // Strict square thumbnail
+    width: 56, 
+    height: 56, 
     backgroundColor: '#F1F5F9', 
     borderRadius: 6, 
     alignItems: 'center', 
@@ -188,17 +174,17 @@ const styles = StyleSheet.create({
   },
   infoContainer: { 
     flex: 1, 
-    marginLeft: 12, 
+    marginLeft: 10, 
     justifyContent: 'space-between' 
   },
-  productName: { fontWeight: 'bold', fontSize: 14, color: '#1F2937' },
-  sellerText: { fontSize: 11, color: '#64748B', marginTop: 2 },
-  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  priceText: { fontWeight: 'bold', fontSize: 14 },
-  unitText: { fontSize: 11, color: '#64748B', fontWeight: 'normal' },
-  moqText: { fontSize: 10, color: '#64748B', marginTop: 2 },
-  verifiedBadge: { backgroundColor: '#DEF7EC', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12 },
-  verifiedBadgeText: { fontSize: 10, color: '#03543F', fontWeight: 'bold' },
+  productName: { fontWeight: 'bold', fontSize: 13, color: '#1F2937' },
+  // 🔥 Consolidated Seller text and MOQ into one line to save vertical space
+  sellerText: { fontSize: 10, color: '#64748B', marginTop: 1 },
+  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  priceText: { fontWeight: 'bold', fontSize: 13 },
+  unitText: { fontSize: 10, color: '#64748B', fontWeight: 'normal' },
+  verifiedBadge: { backgroundColor: '#DEF7EC', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 8 },
+  verifiedBadgeText: { fontSize: 9, color: '#03543F', fontWeight: 'bold' },
   
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }
 });
