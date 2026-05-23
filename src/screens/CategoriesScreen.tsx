@@ -1,26 +1,14 @@
+// src/screens/CategoriesScreen.tsx
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, FlatList, Alert } from 'react-native';
-import { Text, Button, Card, useTheme, Chip, Searchbar, IconButton, FAB, Snackbar } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, FlatList, Alert, TouchableOpacity } from 'react-native';
+import { Text, useTheme, Chip, Searchbar, IconButton, FAB, Snackbar, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
 
-// Standard Categories
-const STANDARD_CATEGORIES = [
-  'Industrial Chemicals', 
-  'Pharma Chemicals', 
-  'Agriculture', 
-  'Food & Beverage', 
-  'Lab Research'
-];
-
-// Display Categories
-const CATEGORIES = [
-  'All Products',
-  ...STANDARD_CATEGORIES,
-  'Other'
-];
+const STANDARD_CATEGORIES = ['Industrial Chemicals', 'Pharma Chemicals', 'Agriculture', 'Food & Beverage', 'Lab Research'];
+const CATEGORIES = ['All Products', ...STANDARD_CATEGORIES, 'Other'];
 
 export default function CategoriesScreen() {
   const navigation = useNavigation<any>();
@@ -31,32 +19,19 @@ export default function CategoriesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
 
-  // ✅ Check if the buyer has the Growth Package
   const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
 
-  // Advanced Filter Logic
   const filteredProducts = products.filter(p => {
     if (p.active === false) return false;
     if (user && p.sellerId === user.uid) return false;
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      const matchesSearch = 
-        p.name?.toLowerCase().includes(query) ||
-        p.category?.toLowerCase().includes(query) ||
-        p.sellerName?.toLowerCase().includes(query);
-      
-      if (!matchesSearch) return false;
-    }
-
+    if (searchQuery.trim() && !p.name?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (selectedCat === 'All Products') return true;
     if (selectedCat === 'Other') return !STANDARD_CATEGORIES.includes(p.category || '');
     return p.category === selectedCat;
   });
 
   const handleToggleCompare = (item: Product) => {
-    const isCompared = compareList.some(p => p.id === item.id);
-    if (isCompared) {
+    if (compareList.some(p => p.id === item.id)) {
       removeFromCompare(item.id!);
     } else {
       addToCompare(item);
@@ -64,93 +39,42 @@ export default function CategoriesScreen() {
     }
   };
 
-  // ✅ FOMO GATE: Handle Add to Cart
   const handleActionClick = (item: Product) => {
     if (item.readyToDispatch && !isPremium) {
-      Alert.alert(
-        '👑 Premium Inventory',
-        'This is a fast-track "Ready to Dispatch" product from a Premium Supplier. Upgrade to the Business Growth Package to order this item.',
-        [
+      Alert.alert('👑 Premium Inventory', 'Upgrade to Business Growth Package to access.', [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Upgrade Now', onPress: () => navigation.navigate('BusinessGrowth') }
-        ]
-      );
+      ]);
       return;
     }
-
-    addToCart({
-      ...item, 
-      id: item.id || '', 
-      quantity: item.moq || 1,
-      pricePerUnit: item.pricePerUnit || item.price || 0,
-      unit: item.unit || 'kg',
-      sellerId: item.sellerId || 'unknown'
-    });
+    addToCart({ ...item, id: item.id || '', quantity: item.moq || 1, pricePerUnit: item.pricePerUnit || item.price || 0, unit: item.unit || 'kg', sellerId: item.sellerId || 'unknown' });
   };
 
+  // 🚀 COMPACT LIST ITEM
   const renderProduct = ({ item }: { item: Product }) => {
     const isCompared = compareList.some(p => p.id === item.id);
     const isRestricted = item.readyToDispatch && !isPremium;
 
     return (
-      <Card 
-        style={[styles.prodCard, item.readyToDispatch && { borderColor: '#FDE68A', borderWidth: 1 }]} 
-        onPress={() => navigation.navigate('ProductDetail', { product: item })}
-      >
-        <View style={{flexDirection:'row'}}>
-          <View style={styles.prodImage}>
-              <Text style={{fontSize:28}}>🧪</Text>
-          </View>
-          
-          <View style={{flex:1, padding:12}}>
-            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems: 'flex-start'}}>
-               <View style={{flex: 1, marginRight: 8}}>
-                 <Text style={styles.prodTitle} numberOfLines={1}>{item.name}</Text>
-                 {item.verified && <Text style={{fontSize:10, color:'green', fontWeight:'bold', marginTop: 2}}>✓ Verified</Text>}
-               </View>
-               
-               <IconButton 
-                 icon={isCompared ? "checkbox-marked-circle" : "scale-balance"} 
-                 iconColor={isCompared ? theme.colors.primary : '#94A3B8'}
-                 size={20}
-                 style={{ margin: 0, padding: 0 }}
-                 onPress={() => handleToggleCompare(item)}
-               />
-            </View>
-            
-            <Text style={{fontSize:11, color:'#64748B', marginTop: 2}}>
-               {item.category} • MOQ: {item.moq || 10} {item.unit}
-            </Text>
+      <TouchableOpacity style={[styles.compactRow, item.readyToDispatch && { backgroundColor: '#FFFAED' }]} onPress={() => navigation.navigate('ProductDetail', { product: item })}>
+        <View style={styles.thumbnail}><Text style={{fontSize: 20}}>🧪</Text></View>
+        
+        <View style={styles.middleCol}>
+          <Text numberOfLines={1} style={styles.productName}>{item.name}</Text>
+          <Text numberOfLines={1} style={styles.metaText}>{item.category} • MOQ: {item.moq || 10} {item.unit}</Text>
+          {item.readyToDispatch && (
+            <Text style={styles.premiumBadge}>👑 Ready to Dispatch</Text>
+          )}
+        </View>
 
-            {/* ✅ FOMO VISUAL: Show the badge so they know it's special */}
-            {item.readyToDispatch && (
-              <View style={{flexDirection: 'row', marginTop: 4}}>
-                <Chip compact icon="flash" style={{backgroundColor: '#FEF3C7', height: 20}} textStyle={{fontSize: 9, color: '#D97706', marginVertical: 0, fontWeight: 'bold'}}>
-                  Premium: Ready to Dispatch
-                </Chip>
-              </View>
-            )}
-            
-            <View style={styles.actionRow}>
-              <Text style={{fontWeight:'bold', fontSize: 16, color: theme.colors.primary}}>
-                ₹{item.pricePerUnit || item.price}
-                <Text style={{fontSize:10, color:'#999', fontWeight:'normal'}}>/{item.unit}</Text>
-              </Text>
-              
-              <Button 
-                mode="contained-tonal" 
-                compact 
-                labelStyle={{fontSize:12, marginVertical: 4}}
-                style={{borderRadius: 8, backgroundColor: isRestricted ? '#FEF3C7' : theme.colors.secondaryContainer}}
-                textColor={isRestricted ? '#D97706' : theme.colors.onSecondaryContainer}
-                onPress={() => handleActionClick(item)}
-              >
-                {isRestricted ? '👑 Unlock' : '+ Add'}
-              </Button>
-            </View>
+        <View style={styles.rightCol}>
+          <Text style={[styles.priceText, { color: theme.colors.primary }]}>₹{item.pricePerUnit || item.price}</Text>
+          <View style={styles.actionRow}>
+            <IconButton icon={isCompared ? "checkbox-marked-circle" : "scale-balance"} iconColor={isCompared ? theme.colors.primary : '#94A3B8'} size={20} style={{ margin: 0, padding: 0 }} onPress={() => handleToggleCompare(item)} />
+            <IconButton icon={isRestricted ? "lock" : "cart-plus"} iconColor={isRestricted ? '#D97706' : theme.colors.primary} size={20} style={{ margin: 0, padding: 0, marginLeft: 8 }} onPress={() => handleActionClick(item)} />
           </View>
         </View>
-      </Card>
+      </TouchableOpacity>
     );
   };
 
@@ -161,88 +85,54 @@ export default function CategoriesScreen() {
       </View>
 
       <View style={styles.searchContainer}>
-        <Searchbar
-          placeholder="Search within categories..."
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchbar}
-          inputStyle={{minHeight: 0}}
-        />
+        <Searchbar placeholder="Search within categories..." onChangeText={setSearchQuery} value={searchQuery} style={styles.searchbar} inputStyle={{minHeight: 0}} />
       </View>
 
-      <View style={{height: 60}}>
+      <View style={{height: 50}}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catScroll}>
           {CATEGORIES.map(cat => (
-            <Chip
-              key={cat}
-              selected={selectedCat === cat}
-              onPress={() => setSelectedCat(cat)}
-              style={[styles.chip, selectedCat === cat && { backgroundColor: '#E3F2FD', borderColor: '#004AAD' }]}
-              textStyle={{ color: selectedCat === cat ? '#004AAD' : '#475569', fontWeight: selectedCat === cat ? 'bold' : 'normal' }}
-              showSelectedOverlay
-              mode="outlined"
-            >
+            <Chip key={cat} selected={selectedCat === cat} onPress={() => setSelectedCat(cat)} style={[styles.chip, selectedCat === cat && { backgroundColor: '#E3F2FD', borderColor: '#004AAD' }]} textStyle={{ color: selectedCat === cat ? '#004AAD' : '#475569', fontSize: 12, marginVertical: 0 }} mode="outlined" compact>
               {cat}
             </Chip>
           ))}
         </ScrollView>
       </View>
 
-      <View style={styles.main}>
-        <View style={styles.subHeader}>
-          <Text variant="labelLarge" style={{color:'#64748B'}}>
-            Showing {filteredProducts.length} results
-          </Text>
-        </View>
+      <FlatList
+        data={filteredProducts}
+        renderItem={renderProduct}
+        keyExtractor={(item, index) => item.id || index.toString()} 
+        contentContainerStyle={{paddingBottom: 80}}
+        ItemSeparatorComponent={() => <Divider style={{backgroundColor: '#F1F5F9'}}/>}
+        ListHeaderComponent={<Text style={styles.subHeader}>Showing {filteredProducts.length} results</Text>}
+        ListEmptyComponent={<View style={{alignItems:'center', marginTop: 50}}><Text style={{fontSize: 30}}>🔍</Text><Text style={{color:'#999', marginTop: 10}}>No products found.</Text></View>}
+      />
 
-        <FlatList
-          data={filteredProducts}
-          renderItem={renderProduct}
-          keyExtractor={(item, index) => item.id || index.toString()} 
-          contentContainerStyle={{padding: 16, paddingBottom: 80}}
-          ListEmptyComponent={
-             <View style={{alignItems:'center', marginTop: 50}}>
-                <Text style={{fontSize: 30}}>🔍</Text>
-                <Text style={{color:'#999', marginTop: 10}}>No products found.</Text>
-             </View>
-          }
-        />
-      </View>
-
-      {compareList.length > 0 && (
-        <FAB
-          icon="scale-balance"
-          label={`Compare (${compareList.length})`}
-          style={styles.fab}
-          color="white"
-          onPress={() => navigation.navigate('Compare')}
-        />
-      )}
-
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={5000}
-        action={{ label: 'Compare', onPress: () => navigation.navigate('Compare') }}
-      >
-        Added to comparison.
-      </Snackbar>
+      {compareList.length > 0 && <FAB icon="scale-balance" label={`Compare (${compareList.length})`} style={styles.fab} color="white" onPress={() => navigation.navigate('Compare')} />}
+      <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={3000} action={{ label: 'Compare', onPress: () => navigation.navigate('Compare') }}>Added to comparison.</Snackbar>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor:'white' },
-  searchContainer: { paddingHorizontal: 16, paddingBottom: 10, backgroundColor:'white' },
-  searchbar: { backgroundColor: '#F1F5F9', borderRadius: 10, height: 45, elevation: 0 },
-  catScroll: { paddingHorizontal: 16, paddingVertical: 10, alignItems:'center' },
-  chip: { marginRight: 8, height: 36, backgroundColor: 'white', borderColor: '#E2E8F0' },
-  main: { flex: 1 },
-  subHeader: { paddingHorizontal: 16, paddingBottom: 8 },
-  prodCard: { marginBottom: 12, backgroundColor: 'white', elevation: 2, borderRadius: 12, overflow: 'hidden' },
-  prodImage: { width: 90, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
-  prodTitle: { fontWeight:'bold', fontSize:15 },
-  actionRow: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginTop:12 },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { paddingHorizontal: 16, paddingVertical: 10 },
+  searchContainer: { paddingHorizontal: 16, paddingBottom: 10 },
+  searchbar: { backgroundColor: '#F8FAFC', borderRadius: 8, height: 40, elevation: 0 },
+  catScroll: { paddingHorizontal: 16, alignItems:'center' },
+  chip: { marginRight: 8, height: 28, backgroundColor: 'white', borderColor: '#E2E8F0' },
+  subHeader: { paddingHorizontal: 16, paddingVertical: 8, color: '#64748B', fontSize: 12, backgroundColor: '#F8FAFC' },
+  
+  compactRow: { flexDirection: 'row', padding: 12, alignItems: 'center' },
+  thumbnail: { width: 40, height: 40, backgroundColor: '#F1F5F9', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  middleCol: { flex: 1, marginLeft: 12 },
+  productName: { fontWeight: 'bold', fontSize: 14, color: '#1E293B' },
+  metaText: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  premiumBadge: { fontSize: 10, color: '#D97706', fontWeight: 'bold', marginTop: 2 },
+  
+  rightCol: { alignItems: 'flex-end', justifyContent: 'center' },
+  priceText: { fontWeight: 'bold', fontSize: 14 },
+  actionRow: { flexDirection: 'row', marginTop: 4 },
+  
   fab: { position: 'absolute', margin: 16, right: 0, bottom: 20, backgroundColor: '#004AAD' }
 });

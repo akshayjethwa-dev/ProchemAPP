@@ -1,6 +1,7 @@
+// src/screens/ProductListingScreen.tsx
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Text, Searchbar, useTheme, IconButton } from 'react-native-paper';
+import { Text, Searchbar, useTheme, IconButton, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,38 +23,34 @@ export default function ProductListingScreen() {
     p.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // 🔥 HIGH-DENSITY HORIZONTAL LIST ITEM
+  // 🚀 COMPACT RESULT CELL
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
-      style={styles.card} 
+      style={styles.compactRow} 
       activeOpacity={0.7}
       onPress={() => navigation.navigate('ProductDetail', { productId: item.id || '' })}
     >
-      <View style={styles.imageContainer}>
-        <Text style={{fontSize: 32}}>🧪</Text>
+      <View style={styles.thumbnail}>
+        <Text style={{fontSize: 20}}>🧪</Text>
       </View>
       
-      <View style={styles.infoContainer}>
-        <View>
-          <Text numberOfLines={1} style={styles.productName}>{item.name}</Text>
-          <Text numberOfLines={1} style={styles.sellerText}>Sold by: {item.sellerName || 'Verified Seller'}</Text>
-        </View>
-        
-        <View style={styles.bottomRow}>
-          <View>
-            <Text style={[styles.priceText, { color: theme.colors.primary }]}>
-              ₹{item.pricePerUnit || item.price || 0} <Text style={styles.unitText}>/{item.unit || 'unit'}</Text>
-            </Text>
-            <Text style={styles.moqText}>MOQ: {item.moq || 1}</Text>
-          </View>
-          
-          <IconButton 
-            icon="chevron-right" 
-            size={20} 
-            iconColor="#9CA3AF" 
-            style={{ margin: 0, padding: 0 }} 
-          />
-        </View>
+      <View style={styles.middleCol}>
+        <Text numberOfLines={1} style={styles.productName}>{item.name}</Text>
+        <Text numberOfLines={1} style={styles.metaText}>
+          {item.sellerName || 'Verified Seller'} • MOQ: {item.moq || 1} {item.unit}
+        </Text>
+      </View>
+      
+      <View style={styles.rightCol}>
+        <Text style={[styles.priceText, { color: theme.colors.primary }]}>
+          ₹{item.pricePerUnit || item.price || 0}
+        </Text>
+        <IconButton 
+          icon="chevron-right" 
+          size={16} 
+          iconColor="#9CA3AF" 
+          style={{ margin: 0, padding: 0, marginTop: 4 }} 
+        />
       </View>
     </TouchableOpacity>
   );
@@ -62,7 +59,7 @@ export default function ProductListingScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="titleMedium" style={{fontWeight:'bold'}}>{category} Marketplace</Text>
+        <Text variant="titleMedium" style={{fontWeight:'bold'}}>{category}</Text>
       </View>
 
       <Searchbar
@@ -70,14 +67,14 @@ export default function ProductListingScreen() {
         onChangeText={setSearchQuery}
         value={searchQuery}
         style={styles.searchBar}
-        inputStyle={{minHeight: 40, padding: 0}}
+        inputStyle={{minHeight: 36, fontSize: 14}}
       />
 
       <FlatList
         data={filteredProducts}
         renderItem={renderProduct}
         keyExtractor={(item, index) => item.id || index.toString()}
-        contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={() => <Divider style={{backgroundColor: '#F1F5F9'}}/>}
         ListEmptyComponent={
           <View style={{padding: 40, alignItems:'center'}}>
             <Text style={{color: '#9CA3AF'}}>No products found.</Text>
@@ -89,38 +86,16 @@ export default function ProductListingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 4 },
-  searchBar: { marginHorizontal: 12, marginBottom: 12, backgroundColor: '#FFFFFF', borderRadius: 8, height: 44, borderWidth: 1, borderColor: '#E5E7EB', elevation: 0 },
-  listContent: { paddingHorizontal: 12, paddingBottom: 20 },
+  searchBar: { marginHorizontal: 12, marginBottom: 12, backgroundColor: '#F8FAFC', borderRadius: 8, height: 40, elevation: 0 },
   
-  // 🔥 HIGH-DENSITY CARD STYLES
-  card: { 
-    flexDirection: 'row', 
-    backgroundColor: '#FFFFFF', 
-    borderWidth: 1, 
-    borderColor: '#E5E7EB', 
-    borderRadius: 8, 
-    padding: 8, 
-    marginBottom: 8 
-  },
-  imageContainer: { 
-    width: 80, 
-    height: 80, 
-    backgroundColor: '#F1F5F9', 
-    borderRadius: 6, 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
-  infoContainer: { 
-    flex: 1, 
-    marginLeft: 12, 
-    justifyContent: 'space-between' 
-  },
-  productName: { fontWeight: 'bold', fontSize: 14, color: '#1F2937' },
-  sellerText: { fontSize: 11, color: '#64748B', marginTop: 2 },
-  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  priceText: { fontWeight: 'bold', fontSize: 14 },
-  unitText: { fontSize: 11, color: '#64748B', fontWeight: 'normal' },
-  moqText: { fontSize: 10, color: '#64748B', marginTop: 2 },
+  compactRow: { flexDirection: 'row', padding: 12, alignItems: 'center' },
+  thumbnail: { width: 44, height: 44, backgroundColor: '#F1F5F9', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  middleCol: { flex: 1, marginLeft: 12, justifyContent: 'center' },
+  productName: { fontWeight: 'bold', fontSize: 14, color: '#1E293B' },
+  metaText: { fontSize: 11, color: '#64748B', marginTop: 4 },
+  
+  rightCol: { alignItems: 'flex-end', justifyContent: 'center', paddingLeft: 8 },
+  priceText: { fontWeight: 'bold', fontSize: 14 }
 });

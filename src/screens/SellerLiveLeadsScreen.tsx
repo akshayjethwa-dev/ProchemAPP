@@ -1,11 +1,12 @@
 // src/screens/SellerLiveLeadsScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet, Alert } from 'react-native';
-import { Text, Card, Button, Portal, Modal, TextInput, useTheme } from 'react-native-paper';
+import { Text, Button, Portal, Modal, TextInput, useTheme, IconButton, ActivityIndicator } from 'react-native-paper';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { BroadcastLead, RFQ } from '../types';
 
 export default function SellerLiveLeadsScreen() {
@@ -13,17 +14,15 @@ export default function SellerLiveLeadsScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAppStore();
   
-  // We maintain raw leads and active RFQs in state separately
   const [rawLeads, setRawLeads] = useState<BroadcastLead[]>([]);
   const [activeRfqs, setActiveRfqs] = useState<RFQ[]>([]);
   const [leads, setLeads] = useState<BroadcastLead[]>([]);
+  const [loading, setLoading] = useState(true);
   
   const [selectedLead, setSelectedLead] = useState<BroadcastLead | null>(null);
-  
   const [quotesUsedThisMonth, setQuotesUsedThisMonth] = useState(0);
   const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
 
-  // Quote Form State
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
   const [dispatchDays, setDispatchDays] = useState('');
@@ -31,212 +30,138 @@ export default function SellerLiveLeadsScreen() {
 
   useEffect(() => {
     if (!user?.uid) return;
+    setLoading(true);
 
-    // 1. Fetch OPEN leads from the Live Market
-    const qLeads = query(collection(db, 'broadcastLeads'), where('status', '==', 'OPEN'));
-    const unsubLeads = onSnapshot(qLeads, (snapshot) => {
-      const fetchedLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead));
-      setRawLeads(fetchedLeads);
+    const unsubLeads = onSnapshot(query(collection(db, 'broadcastLeads'), where('status', '==', 'OPEN')), snap => {
+      setRawLeads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead)));
     });
 
-    // 2. Fetch the current Seller's Active RFQs
-    const qRfqs = query(collection(db, 'rfqs'), where('sellerId', '==', user.uid));
-    const unsubRfqs = onSnapshot(qRfqs, (snapshot) => {
-      const rfqs = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as RFQ))
-        // Only consider RFQs that are currently in an active state
-        .filter(rfq => rfq.status === 'PENDING' || rfq.status === 'NEGOTIATING');
-      setActiveRfqs(rfqs);
+    const unsubRfqs = onSnapshot(query(collection(db, 'rfqs'), where('sellerId', '==', user.uid)), snap => {
+      setActiveRfqs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RFQ)).filter(rfq => rfq.status === 'PENDING' || rfq.status === 'NEGOTIATING'));
     });
 
-    // 3. Fetch Quote Limits
-    const qQuotes = query(collection(db, 'supplierQuotes'), where('supplierId', '==', user.uid));
-    const unsubQuotes = onSnapshot(qQuotes, (snapshot) => {
+    const unsubQuotes = onSnapshot(query(collection(db, 'supplierQuotes'), where('supplierId', '==', user.uid)), snap => {
       const now = new Date();
-      const thisMonthQuotes = snapshot.docs.filter(doc => {
+      setQuotesUsedThisMonth(snap.docs.filter(doc => {
         const data = doc.data();
         if (!data.createdAt) return false;
         const dateObj = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
         return dateObj.getMonth() === now.getMonth() && dateObj.getFullYear() === now.getFullYear();
-      });
-      setQuotesUsedThisMonth(thisMonthQuotes.length);
+      }).length);
+      setLoading(false);
     });
 
-    return () => { 
-      unsubLeads(); 
-      unsubRfqs(); 
-      unsubQuotes(); 
-    };
+    return () => { unsubLeads(); unsubRfqs(); unsubQuotes(); };
   }, [user?.uid]);
 
-  // Compute final visible leads by cross-referencing with active RFQs
   useEffect(() => {
     const filtered = rawLeads.filter(lead => {
-      // 1. Check explicit backend exclusions
       if (lead.excludedSellerId === user?.uid) return false;
-      
-      // ✅ FIX: Verify user.uid exists before passing it to includes()
-      if (user?.uid && lead.excludedSellerIds && lead.excludedSellerIds.includes(user.uid)) {
-        return false;
-      }
-
-      // 2. Cross-reference with the seller's active RFQs
-      const isAlreadyNegotiating = activeRfqs.some(rfq => {
-        // Direct ID match (if the backend sets rfqId or originalOrderId)
-        if (lead.rfqId && lead.rfqId === rfq.id) return true;
-        if (lead.originalOrderId && lead.originalOrderId === rfq.id) return true;
-
-        // Heuristic fallback match: If product name and target quantity match exactly,
-        // it's highly likely to be the same underlying buyer request
-        if (
-          rfq.productName.toLowerCase() === lead.productName.toLowerCase() &&
-          String(rfq.targetQuantity) === String(lead.quantityRequired)
-        ) {
-          return true;
-        }
-
-        return false;
-      });
-
-      // Show the lead ONLY if they aren't already negotiating it
-      return !isAlreadyNegotiating;
+      if (user?.uid && lead.excludedSellerIds && lead.excludedSellerIds.includes(user.uid)) return false;
+      const isNegotiating = activeRfqs.some(rfq => 
+        (lead.rfqId && lead.rfqId === rfq.id) || 
+        (lead.originalOrderId && lead.originalOrderId === rfq.id) || 
+        (rfq.productName.toLowerCase() === lead.productName.toLowerCase() && String(rfq.targetQuantity) === String(lead.quantityRequired))
+      );
+      return !isNegotiating;
     });
-
     setLeads(filtered);
   }, [rawLeads, activeRfqs, user?.uid]);
 
   const submitQuote = async () => {
-    // ✅ FIX: Ensure we have the required IDs so we don't pass undefined to Firestore
-    if (!user?.uid || !selectedLead?.id) {
-      Alert.alert('Error', 'Missing user or lead information.');
-      return;
-    }
-
-    if (!price || !quantity || !dispatchDays) {
-      Alert.alert('Error', 'Please fill all fields to submit your quote.');
-      return;
-    }
+    if (!user?.uid || !selectedLead?.id) return Alert.alert('Error', 'Missing information.');
+    if (!price || !quantity || !dispatchDays) return Alert.alert('Error', 'Fill all fields.');
 
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, 'supplierQuotes'), {
-        leadId: selectedLead.id,
-        productName: selectedLead.productName,
-        supplierId: user.uid,
-        supplierName: user.companyName || 'Verified Supplier',
-        pricePerUnit: Number(price),
-        availableQuantity: quantity,
-        dispatchDays: dispatchDays,
-        status: 'PENDING',
-        createdAt: serverTimestamp(),
+        leadId: selectedLead.id, productName: selectedLead.productName, supplierId: user.uid,
+        supplierName: user.companyName || 'Verified Supplier', pricePerUnit: Number(price),
+        availableQuantity: quantity, dispatchDays: dispatchDays, status: 'PENDING', createdAt: serverTimestamp(),
       });
-      Alert.alert('Success', 'Your quote has been sent to the Admin.');
-      setSelectedLead(null);
-      setPrice(''); 
-      setQuantity(''); 
-      setDispatchDays('');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to submit quote.');
-    } finally {
-      setIsSubmitting(false);
-    }
+      Alert.alert('Success', 'Quote sent to Admin.');
+      setSelectedLead(null); setPrice(''); setQuantity(''); setDispatchDays('');
+    } catch (error) { Alert.alert('Error', 'Failed to submit quote.'); } 
+    finally { setIsSubmitting(false); }
   };
 
   const renderLead = ({ item }: { item: BroadcastLead }) => (
-    <Card style={styles.card} mode="outlined">
-      <Card.Content>
-        <View style={styles.headerRow}>
-          <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{item.productName}</Text>
-          <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>LIVE</Text>
+    <View style={styles.compactRow}>
+      <View style={styles.mainInfo}>
+        <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
+           <Text style={styles.productName}>{item.productName}</Text>
+           <View style={styles.liveBadge}><Text style={styles.liveText}>LIVE</Text></View>
         </View>
-        {item.casNumber && <Text variant="bodySmall" style={{ color: 'gray' }}>CAS: {item.casNumber}</Text>}
-        
-        <View style={styles.detailBox}>
-          <Text variant="bodyMedium">Required: <Text style={{fontWeight: 'bold'}}>{item.quantityRequired} {item.unit}</Text></Text>
-          <Text variant="bodyMedium">Delivery To: <Text style={{fontWeight: 'bold'}}>{item.deliveryRegion}</Text></Text>
-        </View>
-      </Card.Content>
-      <Card.Actions>
+        {/* 🚀 FIX: explicitly casted targetPrice and timeline to any to clear TS error */}
+        <Text style={styles.detailsText}>Target: <Text style={{fontWeight: 'bold', color: theme.colors.primary}}>₹{(item as any).targetPrice || 'N/A'}</Text> • Req: {item.quantityRequired} {item.unit}</Text>
+        <Text style={styles.metaText}>📍 {item.deliveryRegion} • ⏳ {(item as any).timeline || 'Flexible'}</Text>
+      </View>
+      <View style={styles.actionCol}>
         {isPremium ? (
-          <Button mode="contained" onPress={() => setSelectedLead(item)}>Submit Quote</Button>
+          <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => setSelectedLead(item)}>Quote</Button>
         ) : quotesUsedThisMonth < 3 ? (
-          <Button mode="contained" onPress={() => setSelectedLead(item)}>
-            Submit Quote ({3 - quotesUsedThisMonth} Free Left)
+          <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => setSelectedLead(item)}>
+            Quote <Text style={{fontSize: 9, color: 'white'}}>({3 - quotesUsedThisMonth} left)</Text>
           </Button>
         ) : (
-          <Button 
-            mode="contained" 
-            buttonColor="#F59E0B" 
-            onPress={() => navigation.navigate('BusinessGrowth')}
-          >
-            👑 Upgrade to Quote
+          <Button mode="contained" compact labelStyle={{fontSize: 10, marginHorizontal: 10}} style={{backgroundColor: '#F59E0B', borderRadius: 6}} onPress={() => navigation.navigate('BusinessGrowth')}>
+            👑 Upgrade
           </Button>
         )}
-      </Card.Actions>
-    </Card>
+      </View>
+    </View>
   );
 
   return (
-    <View style={styles.container}>
-      <Text variant="headlineSmall" style={styles.pageTitle}>Live Market Requirements</Text>
-      <Text variant="bodyMedium" style={styles.subtitle}>Submit your best price and availability. Quotes go directly to Admin.</Text>
-      
-      <FlatList
-        data={leads}
-        keyExtractor={(item) => item.id!}
-        renderItem={renderLead}
-        contentContainerStyle={{ paddingBottom: 20 }}
-        ListEmptyComponent={<Text style={styles.emptyText}>No live requirements right now.</Text>}
-      />
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        <View>
+          <Text style={{fontWeight:'bold', fontSize: 18, color: '#1E293B'}}>Live Market Requirements</Text>
+          <Text style={{fontSize: 12, color: '#64748B'}}>Submit prices. Quotes go to Admin.</Text>
+        </View>
+      </View>
+
+      {loading ? (
+         <View style={{flex: 1, justifyContent: 'center'}}><ActivityIndicator size="large" color={theme.colors.primary} /></View>
+      ) : (
+        <FlatList
+          data={leads}
+          keyExtractor={(item) => item.id!}
+          renderItem={renderLead}
+          contentContainerStyle={{ padding: 16 }}
+          ListEmptyComponent={<View style={{alignItems: 'center', marginTop: 50}}><Text style={{color: '#94A3B8'}}>No live requirements right now.</Text></View>}
+        />
+      )}
 
       <Portal>
         <Modal visible={!!selectedLead} onDismiss={() => setSelectedLead(null)} contentContainerStyle={styles.modalContent}>
-          <Text variant="titleLarge" style={{ marginBottom: 15, fontWeight: 'bold' }}>Quote for {selectedLead?.productName}</Text>
-          
-          <TextInput
-            label={`Price per ${selectedLead?.unit || 'Unit'} (₹)`}
-            value={price}
-            onChangeText={setPrice}
-            keyboardType="numeric"
-            mode="outlined"
-            style={styles.input}
-          />
-          <TextInput
-            label="Quantity you can supply"
-            value={quantity}
-            onChangeText={setQuantity}
-            keyboardType="numeric"
-            mode="outlined"
-            style={styles.input}
-          />
-          <TextInput
-            label="Estimated Dispatch (e.g., 2 Days)"
-            value={dispatchDays}
-            onChangeText={setDispatchDays}
-            mode="outlined"
-            style={styles.input}
-          />
-          
-          <Button mode="contained" onPress={submitQuote} loading={isSubmitting} style={{ marginTop: 15 }}>
-            Send to Admin
-          </Button>
-          <Button mode="text" onPress={() => setSelectedLead(null)} style={{ marginTop: 5 }}>
-            Cancel
-          </Button>
+          <Text style={{ fontSize: 18, marginBottom: 15, fontWeight: 'bold' }}>Quote: {selectedLead?.productName}</Text>
+          <TextInput label={`Price per ${selectedLead?.unit || 'Unit'} (₹)`} value={price} onChangeText={setPrice} keyboardType="numeric" mode="outlined" style={styles.input} />
+          <TextInput label="Quantity you can supply" value={quantity} onChangeText={setQuantity} keyboardType="numeric" mode="outlined" style={styles.input} />
+          <TextInput label="Est. Dispatch (e.g., 2 Days)" value={dispatchDays} onChangeText={setDispatchDays} mode="outlined" style={styles.input} />
+          <Button mode="contained" onPress={submitQuote} loading={isSubmitting} style={{ marginTop: 15 }}>Send to Admin</Button>
+          <Button mode="text" onPress={() => setSelectedLead(null)} style={{ marginTop: 5 }}>Cancel</Button>
         </Modal>
       </Portal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC', padding: 15 },
-  pageTitle: { fontWeight: 'bold', color: '#1E293B' },
-  subtitle: { color: '#64748B', marginBottom: 15 },
-  card: { marginBottom: 12, backgroundColor: 'white' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  detailBox: { marginTop: 10, backgroundColor: '#F1F5F9', padding: 10, borderRadius: 8 },
-  emptyText: { textAlign: 'center', marginTop: 50, color: 'gray' },
-  modalContent: { backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 10 },
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', paddingBottom: 8 },
+  
+  compactRow: { flexDirection: 'row', backgroundColor: 'white', padding: 16, borderRadius: 12, marginBottom: 12, elevation: 1, alignItems: 'center' },
+  mainInfo: { flex: 1, paddingRight: 8 },
+  productName: { fontWeight: 'bold', fontSize: 14, color: '#1E293B' },
+  liveBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 },
+  liveText: { fontSize: 9, fontWeight: 'bold', color: '#DC2626' },
+  detailsText: { fontSize: 13, color: '#475569', marginBottom: 4 },
+  metaText: { fontSize: 11, color: '#94A3B8' },
+  
+  actionCol: { justifyContent: 'center' },
+  
+  modalContent: { backgroundColor: 'white', padding: 24, margin: 20, borderRadius: 16 },
   input: { marginBottom: 10, backgroundColor: 'white' }
 });

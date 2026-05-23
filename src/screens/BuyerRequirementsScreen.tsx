@@ -1,115 +1,141 @@
 // src/screens/BuyerRequirementsScreen.tsx
-import React, { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
-import { Text, Card, Button, useTheme, Chip } from 'react-native-paper';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { Text, IconButton, useTheme, FAB, Card, Chip, Divider } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
-import { useNavigation } from '@react-navigation/native';
 
 export default function BuyerRequirementsScreen() {
-  const theme = useTheme();
   const navigation = useNavigation<any>();
+  const theme = useTheme();
   const { user } = useAppStore();
+  
   const [requirements, setRequirements] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.uid) return;
-    const q = query(collection(db, 'customRequirements'), where('buyerId', '==', user.uid));
+
+    const q = query(
+      collection(db, 'customRequirements'),
+      where('buyerId', '==', user.uid)
+      // orderBy('createdAt', 'desc') // Ensure indexing in Firebase if using orderBy
+    );
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // ✅ Cast the mapped document to 'any' to resolve TypeScript errors
-      const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      
-      // Sort manually to keep newest first
-      reqs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      const reqs: any[] = [];
+      snapshot.forEach((doc) => {
+        reqs.push({ id: doc.id, ...doc.data() });
+      });
+      // Sort manually if index is missing
+      reqs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setRequirements(reqs);
+      setLoading(false);
     });
+
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user]);
 
-  const handleAcceptQuote = (req: any) => {
-    // ✅ Package the quoted requirement into a "Cart Item" format
-    const negotiatedItem = {
-      id: `custom_${req.id}`,
-      productId: 'CUSTOM_SOURCED',
-      name: req.productName,
-      quantity: Number(req.quantity),
-      pricePerUnit: Number(req.quotedPrice),
-      unit: req.unit || 'kg',
-      sellerId: req.quotedSupplierId,
-      gstPercent: 18, // Default B2B GST rate
-      customRequirementId: req.id // We pass this so Checkout knows what to mark as FULFILLED
-    };
-
-    // ✅ Send the user to the Checkout Screen to finish the order
-    navigation.navigate('Checkout', { negotiatedItem });
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'QUOTED': return { bg: '#DCFCE7', text: '#166534' };
+      case 'PENDING': return { bg: '#FEF3C7', text: '#D97706' };
+      case 'CLOSED': return { bg: '#F1F5F9', text: '#64748B' };
+      default: return { bg: '#F1F5F9', text: '#64748B' };
+    }
   };
 
-  const renderItem = ({ item }: { item: any }) => (
-    <Card style={styles.card} mode="outlined">
-      <Card.Content>
-        <View style={styles.headerRow}>
-          <Text variant="titleMedium" style={{fontWeight: 'bold', flex: 1}}>{item.productName}</Text>
-          <Chip 
-            compact 
-            style={{ backgroundColor: item.status === 'QUOTED' ? '#D1FAE5' : '#E2E8F0' }}
-            textStyle={{ color: item.status === 'QUOTED' ? '#065F46' : 'black', fontSize: 10, fontWeight: 'bold' }}
-          >
-            {item.status}
-          </Chip>
+  const renderItem = ({ item }: { item: any }) => {
+    const statusStyle = getStatusColor(item.status || 'PENDING');
+    
+    return (
+      <Card style={styles.card} mode="elevated" onPress={() => {}}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+          <View style={[styles.badge, { backgroundColor: statusStyle.bg }]}>
+            <Text style={[styles.badgeText, { color: statusStyle.text }]}>{item.status || 'PENDING'}</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.productName}>{item.productName}</Text>
+        
+        <View style={styles.specsRow}>
+          <Text style={styles.specText}>Target: ₹{item.targetPrice}/{item.unit}</Text>
+          <Text style={styles.specText}>Qty: {item.quantity} {item.unit}</Text>
         </View>
 
-        <Text variant="bodyMedium">Requested: {item.quantity} {item.unit}</Text>
-
-        {item.status === 'QUOTED' && item.quotedPrice && (
-          <View style={styles.quoteBox}>
-            <Text variant="titleSmall" style={{color: '#065F46', fontWeight: 'bold'}}>✨ Market Quote Found!</Text>
-            <Text variant="bodyMedium" style={{marginTop: 5}}>
-              Price: <Text style={{fontWeight: 'bold'}}>₹{item.quotedPrice} / {item.unit}</Text>
-            </Text>
-            <Text variant="bodyMedium">
-              Total: <Text style={{fontWeight: 'bold'}}>₹{(Number(item.quantity) * Number(item.quotedPrice)).toLocaleString()}</Text>
-            </Text>
-          </View>
-        )}
-      </Card.Content>
-      
-      {item.status === 'QUOTED' && (
-        <Card.Actions>
-          <Button 
-            mode="contained" 
-            buttonColor="#004AAD" 
-            onPress={() => handleAcceptQuote(item)}
-          >
-            Accept & Checkout
-          </Button>
-        </Card.Actions>
-      )}
-    </Card>
-  );
+        <Divider style={{ marginVertical: 12, backgroundColor: '#F1F5F9' }} />
+        
+        <View style={styles.footerRow}>
+           <Text style={styles.locationText}>📍 {item.deliveryPincode || 'N/A'}</Text>
+           <Text style={styles.timelineText}>⏳ {item.timeline || 'Standard'}</Text>
+        </View>
+      </Card>
+    );
+  };
 
   return (
-    <View style={styles.container}>
-      <Text variant="headlineSmall" style={styles.pageTitle}>My Sourcing Requests</Text>
-      <Text variant="bodyMedium" style={styles.subtitle}>Track your custom chemical requirements here.</Text>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        <Text variant="titleLarge" style={{fontWeight:'bold'}}>My Sourcing Requests</Text>
+      </View>
 
-      <FlatList
-        data={requirements}
-        keyExtractor={item => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 20 }}
-        ListEmptyComponent={<Text style={styles.emptyText}>You haven't submitted any custom requirements.</Text>}
+      {loading ? (
+        <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>
+      ) : (
+        <FlatList
+          data={requirements}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={{fontSize: 50}}>📝</Text>
+              <Text style={styles.emptyTitle}>No Requests Yet</Text>
+              <Text style={styles.emptySub}>Post a custom chemical requirement to get competitive quotes from verified suppliers.</Text>
+            </View>
+          }
+        />
+      )}
+
+      <FAB
+        icon="plus"
+        label="Post Requirement"
+        style={styles.fab}
+        color="white"
+        onPress={() => navigation.navigate('PostRequirement')}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC', padding: 15 },
-  pageTitle: { fontWeight: 'bold', color: '#1E293B' },
-  subtitle: { color: '#64748B', marginBottom: 15 },
-  card: { marginBottom: 12, backgroundColor: 'white' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  quoteBox: { marginTop: 15, backgroundColor: '#ECFDF5', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0' },
-  emptyText: { textAlign: 'center', marginTop: 40, color: '#94A3B8' }
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', paddingBottom: 8 },
+  listContent: { padding: 16, paddingBottom: 100 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  
+  card: { backgroundColor: 'white', marginBottom: 12, borderRadius: 12, padding: 16, elevation: 1 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  dateText: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  badgeText: { fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
+  
+  productName: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', marginBottom: 8 },
+  specsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  specText: { fontSize: 13, color: '#475569', fontWeight: '500' },
+  
+  footerRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  locationText: { fontSize: 12, color: '#64748B' },
+  timelineText: { fontSize: 12, color: '#64748B' },
+
+  emptyState: { alignItems: 'center', marginTop: 80, paddingHorizontal: 30 },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginTop: 16, marginBottom: 8 },
+  emptySub: { fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 20 },
+  
+  fab: { position: 'absolute', margin: 16, right: 0, bottom: 20, backgroundColor: '#004AAD' }
 });

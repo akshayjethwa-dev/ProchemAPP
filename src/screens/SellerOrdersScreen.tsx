@@ -1,6 +1,7 @@
+// src/screens/SellerOrdersScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, Alert, Modal, StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { Text, Button, Card, Divider, TextInput, Chip, SegmentedButtons, IconButton, useTheme, ActivityIndicator, Avatar } from 'react-native-paper';
+import { Text, Button, Divider, TextInput, SegmentedButtons, IconButton, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -13,36 +14,23 @@ import { Order } from '../types';
 export default function SellerOrdersScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAppStore();
-  const theme = useTheme();
   
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('requests'); 
 
-  // Modal State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDocModal, setShowDocModal] = useState(false);
-  
-  const [docs, setDocs] = useState({ 
-    qualityFile: null as any, 
-    purity: '', 
-    grade: '' 
-  });
+  const [docs, setDocs] = useState({ qualityFile: null as any, purity: '', grade: '' });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    if (!user) { setLoading(false); return; }
     const q = query(collection(db, 'orders'), where('sellerId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Order));
       data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setOrders(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Seller Order Query Error:", error);
       setLoading(false);
     });
     return unsubscribe;
@@ -51,28 +39,19 @@ export default function SellerOrdersScreen() {
   const pendingOrders = orders.filter(o => o.status === 'PENDING_SELLER');
   const historyOrders = orders.filter(o => o.status !== 'PENDING_SELLER');
 
-  const handleAcceptClick = (order: Order) => {
-    setSelectedOrder(order);
-    setShowDocModal(true);
-  };
+  const handleAcceptClick = (order: Order) => { setSelectedOrder(order); setShowDocModal(true); };
 
   const handleDecline = (orderId: string) => {
-    Alert.alert(
-      'Decline Order',
-      'Are you sure? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Decline', style: 'destructive', onPress: async () => await sellerDeclineOrder(orderId) }
-      ]
-    );
+    Alert.alert('Decline Order', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Decline', style: 'destructive', onPress: async () => await sellerDeclineOrder(orderId) }
+    ]);
   };
 
-  // ✅ UPDATED: Open WhatsApp for Invoice Request
   const handleRequestInvoice = async (order: Order) => {
-    const phoneNumber = '+918460852903'; // REPLACE with your Admin/Support WhatsApp Number
+    const phoneNumber = '+918460852903';
     const message = `Hello, I need the Seller Invoice for Order #${order.id.slice(0,6).toUpperCase()}.`;
     const url = `whatsapp://send?text=${encodeURIComponent(message)}&phone=${phoneNumber}`;
-    
     const supported = await Linking.canOpenURL(url);
     if (supported) await Linking.openURL(url);
     else Alert.alert('WhatsApp not installed', 'Please contact support.');
@@ -81,96 +60,79 @@ export default function SellerOrdersScreen() {
   const pickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-      if (result.assets && result.assets.length > 0) {
-        setDocs({ ...docs, qualityFile: result.assets[0] });
-      }
+      if (result.assets && result.assets.length > 0) setDocs({ ...docs, qualityFile: result.assets[0] });
     } catch (err) { console.error("Error: ", err); }
   };
 
-  const uploadFileToStorage = async (file: any) => {
-    return new Promise<string>((resolve) => {
-      setTimeout(() => resolve(`https://mock-url.com/${file.name}`), 1000);
-    });
-  };
-
   const submitDocuments = async () => {
-    if (!selectedOrder) return;
-    if (!docs.qualityFile || !docs.purity || !docs.grade) {
-      Alert.alert('Missing Info', 'Please fill all fields and upload document.');
-      return;
+    if (!selectedOrder || !docs.qualityFile || !docs.purity || !docs.grade) {
+      Alert.alert('Missing Info', 'Please fill all fields and upload document.'); return;
     }
     setSubmitting(true);
     try {
-      const fileUrl = await uploadFileToStorage(docs.qualityFile);
-      await sellerAcceptOrder(selectedOrder.id, {
-        qualityReport: fileUrl,     
-        fileName: docs.qualityFile.name, 
-        purityCertificate: docs.purity,
-        gradeSheet: docs.grade
-      });
+      const fileUrl = await new Promise<string>((res) => setTimeout(() => res(`https://mock-url.com/${docs.qualityFile.name}`), 1000));
+      await sellerAcceptOrder(selectedOrder.id, { qualityReport: fileUrl, fileName: docs.qualityFile.name, purityCertificate: docs.purity, gradeSheet: docs.grade });
       setShowDocModal(false);
       setDocs({ qualityFile: null, purity: '', grade: '' });
       Alert.alert('Success', 'Order accepted!');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to submit.');
-    } finally {
-      setSubmitting(false);
-    }
+    } catch (error) { Alert.alert('Error', 'Failed to submit.'); } 
+    finally { setSubmitting(false); }
+  };
+
+  const getStatusStyle = (status: string) => {
+    if (status === 'PENDING_SELLER') return { bg: '#FEF3C7', text: '#D97706' };
+    if (status === 'DELIVERED') return { bg: '#DCFCE7', text: '#16A34A' };
+    return { bg: '#F1F5F9', text: '#64748B' };
   };
 
   const renderItem = ({ item }: { item: Order }) => {
     const isRequest = item.status === 'PENDING_SELLER';
+    const status = getStatusStyle(item.status);
+    const prodName = item.items[0]?.name || 'Chemical Product';
+
     return (
-      <Card style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View>
-            <Text variant="titleMedium" style={{fontWeight:'bold'}}>Order #{item.id.slice(0,6).toUpperCase()}</Text>
-            <Text variant="bodySmall" style={{color:'#666'}}>{new Date(item.createdAt).toDateString()}</Text>
+      <View style={styles.compactRow}>
+        <View style={styles.rowTop}>
+          <View style={styles.iconBox}><Text style={{fontSize: 20}}>📦</Text></View>
+          <View style={styles.middleCol}>
+            <Text style={styles.orderId}>Order #{item.id.slice(-6).toUpperCase()}</Text>
+            {/* 🚀 FIX: explicitly checked for buyerName or used fallback */}
+            <Text style={styles.buyerText} numberOfLines={1}>{(item as any).buyerName || 'Buyer'} • {new Date(item.createdAt).toLocaleDateString()}</Text>
+            <Text style={styles.productText} numberOfLines={1}>{prodName}</Text>
           </View>
-          <View style={{alignItems: 'flex-end'}}>
-             <Chip 
-               compact 
-               style={{backgroundColor: isRequest ? '#FFF3E0' : '#E8F5E9', marginBottom: 4}} 
-               textStyle={{color: isRequest ? '#E65100' : '#2E7D32', fontWeight:'bold', fontSize:10}}
-             >
-               {item.status.replace('_', ' ')}
-             </Chip>
-             {/* ✅ UPDATED LINK ACTION */}
-             <TouchableOpacity onPress={() => handleRequestInvoice(item)}>
-               <Text style={{color: '#004AAD', fontSize: 12, fontWeight:'bold', textDecorationLine: 'underline'}}>
-                 Request Invoice
-               </Text>
-             </TouchableOpacity>
+          <View style={styles.rightCol}>
+            <Text style={styles.priceText}>₹{item.totalAmount}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+              <Text style={[styles.statusText, { color: status.text }]}>{item.status.replace('_', ' ')}</Text>
+            </View>
           </View>
         </View>
-        <Divider style={{marginVertical: 10}} />
-        <Card.Content style={{paddingHorizontal:0}}>
-           {item.items.map((prod, idx) => (
-             <View key={idx} style={styles.productRow}>
-               <Text style={{fontWeight:'bold', flex:1}}>{prod.name}</Text>
-               <Text style={{color:'#666'}}>{prod.quantity} {prod.unit}</Text>
-               <Text style={{fontWeight:'bold', color: theme.colors.primary, marginLeft:10}}>₹{prod.pricePerUnit * prod.quantity}</Text>
-             </View>
-           ))}
-           <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:15}}>
-             <Text style={{fontWeight:'bold'}}>Total Payout</Text>
-             <Text variant="titleMedium" style={{fontWeight:'bold', color: theme.colors.primary}}>₹{item.totalAmount}</Text>
-           </View>
-        </Card.Content>
-        {isRequest && (
-          <Card.Actions style={{paddingHorizontal:0, marginTop:10}}>
-             <Button mode="outlined" textColor="#D32F2F" style={{flex:1, marginRight:8}} onPress={() => handleDecline(item.id)}>Decline</Button>
-             <Button mode="contained" style={{flex:1, marginLeft:8}} onPress={() => handleAcceptClick(item)}>Accept</Button>
-          </Card.Actions>
-        )}
-      </Card>
+
+        <Divider style={{marginVertical: 10, backgroundColor: '#F1F5F9'}} />
+
+        <View style={styles.actionRow}>
+          {!isRequest && (
+            <TouchableOpacity onPress={() => handleRequestInvoice(item)}>
+              <Text style={styles.invoiceLink}>Request Invoice</Text>
+            </TouchableOpacity>
+          )}
+          <View style={{flex: 1}} /> 
+          {isRequest && (
+            <View style={{flexDirection: 'row'}}>
+              <Button mode="text" textColor="#D32F2F" compact onPress={() => handleDecline(item.id)}>Decline</Button>
+              <Button mode="contained" buttonColor="#10B981" compact style={{marginLeft: 8, borderRadius: 6}} onPress={() => handleAcceptClick(item)}>Accept</Button>
+            </View>
+          )}
+        </View>
+      </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text variant="headlineSmall" style={{fontWeight:'bold'}}>Manage Orders</Text>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        <Text style={{fontWeight:'bold', fontSize: 20, color: '#1E293B'}}>Manage Orders</Text>
       </View>
 
       <View style={{paddingHorizontal: 16, paddingBottom: 10}}>
@@ -192,11 +154,7 @@ export default function SellerOrdersScreen() {
           renderItem={renderItem}
           keyExtractor={i => i.id}
           contentContainerStyle={{padding: 16, paddingBottom: 80}}
-          ListEmptyComponent={
-            <View style={{alignItems:'center', marginTop: 50}}>
-              <Text style={{color:'#999'}}>{tab === 'requests' ? 'No new requests.' : 'No history found.'}</Text>
-            </View>
-          }
+          ListEmptyComponent={<View style={{alignItems:'center', marginTop: 50}}><Text style={{color:'#999'}}>{tab === 'requests' ? 'No new requests.' : 'No history found.'}</Text></View>}
         />
       )}
 
@@ -204,12 +162,11 @@ export default function SellerOrdersScreen() {
       <Modal visible={showDocModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text variant="titleLarge" style={{fontWeight:'bold', marginBottom: 20}}>Upload Documents</Text>
-            
+            <Text style={{fontSize: 18, fontWeight:'bold', marginBottom: 20}}>Upload Documents</Text>
             <View style={styles.uploadArea}>
               {docs.qualityFile ? (
                 <View style={styles.filePreview}>
-                   <Text numberOfLines={1}>{docs.qualityFile.name}</Text>
+                   <Text numberOfLines={1} style={{flex: 1}}>{docs.qualityFile.name}</Text>
                    <IconButton icon="close-circle" iconColor="red" onPress={() => setDocs({...docs, qualityFile: null})} />
                 </View>
               ) : (
@@ -218,10 +175,8 @@ export default function SellerOrdersScreen() {
                 </TouchableOpacity>
               )}
             </View>
-
             <TextInput label="Purity (%)" value={docs.purity} onChangeText={t => setDocs({...docs, purity: t})} mode="outlined" style={styles.input} />
             <TextInput label="Grade" value={docs.grade} onChangeText={t => setDocs({...docs, grade: t})} mode="outlined" style={styles.input} />
-
             <View style={{flexDirection:'row', justifyContent:'flex-end', marginTop: 10}}>
               <Button onPress={() => setShowDocModal(false)}>Cancel</Button>
               <Button mode="contained" onPress={submitDocuments} loading={submitting}>Submit</Button>
@@ -229,17 +184,30 @@ export default function SellerOrdersScreen() {
           </View>
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { padding: 20, backgroundColor:'white', borderBottomWidth:1, borderBottomColor:'#eee' },
-  card: { backgroundColor: 'white', marginBottom: 15, padding: 15, borderRadius: 12, elevation: 2 },
-  cardHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start' },
-  productRow: { flexDirection:'row', justifyContent:'space-between', marginBottom: 6 },
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', paddingBottom: 8 },
+  
+  compactRow: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginBottom: 12, elevation: 1 },
+  rowTop: { flexDirection: 'row' },
+  iconBox: { width: 44, height: 44, backgroundColor: '#F8FAFC', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  middleCol: { flex: 1, marginLeft: 12, justifyContent: 'center' },
+  orderId: { fontWeight: 'bold', fontSize: 14, color: '#1E293B' },
+  buyerText: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  productText: { fontSize: 12, color: '#334155', marginTop: 4, fontWeight: '500' },
+  
+  rightCol: { alignItems: 'flex-end', justifyContent: 'flex-start' },
+  priceText: { fontWeight: 'bold', fontSize: 14, color: '#0F172A', marginBottom: 6 },
+  statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  statusText: { fontSize: 9, fontWeight: 'bold' },
+
+  actionRow: { flexDirection: 'row', alignItems: 'center' },
+  invoiceLink: { color: '#004AAD', fontSize: 12, fontWeight:'bold', textDecorationLine: 'underline' },
+  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 16 },
   input: { marginBottom: 12, backgroundColor: 'white' },

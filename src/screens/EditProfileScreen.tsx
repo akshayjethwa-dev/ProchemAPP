@@ -1,7 +1,7 @@
-// File: src/screens/EditProfileScreen.tsx
+// src/screens/EditProfileScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { TextInput, Button, IconButton, Text, ActivityIndicator, Switch, Divider } from 'react-native-paper';
+import { TextInput, Button, IconButton, Text, ActivityIndicator, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../store/appStore';
@@ -11,26 +11,24 @@ import { db } from '../config/firebase';
 export default function EditProfileScreen() {
   const navigation = useNavigation();
   const { user, setUser } = useAppStore();
-  
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    companyName: '',
-    phone: '',
-    address: '',
-    pincode: '',
-    gstNumber: '',
-    whatsappOptIn: false // 🚀 Added state
+  
+  const [formData, setFormData] = useState({ 
+    companyName: '', 
+    phone: '', 
+    address: '', 
+    pincode: '', 
+    gstNumber: '' 
   });
 
   useEffect(() => {
     if (user) {
       setFormData({
-        companyName: user.companyName || '',
-        phone: user.phone || '',
-        address: user.address || '',
-        pincode: user.pincode ? String(user.pincode) : '',
-        gstNumber: user.gstNumber || '',
-        whatsappOptIn: user.whatsappOptIn ?? false // 🚀 Load existing preference
+        companyName: user.companyName || '', 
+        phone: user.phone || '', 
+        address: user.address || '', 
+        pincode: user.pincode ? String(user.pincode) : '', 
+        gstNumber: user.gstNumber || ''
       });
     }
   }, [user]);
@@ -39,15 +37,8 @@ export default function EditProfileScreen() {
     if (!user) return;
     setLoading(true);
     try {
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, formData);
-      
-      setUser({ 
-        ...user, 
-        ...formData,
-        pincode: formData.pincode 
-      });
-      
+      await updateDoc(doc(db, 'users', user.uid), formData);
+      setUser({ ...user, ...formData, pincode: formData.pincode });
       Alert.alert('Success', 'Profile updated successfully');
       navigation.goBack();
     } catch (error: any) {
@@ -57,85 +48,73 @@ export default function EditProfileScreen() {
     }
   };
 
-  if (!user) {
-    return (
-      <View style={{flex:1, justifyContent:'center', alignItems:'center'}}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
+  if (!user) return <View style={styles.center}><ActivityIndicator size="large" /></View>;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="headlineSmall" style={{fontWeight:'bold'}}>Edit Profile</Text>
+        <Text variant="titleLarge" style={{fontWeight:'bold'}}>Company Profile</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <TextInput
-          label="Company Name"
-          value={formData.companyName}
-          onChangeText={(t) => setFormData({...formData, companyName: t})}
-          mode="outlined"
-          style={styles.input}
-        />
-        <TextInput
-          label="Phone Number"
-          value={formData.phone}
-          onChangeText={(t) => setFormData({...formData, phone: t})}
-          mode="outlined"
-          keyboardType="phone-pad"
-          style={styles.input}
-        />
-        <TextInput
-          label="Address"
-          value={formData.address}
-          onChangeText={(t) => setFormData({...formData, address: t})}
-          mode="outlined"
-          multiline
-          style={styles.input}
-        />
-        <TextInput
-          label="Pincode"
-          value={formData.pincode}
-          onChangeText={(t) => setFormData({...formData, pincode: t})}
-          mode="outlined"
-          keyboardType="numeric"
-          maxLength={6}
-          style={styles.input}
-        />
-        <TextInput
-          label="GST Number"
-          value={formData.gstNumber}
-          mode="outlined"
-          disabled 
-          style={[styles.input, {backgroundColor: '#f0f0f0'}]}
-        />
-
-        {/* 🚀 NEW: WhatsApp Opt-In Toggle */}
-        <Divider style={{ marginVertical: 15 }} />
-        <View style={styles.switchContainer}>
-          <View style={{ flex: 1 }}>
-            <Text variant="titleMedium">WhatsApp Notifications</Text>
-            <Text variant="bodySmall" style={{ color: '#666' }}>
-              Receive important order updates and alerts via WhatsApp.
-            </Text>
-          </View>
-          <Switch 
-            value={formData.whatsappOptIn} 
-            onValueChange={(val) => setFormData({...formData, whatsappOptIn: val})} 
-            color="#25D366" 
+        
+        <Text style={styles.sectionTitle}>BUSINESS DETAILS</Text>
+        <View style={styles.inputGroup}>
+          <TextInput 
+            label="Company Name" 
+            value={formData.companyName} 
+            onChangeText={(t) => setFormData({...formData, companyName: t})} 
+            style={styles.input} 
+            underlineColor="transparent" 
+            theme={{colors: {background: 'transparent'}}}
+          />
+          <Divider />
+          <TextInput 
+            label="GST Number (Read Only)" 
+            value={formData.gstNumber} 
+            disabled 
+            style={[styles.input, {backgroundColor: '#F8FAFC'}]} 
+            underlineColor="transparent" 
+            theme={{colors: {background: 'transparent'}}}
           />
         </View>
-        <Divider style={{ marginVertical: 15 }} />
 
-        <Button 
-          mode="contained" 
-          onPress={handleUpdate} 
-          loading={loading}
-          style={styles.btn}
-        >
+        <Text style={styles.sectionTitle}>CONTACT & LOCATION</Text>
+        <View style={styles.inputGroup}>
+          <TextInput 
+            label="Phone Number" 
+            value={formData.phone} 
+            onChangeText={(t) => setFormData({...formData, phone: t})} 
+            keyboardType="phone-pad" 
+            style={styles.input} 
+            underlineColor="transparent" 
+            theme={{colors: {background: 'transparent'}}}
+          />
+          <Divider />
+          <TextInput 
+            label="Registered Address" 
+            value={formData.address} 
+            onChangeText={(t) => setFormData({...formData, address: t})} 
+            multiline 
+            style={styles.input} 
+            underlineColor="transparent" 
+            theme={{colors: {background: 'transparent'}}}
+          />
+          <Divider />
+          <TextInput 
+            label="Pincode" 
+            value={formData.pincode} 
+            onChangeText={(t) => setFormData({...formData, pincode: t})} 
+            keyboardType="numeric" 
+            maxLength={6} 
+            style={styles.input} 
+            underlineColor="transparent" 
+            theme={{colors: {background: 'transparent'}}}
+          />
+        </View>
+
+        <Button mode="contained" onPress={handleUpdate} loading={loading} style={styles.btn}>
           Save Changes
         </Button>
       </ScrollView>
@@ -144,10 +123,12 @@ export default function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'white' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 8 },
-  content: { padding: 20 },
-  input: { marginBottom: 16, backgroundColor: 'white' },
-  switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
-  btn: { marginTop: 10, borderRadius: 8 }
+  container: { flex: 1, backgroundColor: '#F1F5F9' }, // Gray Background to make white cards pop
+  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', paddingBottom: 8 },
+  content: { padding: 16 },
+  sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#64748B', marginLeft: 16, marginBottom: 8, marginTop: 16, letterSpacing: 1 },
+  inputGroup: { backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }, // The grouped block
+  input: { height: 56, paddingHorizontal: 4 }, // Flat inputs inside the group
+  btn: { marginTop: 30, borderRadius: 8, paddingVertical: 4 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });

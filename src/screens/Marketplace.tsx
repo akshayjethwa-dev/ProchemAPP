@@ -1,6 +1,7 @@
+// src/screens/Marketplace.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, ScrollView, TouchableOpacity } from 'react-native';
-import { Text, Searchbar, ActivityIndicator, IconButton, Chip, useTheme, Button } from 'react-native-paper';
+import { Text, Searchbar, ActivityIndicator, IconButton, Chip, useTheme, Button, Portal, Modal, RadioButton, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,6 +19,10 @@ export default function Marketplace() {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined);
+  
+  // Sort/Filter State
+  const [sortVisible, setSortVisible] = useState(false);
+  const [sortBy, setSortBy] = useState('price_asc');
 
   const categories = ['All Products', 'Industrial Acids', 'Alkalis', 'Oxidizers', 'Salts'];
 
@@ -28,14 +33,13 @@ export default function Marketplace() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      setError('');
       let data = await getProducts(); 
       const catParam = selectedCategory === 'All Products' ? undefined : selectedCategory;
       if (catParam) {
         data = data.filter(p => p.category === catParam);
       }
       setProducts(data);
-      setFilteredProducts(data);
+      applySortAndFilter(data, searchTerm, sortBy);
     } catch (err: any) {
       setError(err.message || 'Failed to load products');
     } finally {
@@ -43,48 +47,62 @@ export default function Marketplace() {
     }
   };
 
-  useEffect(() => {
-    if (searchTerm.trim()) {
-      const lowerTerm = searchTerm.toLowerCase();
-      const filtered = products.filter(p => 
+  const applySortAndFilter = (data: Product[], term: string, sortOrder: string) => {
+    let result = [...data];
+    if (term.trim()) {
+      const lowerTerm = term.toLowerCase();
+      result = result.filter(p => 
         p.name?.toLowerCase().includes(lowerTerm) ||
         p.category?.toLowerCase().includes(lowerTerm) ||
         p.sellerName?.toLowerCase().includes(lowerTerm)
       );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts(products);
     }
-  }, [searchTerm, products]);
+    
+    if (sortOrder === 'price_asc') {
+      result.sort((a, b) => (a.pricePerUnit || a.price || 0) - (b.pricePerUnit || b.price || 0));
+    } else if (sortOrder === 'price_desc') {
+      result.sort((a, b) => (b.pricePerUnit || b.price || 0) - (a.pricePerUnit || a.price || 0));
+    } else if (sortOrder === 'moq_asc') {
+      result.sort((a, b) => (a.moq || 0) - (b.moq || 0));
+    }
 
-  // 🔥 ULTRA-DENSITY LIST ITEM
+    setFilteredProducts(result);
+  };
+
+  useEffect(() => {
+    applySortAndFilter(products, searchTerm, sortBy);
+  }, [searchTerm, products, sortBy]);
+
+  // 🚀 COMPACT RESULT CELL
   const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity 
-      style={styles.card} 
+      style={styles.compactRow} 
       activeOpacity={0.7}
       onPress={() => navigation.navigate('ProductDetail', { productId: item.id || '' })}
     >
-      <View style={styles.imageContainer}>
-        <Text style={{fontSize: 24}}>🧪</Text>
+      <View style={styles.thumbnail}>
+        <Text style={{fontSize: 20}}>🧪</Text>
       </View>
       
-      <View style={styles.infoContainer}>
-        <View>
+      <View style={styles.middleCol}>
+        <View style={{flexDirection: 'row', alignItems: 'center'}}>
           <Text numberOfLines={1} style={styles.productName}>{item.name}</Text>
-          <Text numberOfLines={1} style={styles.sellerText}>{item.sellerName || 'Verified Seller'} • MOQ: {item.moq || 1}</Text>
+          {item.readyToDispatch && <View style={styles.stockDot} />}
         </View>
-        
-        <View style={styles.bottomRow}>
-          <Text style={[styles.priceText, { color: theme.colors.primary }]}>
-            ₹{item.pricePerUnit || item.price || 0} <Text style={styles.unitText}>/{item.unit || 'unit'}</Text>
-          </Text>
-          
-          {item.verified && (
-            <View style={styles.verifiedBadge}>
-              <Text style={styles.verifiedBadgeText}>✓ Verified</Text>
-            </View>
-          )}
+        <Text numberOfLines={1} style={styles.metaText}>
+          {item.sellerName || 'Verified Supplier'} • {(item as any).location || 'Gujarat, IN'}
+        </Text>
+        <View style={styles.badgeRow}>
+          <Text style={styles.moqText}>MOQ: {item.moq || 1} {item.unit}</Text>
+          {item.verified && <Text style={styles.trustBadge}>✓ Verified</Text>}
         </View>
+      </View>
+      
+      <View style={styles.rightCol}>
+        <Text style={[styles.priceText, { color: theme.colors.primary }]}>
+          ₹{item.pricePerUnit || item.price || 0}
+        </Text>
+        <Text style={styles.unitText}>/{item.unit || 'unit'}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -102,12 +120,17 @@ export default function Marketplace() {
           onChangeText={setSearchTerm}
           value={searchTerm}
           style={styles.searchbar}
-          inputStyle={{minHeight: 36, fontSize: 14}} // 🔥 Slimmer search bar
+          inputStyle={{minHeight: 36, fontSize: 14}}
         />
       </View>
 
-      <View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catScroll}>
+      {/* 🚀 STICKY FILTER & SORT BAR */}
+      <View style={styles.stickyFilterBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <Button mode="text" icon="sort" compact textColor="#475569" onPress={() => setSortVisible(true)}>
+            Sort
+          </Button>
+          <Divider style={{width: 1, height: '60%', alignSelf: 'center', marginHorizontal: 8}} />
           {categories.map((cat) => (
             <Chip
               key={cat}
@@ -115,7 +138,7 @@ export default function Marketplace() {
               onPress={() => setSelectedCategory(cat === 'All Products' ? undefined : cat)}
               style={[styles.chip, selectedCategory === cat && { backgroundColor: '#E3F2FD', borderColor: theme.colors.primary }]}
               textStyle={{ fontSize: 11, marginVertical: 0 }}
-              showSelectedOverlay
+              compact
             >
               {cat}
             </Chip>
@@ -136,55 +159,50 @@ export default function Marketplace() {
           renderItem={renderProduct}
           keyExtractor={(item, index) => item.id || index.toString()}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<View style={styles.center}><Text style={{color: '#999'}}>No products found</Text></View>}
+          ItemSeparatorComponent={() => <Divider style={{backgroundColor: '#F1F5F9'}}/>}
         />
       )}
+
+      {/* SORT BOTTOM SHEET (MODAL) */}
+      <Portal>
+        <Modal visible={sortVisible} onDismiss={() => setSortVisible(false)} contentContainerStyle={styles.bottomSheet}>
+          <Text variant="titleMedium" style={{fontWeight: 'bold', marginBottom: 12}}>Sort Products</Text>
+          <RadioButton.Group onValueChange={value => { setSortBy(value); setSortVisible(false); }} value={sortBy}>
+            <RadioButton.Item label="Price: Low to High" value="price_asc" labelStyle={{fontSize: 14}} />
+            <RadioButton.Item label="Price: High to Low" value="price_desc" labelStyle={{fontSize: 14}} />
+            <RadioButton.Item label="MOQ: Lowest First" value="moq_asc" labelStyle={{fontSize: 14}} />
+          </RadioButton.Group>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0, paddingBottom: 0 },
   searchContainer: { paddingHorizontal: 12, marginBottom: 8 },
-  // 🔥 REDUCED search bar height
-  searchbar: { backgroundColor: '#FFFFFF', borderRadius: 8, height: 40, borderWidth: 1, borderColor: '#E5E7EB', elevation: 0 },
-  catScroll: { paddingHorizontal: 12, paddingBottom: 8 },
-  // 🔥 SLIMMER chips
-  chip: { marginRight: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', height: 28, elevation: 0, alignItems: 'center' },
-  list: { paddingHorizontal: 12, paddingBottom: 20 },
+  searchbar: { backgroundColor: '#F8FAFC', borderRadius: 8, height: 40, elevation: 0 },
   
-  card: { 
-    flexDirection: 'row', 
-    backgroundColor: '#FFFFFF', 
-    borderWidth: 1, 
-    borderColor: '#E5E7EB', 
-    borderRadius: 8, 
-    padding: 8, 
-    marginBottom: 6 // 🔥 Tighter gaps between products
-  },
-  // 🔥 REDUCED Image from 80px to 56px
-  imageContainer: { 
-    width: 56, 
-    height: 56, 
-    backgroundColor: '#F1F5F9', 
-    borderRadius: 6, 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
-  infoContainer: { 
-    flex: 1, 
-    marginLeft: 10, 
-    justifyContent: 'space-between' 
-  },
-  productName: { fontWeight: 'bold', fontSize: 13, color: '#1F2937' },
-  // 🔥 Consolidated Seller text and MOQ into one line to save vertical space
-  sellerText: { fontSize: 10, color: '#64748B', marginTop: 1 },
-  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  priceText: { fontWeight: 'bold', fontSize: 13 },
-  unitText: { fontSize: 10, color: '#64748B', fontWeight: 'normal' },
-  verifiedBadge: { backgroundColor: '#DEF7EC', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 8 },
-  verifiedBadgeText: { fontSize: 9, color: '#03543F', fontWeight: 'bold' },
+  stickyFilterBar: { paddingHorizontal: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 8, flexDirection: 'row', alignItems: 'center' },
+  chip: { marginRight: 6, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', height: 26, elevation: 0 },
   
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 }
+  list: { paddingBottom: 20 },
+  
+  compactRow: { flexDirection: 'row', backgroundColor: '#FFFFFF', padding: 12, alignItems: 'center' },
+  thumbnail: { width: 44, height: 44, backgroundColor: '#F1F5F9', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  middleCol: { flex: 1, marginLeft: 12, justifyContent: 'center' },
+  productName: { fontWeight: 'bold', fontSize: 14, color: '#1E293B', paddingRight: 4 },
+  stockDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981', marginTop: 2 },
+  metaText: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  moqText: { fontSize: 10, color: '#475569', backgroundColor: '#F1F5F9', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
+  trustBadge: { fontSize: 10, color: '#059669', marginLeft: 8, fontWeight: 'bold' },
+  
+  rightCol: { alignItems: 'flex-end', justifyContent: 'center', paddingLeft: 8 },
+  priceText: { fontWeight: 'bold', fontSize: 15 },
+  unitText: { fontSize: 10, color: '#94A3B8' },
+  
+  bottomSheet: { backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 12 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });

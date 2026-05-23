@@ -1,14 +1,13 @@
+// src/screens/AccountScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Modal, ActivityIndicator, Dimensions, Alert } from 'react-native';
-import { Text, Avatar, List, Divider, Button, Chip, useTheme, Card, IconButton, Badge, Switch } from 'react-native-paper'; 
+import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Modal, ActivityIndicator, Alert } from 'react-native';
+import { Text, Avatar, List, Divider, Button, useTheme, Switch, Badge } from 'react-native-paper'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { logoutUser, deleteUserAccount } from '../services/authService';
-
-const { width } = Dimensions.get('window');
 
 export default function AccountScreen() {
   const navigation = useNavigation<any>();
@@ -21,36 +20,19 @@ export default function AccountScreen() {
   const [showWaPrefsModal, setShowWaPrefsModal] = useState(false); 
   const [switching, setSwitching] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  // ✅ Track quoted custom requirements for the notification badge
   const [quotedReqsCount, setQuotedReqsCount] = useState(0);
 
-  // ✅ WhatsApp Preferences State
   const [waPrefs, setWaPrefs] = useState({
-    general: true,
-    marketAlerts: true,
-    negotiations: true,
-    digest: true
+    general: true, marketAlerts: true, negotiations: true, digest: true
   });
 
   useEffect(() => {
     if (!user?.uid || viewMode !== 'buyer') return;
-    
-    // Listen for custom sourcing requests that the admin has quoted
-    const qReq = query(
-      collection(db, 'customRequirements'), 
-      where('buyerId', '==', user.uid), 
-      where('status', '==', 'QUOTED')
-    );
-    
-    const unsub = onSnapshot(qReq, snap => {
-      setQuotedReqsCount(snap.docs.length);
-    });
-    
+    const qReq = query(collection(db, 'customRequirements'), where('buyerId', '==', user.uid), where('status', '==', 'QUOTED'));
+    const unsub = onSnapshot(qReq, snap => setQuotedReqsCount(snap.docs.length));
     return () => unsub();
   }, [user?.uid, viewMode]);
 
-  // ✅ Load initial preferences from user document (Clean TypeScript way)
   useEffect(() => {
     if (user?.whatsappPreferences) {
       setWaPrefs({
@@ -62,65 +44,47 @@ export default function AccountScreen() {
     }
   }, [user]);
 
-  const handleSupport = () => {
-    setShowSupportModal(true);
-  };
-
-  const openDialer = () => {
-    Linking.openURL('tel:+918460852903');
-  };
-
-  const openWhatsApp = () => {
-    Linking.openURL('whatsapp://send?phone=918460852903&text=Hello, I need assistance with the ProChem App.');
-  };
-
-  const initiateSwitch = () => {
-    setShowSwitchModal(true);
-  };
-
   const confirmSwitch = () => {
     setShowSwitchModal(false);
     setSwitching(true);
-
-    const targetMode = viewMode === 'buyer' ? 'seller' : 'buyer';
-    
     setTimeout(() => {
-      console.log("Switching to:", targetMode);
-      setViewMode(targetMode);
+      setViewMode(viewMode === 'buyer' ? 'seller' : 'buyer');
       setSwitching(false);
     }, 800);
   };
 
-  // Handles the account deletion process
   const handleDeleteAccount = async () => {
     try {
       setIsDeleting(true);
       await deleteUserAccount();
-      setShowDeleteModal(false);
-      Alert.alert("Account Deleted", "Your account and data have been permanently removed.");
+      Alert.alert("Account Deleted", "Your account has been permanently removed.");
     } catch (error: any) {
-      setShowDeleteModal(false);
       Alert.alert("Deletion Failed", error.message);
     } finally {
       setIsDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
-  // ✅ Function to toggle & save WA preference to Firestore
   const toggleWaPref = async (key: keyof typeof waPrefs, value: boolean) => {
     const newPrefs = { ...waPrefs, [key]: value };
-    setWaPrefs(newPrefs); // Optimistic UI update
-    
+    setWaPrefs(newPrefs);
     if (user?.uid) {
-      try {
-        await updateDoc(doc(db, 'users', user.uid), { whatsappPreferences: newPrefs });
-      } catch (error) {
-        console.error("Failed to update WA preferences", error);
-        Alert.alert("Error", "Could not save preference.");
-        setWaPrefs({ ...waPrefs }); // Revert on failure
-      }
+      try { await updateDoc(doc(db, 'users', user.uid), { whatsappPreferences: newPrefs }); } 
+      catch { setWaPrefs({ ...waPrefs }); }
     }
   };
+
+  const openDialer = () => Linking.openURL('tel:+918460852903');
+  const openWhatsApp = () => Linking.openURL('whatsapp://send?phone=918460852903&text=Hello, I need assistance with the ProChem App.');
+
+  // UI Component for grouping lists cleanly
+  const SettingsGroup = ({ children, title }: any) => (
+    <View style={styles.groupContainer}>
+      {title && <Text style={styles.groupTitle}>{title}</Text>}
+      <View style={styles.groupBlock}>{children}</View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -135,43 +99,24 @@ export default function AccountScreen() {
                 WhatsApp Notifications
               </Text>
             </View>
-            
             <View style={{padding: 20}}>
               <View style={styles.switchRow}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.switchLabel}>General Updates</Text>
-                  <Text style={styles.switchSub}>Marketing, promos, and platform news.</Text>
-                </View>
+                <View style={{flex: 1}}><Text style={styles.switchLabel}>General Updates</Text><Text style={styles.switchSub}>Marketing, promos, and platform news.</Text></View>
                 <Switch value={waPrefs.general} onValueChange={(val) => toggleWaPref('general', val)} color="#25D366" />
               </View>
-
               <View style={styles.switchRow}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.switchLabel}>Market Alerts</Text>
-                  <Text style={styles.switchSub}>Live buyer requirements and sourcing requests.</Text>
-                </View>
+                <View style={{flex: 1}}><Text style={styles.switchLabel}>Market Alerts</Text><Text style={styles.switchSub}>Live buyer requirements and sourcing requests.</Text></View>
                 <Switch value={waPrefs.marketAlerts} onValueChange={(val) => toggleWaPref('marketAlerts', val)} color="#25D366" />
               </View>
-
               <View style={styles.switchRow}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.switchLabel}>Negotiations & Orders</Text>
-                  <Text style={styles.switchSub}>Chat relays, quotes, and payment status.</Text>
-                </View>
+                <View style={{flex: 1}}><Text style={styles.switchLabel}>Negotiations & Orders</Text><Text style={styles.switchSub}>Chat relays, quotes, and payment status.</Text></View>
                 <Switch value={waPrefs.negotiations} onValueChange={(val) => toggleWaPref('negotiations', val)} color="#25D366" />
               </View>
-
               <View style={[styles.switchRow, {borderBottomWidth: 0}]}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.switchLabel}>Weekly Digest</Text>
-                  <Text style={styles.switchSub}>Weekly summary of your market activity.</Text>
-                </View>
+                <View style={{flex: 1}}><Text style={styles.switchLabel}>Weekly Digest</Text><Text style={styles.switchSub}>Weekly summary of your market activity.</Text></View>
                 <Switch value={waPrefs.digest} onValueChange={(val) => toggleWaPref('digest', val)} color="#25D366" />
               </View>
-
-              <Button mode="contained" onPress={() => setShowWaPrefsModal(false)} style={{marginTop: 10, backgroundColor: '#1E293B'}}>
-                Done
-              </Button>
+              <Button mode="contained" onPress={() => setShowWaPrefsModal(false)} style={{marginTop: 10, backgroundColor: '#1E293B'}}>Done</Button>
             </View>
           </View>
         </View>
@@ -182,30 +127,13 @@ export default function AccountScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-               <Avatar.Icon 
-                 size={50} 
-                 icon="swap-horizontal" 
-                 style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
-                 color="#004AAD"
-               />
-               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>
-                 Switch to {viewMode === 'buyer' ? 'Selling' : 'Buying'}?
-               </Text>
+               <Avatar.Icon size={50} icon="swap-horizontal" style={{backgroundColor: '#E3F2FD', marginBottom: 15}} color="#004AAD" />
+               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>Switch to {viewMode === 'buyer' ? 'Selling' : 'Buying'}?</Text>
             </View>
-            
-            <Text style={styles.modalBody}>
-              {viewMode === 'buyer' 
-                ? 'You will be moved to the Seller Dashboard to manage your inventory and orders.' 
-                : 'You will be moved to the Marketplace to browse chemicals and make purchases.'}
-            </Text>
-
+            <Text style={styles.modalBody}>{viewMode === 'buyer' ? 'You will be moved to the Seller Dashboard.' : 'You will be moved to the Marketplace.'}</Text>
             <View style={styles.modalActions}>
-              <Button mode="outlined" onPress={() => setShowSwitchModal(false)} style={{flex:1, marginRight:10}}>
-                Cancel
-              </Button>
-              <Button mode="contained" onPress={confirmSwitch} style={{flex:1}}>
-                Switch
-              </Button>
+              <Button mode="outlined" onPress={() => setShowSwitchModal(false)} style={{flex:1, marginRight:10}}>Cancel</Button>
+              <Button mode="contained" onPress={confirmSwitch} style={{flex:1}}>Switch</Button>
             </View>
           </View>
         </View>
@@ -216,45 +144,14 @@ export default function AccountScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-               <Avatar.Icon 
-                 size={50} 
-                 icon="headset" 
-                 style={{backgroundColor: '#E3F2FD', marginBottom: 15}} 
-                 color="#004AAD"
-               />
-               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>
-                 Promact Support
-               </Text>
+               <Avatar.Icon size={50} icon="headset" style={{backgroundColor: '#E3F2FD', marginBottom: 15}} color="#004AAD" />
+               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>Promact Support</Text>
             </View>
-            
-            <Text style={[styles.modalBody, {marginBottom: 20}]}>
-              We are here to help! Choose a method below to contact us directly.
-            </Text>
-
+            <Text style={[styles.modalBody, {marginBottom: 20}]}>We are here to help! Choose a method below to contact us.</Text>
             <View style={{width: '100%'}}>
-               <Button 
-                 mode="outlined" 
-                 icon="phone" 
-                 onPress={openDialer} 
-                 style={{borderColor: '#004AAD', marginBottom: 10}}
-                 textColor="#004AAD"
-               >
-                 Call +91-84608 52903
-               </Button>
-               
-               <Button 
-                 mode="outlined" 
-                 icon="whatsapp" 
-                 onPress={openWhatsApp} 
-                 style={{borderColor: '#25D366', marginBottom: 15}} 
-                 textColor="#25D366"
-               >
-                 Chat on WhatsApp
-               </Button>
-               
-               <Button mode="contained" onPress={() => setShowSupportModal(false)} style={{backgroundColor: '#64748B'}}>
-                 Close
-               </Button>
+               <Button mode="outlined" icon="phone" onPress={openDialer} style={{borderColor: '#004AAD', marginBottom: 10}} textColor="#004AAD">Call +91-84608 52903</Button>
+               <Button mode="outlined" icon="whatsapp" onPress={openWhatsApp} style={{borderColor: '#25D366', marginBottom: 15}} textColor="#25D366">Chat on WhatsApp</Button>
+               <Button mode="contained" onPress={() => setShowSupportModal(false)} style={{backgroundColor: '#64748B'}}>Close</Button>
             </View>
           </View>
         </View>
@@ -265,28 +162,13 @@ export default function AccountScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-               <Avatar.Icon 
-                 size={50} 
-                 icon="alert" 
-                 style={{backgroundColor: '#FFEBEE', marginBottom: 15}} 
-                 color="#D32F2F"
-               />
-               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center', color: '#D32F2F'}}>
-                 Delete Account?
-               </Text>
+               <Avatar.Icon size={50} icon="alert" style={{backgroundColor: '#FFEBEE', marginBottom: 15}} color="#D32F2F" />
+               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center', color: '#D32F2F'}}>Delete Account?</Text>
             </View>
-            
-            <Text style={styles.modalBody}>
-              Are you sure you want to permanently delete your account? This will erase all your business data, order history, and KYC details. This action cannot be undone.
-            </Text>
-
+            <Text style={styles.modalBody}>Are you sure you want to permanently delete your account? This action cannot be undone.</Text>
             <View style={styles.modalActions}>
-              <Button mode="outlined" onPress={() => setShowDeleteModal(false)} style={{flex:1, marginRight:10}} disabled={isDeleting}>
-                Cancel
-              </Button>
-              <Button mode="contained" buttonColor="#D32F2F" onPress={handleDeleteAccount} style={{flex:1}} loading={isDeleting} disabled={isDeleting}>
-                Delete
-              </Button>
+              <Button mode="outlined" onPress={() => setShowDeleteModal(false)} style={{flex:1, marginRight:10}} disabled={isDeleting}>Cancel</Button>
+              <Button mode="contained" buttonColor="#D32F2F" onPress={handleDeleteAccount} style={{flex:1}} loading={isDeleting} disabled={isDeleting}>Delete</Button>
             </View>
           </View>
         </View>
@@ -304,225 +186,82 @@ export default function AccountScreen() {
 
       <ScrollView contentContainerStyle={{paddingBottom: 40}} showsVerticalScrollIndicator={false}>
         
-        {/* PROFILE HEADER */}
-        <View style={styles.header}>
-          <Avatar.Text 
-            size={70} 
-            label={user?.companyName?.[0]?.toUpperCase() || "U"} 
-            style={{backgroundColor: theme.colors.primary, elevation: 5}} 
-            color='white'
-          />
-          <View style={{marginLeft: 20, flex:1, justifyContent:'center'}}>
-            <Text variant="titleLarge" style={{fontWeight:'bold', marginBottom: 4}} numberOfLines={1}>
-              {user?.companyName || "Business User"}
+        {/* COMPACT PROFILE HEADER */}
+        <TouchableOpacity style={styles.profileHeader} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.7}>
+          <Avatar.Text size={60} label={user?.companyName?.[0]?.toUpperCase() || "U"} style={{backgroundColor: theme.colors.primary}} color='white'/>
+          <View style={{flex: 1, marginLeft: 16}}>
+            <Text variant="titleMedium" style={{fontWeight:'bold'}} numberOfLines={1}>{user?.companyName || "Business User"}</Text>
+            <Text style={{color:'#64748B', fontSize: 13}}>{user?.email}</Text>
+            <Text style={{color: user?.verified ? '#059669' : '#D97706', fontSize: 12, fontWeight: 'bold', marginTop: 4}}>
+              {user?.verified ? '✓ Verified Business' : 'Pending Verification'}
             </Text>
-            <Text style={{color:'#64748B', fontSize:14, marginBottom: 8}}>{user?.email}</Text>
-            
-            <View style={{flexDirection:'row'}}>
-              <Chip 
-                icon={user?.verified ? "check-decagram" : "clock-outline"} 
-                compact 
-                textStyle={{fontSize:11, fontWeight:'600'}} 
-                style={{backgroundColor: user?.verified ? '#DCFCE7' : '#FFF7ED', height: 28}}
-              >
-                {user?.verified ? 'Verified Business' : 'Verification Pending'}
-              </Chip>
-            </View>
           </View>
-        </View>
+          <List.Icon icon="chevron-right" color="#CBD5E1" />
+        </TouchableOpacity>
 
-        <Divider style={{height: 1, backgroundColor:'#E2E8F0', marginVertical: 10}} />
-
-        {/* SWITCH MODE CARD */}
-        <View style={{paddingHorizontal: 20, marginVertical: 15}}>
-          <TouchableOpacity onPress={initiateSwitch} activeOpacity={0.9}>
-            <Card style={[styles.switchCard, {
-              backgroundColor: viewMode === 'buyer' ? '#FFF8E1' : '#E3F2FD',
-              borderColor: viewMode === 'buyer' ? '#FFB74D' : '#64B5F6',
-            }]}>
-              <View style={styles.switchContent}>
-                <Avatar.Icon 
-                  icon={viewMode === 'buyer' ? "store-cog" : "shopping"} 
-                  size={46} 
-                  style={{backgroundColor: 'white'}} 
-                  color={viewMode === 'buyer' ? '#E65100' : '#0D47A1'} 
-                />
-                <View style={{flex:1, marginLeft: 15}}>
-                  <Text style={{
-                    fontWeight: 'bold', 
-                    fontSize: 16,
-                    color: viewMode === 'buyer' ? '#E65100' : '#0D47A1'
-                  }}>
-                    {viewMode === 'buyer' ? "Switch to Seller Mode" : "Switch to Buyer Mode"}
-                  </Text>
-                  <Text style={{fontSize: 12, color: '#555', marginTop: 2}}>
-                    {viewMode === 'buyer' ? "Manage Products & Orders" : "Browse Marketplace"}
-                  </Text>
-                </View>
-                <IconButton icon="chevron-right" iconColor={viewMode === 'buyer' ? '#E65100' : '#0D47A1'} />
-              </View>
-            </Card>
-          </TouchableOpacity>
-        </View>
-
-        <Divider style={{height: 8, backgroundColor:'#F1F5F9'}} />
-
-        {/* MENU OPTIONS */}
-        <List.Section style={styles.listSection}>
-          <List.Subheader style={styles.subheader}>BUSINESS SETTINGS</List.Subheader>
-          
+        {/* WORKSPACE SWITCHER */}
+        <SettingsGroup>
           <List.Item 
-            title="Business Profile"
-            description="Edit Name, GST, Address" 
-            left={() => <List.Icon icon="briefcase-outline" color="#64748B" />}
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => navigation.navigate('EditProfile')}
-            style={styles.listItem}
+            title={viewMode === 'buyer' ? "Switch to Seller Mode" : "Switch to Buyer Mode"}
+            description={viewMode === 'buyer' ? "Manage Products & Orders" : "Browse Marketplace"}
+            left={props => <List.Icon {...props} icon={viewMode === 'buyer' ? "store-cog" : "shopping"} color={viewMode === 'buyer' ? '#E65100' : '#0D47A1'} />}
+            right={props => <List.Icon {...props} icon="swap-horizontal" color="#CBD5E1" />}
+            onPress={() => setShowSwitchModal(true)}
           />
-          <Divider style={{marginLeft: 60}} />
+        </SettingsGroup>
 
-          {/* 🚀 BUYER NEGOTIATIONS & REQUESTS */}
-          {viewMode === 'buyer' && (
-            <>
-              <List.Item 
-                title="My Quotes & Negotiations"
-                description="Track your B2B custom price requests" 
-                left={() => <List.Icon icon="handshake-outline" color="#004AAD" />}
-                right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-                onPress={() => navigation.navigate('NegotiationsList')}
-                style={styles.listItem}
-              />
-              <Divider style={{marginLeft: 60}} />
-              
-              <List.Item 
-                title="My Sourcing Requests"
-                description="Track custom chemicals we are sourcing" 
-                left={() => <List.Icon icon="clipboard-search-outline" color="#004AAD" />}
-                right={() => (
-                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    {quotedReqsCount > 0 && (
-                      <Badge size={22} style={{marginRight: 10, backgroundColor: '#10B981', paddingHorizontal: 6}}>
-                        {`${quotedReqsCount} New`}
-                      </Badge>
-                    )}
-                    <List.Icon icon="chevron-right" color="#CBD5E1" />
-                  </View>
-                )}
-                onPress={() => navigation.navigate('BuyerRequirements')}
-                style={styles.listItem}
-              />
-              <Divider style={{marginLeft: 60}} />
-            </>
-          )}
+        {/* ACTIVITY GROUP */}
+        {viewMode === 'buyer' && (
+          <SettingsGroup title="BUYING ACTIVITY">
+            <List.Item title="My Negotiations" left={props => <List.Icon {...props} icon="handshake-outline" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('NegotiationsList')} />
+            <Divider style={styles.divider} />
+            <List.Item title="Sourcing Requests" left={props => <List.Icon {...props} icon="clipboard-search-outline" color="#475569" />} right={props => <View style={{flexDirection:'row', alignItems:'center'}}>{quotedReqsCount > 0 && <Badge style={{marginRight: 8}}>{`${quotedReqsCount} New`}</Badge>}<List.Icon {...props} icon="chevron-right" color="#CBD5E1" /></View>} onPress={() => navigation.navigate('BuyerRequirements')} />
+          </SettingsGroup>
+        )}
 
-          <List.Item 
-            title="Manage Address" 
-            left={() => <List.Icon icon="map-marker-outline" color="#64748B" />} 
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => navigation.navigate('AddressList')} 
-            style={styles.listItem}
-          />
-          <Divider style={{marginLeft: 60}} />
+        {/* SETTINGS GROUP */}
+        <SettingsGroup title="ACCOUNT SETTINGS">
+          <List.Item title="Company Details" left={props => <List.Icon {...props} icon="domain" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('EditProfile')} />
+          <Divider style={styles.divider} />
+          <List.Item title="Saved Addresses" left={props => <List.Icon {...props} icon="map-marker-outline" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('AddressList')} />
+          <Divider style={styles.divider} />
+          <List.Item title="WhatsApp Notifications" left={props => <List.Icon {...props} icon="whatsapp" color="#25D366" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => setShowWaPrefsModal(true)} />
+        </SettingsGroup>
 
-           {/* 🚀 NEW: WhatsApp Preferences Button */}
-           <List.Item 
-            title="WhatsApp Preferences" 
-            description="Manage alerts and notifications"
-            left={() => <List.Icon icon="whatsapp" color="#25D366" />} 
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => setShowWaPrefsModal(true)} 
-            style={styles.listItem} 
-          />
-          <Divider style={{marginLeft: 60}} />
+        {/* SUPPORT & LEGAL GROUP */}
+        <SettingsGroup title="SUPPORT & ABOUT">
+          <List.Item title="Help Center" left={props => <List.Icon {...props} icon="headset" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => setShowSupportModal(true)} />
+          <Divider style={styles.divider} />
+          <List.Item title="About Prochem" left={props => <List.Icon {...props} icon="information-outline" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('AboutProchem')} />
+          <Divider style={styles.divider} />
+          <List.Item title="Legal & Privacy" left={props => <List.Icon {...props} icon="file-document-outline" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('LegalPages')} />
+        </SettingsGroup>
 
-           <List.Item 
-            title="KYC Documents" 
-            left={() => <List.Icon icon="file-document-outline" color="#64748B" />}
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => alert('KYC Feature coming soon')}
-            style={styles.listItem}
-          />
-        </List.Section>
+        {/* DANGER ZONE */}
+        <SettingsGroup>
+          <List.Item title="Sign Out" titleStyle={{color: '#EF5350', fontWeight: 'bold'}} left={props => <List.Icon {...props} icon="logout" color="#EF5350" />} onPress={logoutUser} />
+          <Divider style={styles.divider} />
+          <List.Item title="Delete Account" titleStyle={{color: '#D32F2F'}} left={props => <List.Icon {...props} icon="delete-outline" color="#D32F2F" />} onPress={() => setShowDeleteModal(true)} />
+        </SettingsGroup>
 
-        <Divider style={{height: 8, backgroundColor:'#F1F5F9'}} />
-
-        <List.Section style={styles.listSection}>
-          <List.Subheader style={styles.subheader}>SUPPORT & LEGAL</List.Subheader>
-          
-          <List.Item 
-            title="Help Center" 
-            left={() => <List.Icon icon="headset" color="#64748B" />} 
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={handleSupport}
-            style={styles.listItem}
-          />
-          <Divider style={{marginLeft: 60}} />
-
-          <List.Item 
-            title="About Prochem" 
-            left={() => <List.Icon icon="information-outline" color="#004AAD" />} 
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => navigation.navigate('AboutProchem')}
-            style={styles.listItem}
-          />
-          <Divider style={{marginLeft: 60}} />
-
-          <List.Item 
-            title="Terms & Privacy Policy" 
-            left={() => <List.Icon icon="file-sign" color="#64748B" />} 
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => navigation.navigate('LegalPages')}
-            style={styles.listItem}
-          />
-          <Divider style={{marginLeft: 60}} />
-          
-          {/* Delete Account Entry */}
-          <List.Item 
-            title="Delete Account" 
-            left={() => <List.Icon icon="delete-outline" color="#D32F2F" />} 
-            right={() => <List.Icon icon="chevron-right" color="#CBD5E1" />} 
-            onPress={() => setShowDeleteModal(true)} 
-            titleStyle={{color: '#D32F2F', fontWeight: 'bold'}}
-            style={styles.listItem} 
-          />
-        </List.Section>
-
-        {/* LOGOUT BUTTON */}
-        <View style={{padding: 20, marginTop: 10}}>
-          <Button 
-            mode="outlined" 
-            textColor="#EF5350" 
-            style={{borderColor: '#EF5350', borderRadius: 8, borderWidth: 1}}
-            contentStyle={{height: 48}}
-            icon="logout" 
-            onPress={logoutUser}
-          >
-            Sign Out
-          </Button>
-          <Text style={{textAlign:'center', color:'#94A3B8', marginTop: 15, fontSize: 12}}>
-            App Version 2.1.1
-          </Text>
-        </View>
-
+        <Text style={{textAlign:'center', color:'#94A3B8', marginTop: 20, fontSize: 12}}>App Version 2.1.1</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'white' },
-  header: { padding: 24, flexDirection: 'row', alignItems: 'center' },
-  switchCard: { borderWidth: 1, borderRadius: 16, elevation: 2 },
-  switchContent: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  listSection: { backgroundColor: 'white' },
-  subheader: { color: '#94A3B8', fontWeight: 'bold', fontSize: 12, letterSpacing: 1 },
-  listItem: { paddingVertical: 12 },
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  profileHeader: { flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: 'white', marginBottom: 20 },
+  groupContainer: { paddingHorizontal: 16, marginBottom: 24 },
+  groupTitle: { fontSize: 12, fontWeight: 'bold', color: '#64748B', marginLeft: 16, marginBottom: 8, letterSpacing: 1 },
+  groupBlock: { backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' },
+  divider: { marginLeft: 56, backgroundColor: '#F1F5F9' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 20, width: '100%', maxWidth: 360, elevation: 10 },
   modalHeader: { alignItems: 'center', marginBottom: 10 },
   modalBody: { textAlign: 'center', color: '#64748B', marginBottom: 25, lineHeight: 20 },
   modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
-  // WA switch row styles
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
   switchLabel: { fontWeight: 'bold', fontSize: 16, color: '#1E293B' },
   switchSub: { fontSize: 12, color: '#64748B', marginTop: 2 }
