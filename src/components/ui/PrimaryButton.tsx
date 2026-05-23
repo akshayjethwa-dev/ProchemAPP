@@ -1,5 +1,5 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useRef } from 'react';
+import { Text, StyleSheet, ActivityIndicator, Animated, Pressable } from 'react-native';
 import { theme } from '../../theme';
 
 interface PrimaryButtonProps {
@@ -9,35 +9,57 @@ interface PrimaryButtonProps {
 }
 
 export const PrimaryButton: React.FC<PrimaryButtonProps> = ({ title, onPress, isLoading }) => {
+  // 1. Initialize an animated value for the scale
+  const scaleValue = useRef(new Animated.Value(1)).current;
+
+  // 2. Define the animation for when the button is pressed down
+  const handlePressIn = () => {
+    if (isLoading) return;
+    Animated.spring(scaleValue, {
+      toValue: 0.95, // Shrink slightly to 95% size
+      useNativeDriver: true, // Use native driver for 60fps performance
+    }).start();
+  };
+
+  // 3. Define the animation for when the button is released
+  const handlePressOut = () => {
+    Animated.spring(scaleValue, {
+      toValue: 1, // Bounce back to 100% size
+      friction: 4, // Controls the "bounciness"
+      tension: 40, // Controls the speed
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
-    <TouchableOpacity 
-      style={styles.button} 
+    <Pressable 
       onPress={onPress} 
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       disabled={isLoading}
-      activeOpacity={0.8}
+      style={{ width: '100%' }} // Ensure the pressable area takes full available width
     >
-      {isLoading ? (
-        <ActivityIndicator color={theme.colors.surface} />
-      ) : (
-        <Text style={styles.text}>{title}</Text>
-      )}
-    </TouchableOpacity>
+      {/* 4. Apply the animated scale to the button view */}
+      <Animated.View style={[styles.button, { transform: [{ scale: scaleValue }] }]}>
+        {isLoading ? (
+          <ActivityIndicator color={theme.colors.surface} />
+        ) : (
+          <Text style={styles.text}>{title}</Text>
+        )}
+      </Animated.View>
+    </Pressable>
   );
 };
 
 const styles = StyleSheet.create({
   button: {
-    // 1. Base card styles (gives us the standardized soft shadow)
     ...theme.cardStyle, 
-    
-    // 2. Button-specific overrides (these now safely override the card defaults)
-    backgroundColor: '#3B82F6', // Standard blue
-    borderWidth: 0,             // Remove the gray card border
+    backgroundColor: '#3B82F6', 
+    borderWidth: 0,             
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    // We removed the duplicate borderRadius: 8 here since theme.cardStyle already provides it!
   },
   text: {
     color: theme.colors.surface,

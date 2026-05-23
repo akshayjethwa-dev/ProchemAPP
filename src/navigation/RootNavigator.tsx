@@ -92,16 +92,21 @@ export const RootNavigator = () => {
         <Stack.Navigator 
           screenOptions={{ 
             headerShown: false,
-            headerBackTitle: '', // FIX: Properly hide back text
+            headerBackTitle: '', 
             headerTintColor: '#1F2937', 
             headerShadowVisible: false, 
-            headerStyle: { backgroundColor: '#FFFFFF' }, // FIX: Removed border properties
+            headerStyle: { backgroundColor: '#FFFFFF' }, 
             headerTitleStyle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
             headerTitleAlign: 'center',
+            // MOTION POLISH: Apply a smooth, native-feeling slide animation to all transitions
+            animation: 'slide_from_right', 
+            // MOTION POLISH: Prevent layout jumps during transitions
+            animationDuration: 250,
           }}
         >
           {!user ? (
-            <Stack.Group>
+            <Stack.Group screenOptions={{ animation: 'fade' }}>
+              {/* Fade is better for auth/splash screens to prevent jarring sliding */}
               <Stack.Screen name="Splash" component={SplashScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Registration" component={RegistrationScreen} />
@@ -110,7 +115,7 @@ export const RootNavigator = () => {
               <Stack.Screen name="AboutProchem" component={AboutProchemScreen} /> 
             </Stack.Group>
           ) : !hasSeenOnboarding ? (
-            <Stack.Group>
+            <Stack.Group screenOptions={{ animation: 'fade' }}>
               <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             </Stack.Group>
           ) : (
@@ -120,7 +125,7 @@ export const RootNavigator = () => {
               ) : viewMode === 'seller' ? (
                 <>
                   <Stack.Screen name="SellerApp" component={SellerNavigator} />
-                  <Stack.Screen name="AddChemical" component={SellerAddChemical} />
+                  <Stack.Screen name="AddChemical" component={SellerAddChemical} options={{ animation: 'slide_from_bottom' }} />
                 </>
               ) : (
                 <>
@@ -131,7 +136,7 @@ export const RootNavigator = () => {
               <Stack.Screen name="ProductDetail" component={ProductDetail} />
               <Stack.Screen name="Negotiation" component={NegotiationScreen} />
               <Stack.Screen name="OrderTracking" component={OrderTracking} />
-              <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+              <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="Notifications" component={NotificationScreen} />
               <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
               <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
