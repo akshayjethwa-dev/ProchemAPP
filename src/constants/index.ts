@@ -1,4 +1,8 @@
 // src/constants/index.ts
+
+// Import the design system so it can be exported from this central file
+import { theme } from '../theme';
+
 export const CATEGORIES = [
   'Pharma Grade Acids',
   'Industrial Solvents',
@@ -17,3 +21,6 @@ export const INDIAN_STATES = [
   "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", 
   "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
 ];
+
+// Export the theme so any screen can import { theme, CATEGORIES } from '../constants'
+export { theme };

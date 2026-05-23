@@ -13,6 +13,15 @@ const admin = require("firebase-admin");
  * @returns {Promise<string>} - The Twilio Message SID
  */
 async function sendWhatsApp(toNumber, body, mediaUrl = null, logMeta = {}) {
+  
+  // ✅ ADD THIS BLOCK — normalize Indian numbers
+  let normalizedNumber = toNumber.replace(/\s+/g, '').replace(/^whatsapp:/, '');
+  if (normalizedNumber.length === 10 && normalizedNumber.startsWith('')) {
+    normalizedNumber = '+91' + normalizedNumber;  // Add India country code
+  } else if (normalizedNumber.length === 12 && normalizedNumber.startsWith('91')) {
+    normalizedNumber = '+' + normalizedNumber;    // Add + prefix
+  }
+  toNumber = normalizedNumber;
   // 1. Verify credentials exist
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
     console.error("Missing Twilio environment variables.");

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
-import { Text, Searchbar, Chip, useTheme, IconButton, Card } from 'react-native-paper';
+import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { Text, Searchbar, useTheme, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,45 +9,53 @@ import { RootStackParamList } from '../navigation/types';
 import { Product } from '../types';
 
 export default function ProductListingScreen() {
-  // ✅ 1. Get Navigation Hook
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<any>();
   const { category } = route.params || { category: 'All' };
   
-  // ✅ 2. Get Data from Store
   const products = useAppStore(state => state.products);
   const theme = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
 
-  // ✅ 3. Filter Logic
   const filteredProducts = products.filter(p => 
     (category === 'All' || p.category === category) &&
     p.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // ✅ 4. Render Item (The "Clickable" Card)
+  // 🔥 HIGH-DENSITY HORIZONTAL LIST ITEM
   const renderProduct = ({ item }: { item: Product }) => (
-    <Card 
+    <TouchableOpacity 
       style={styles.card} 
-      // 🚀 THE CRITICAL LINK: This opens the detail screen
+      activeOpacity={0.7}
       onPress={() => navigation.navigate('ProductDetail', { productId: item.id || '' })}
     >
-      <View style={styles.cardContent}>
-        <View style={styles.imageContainer}><Text style={{fontSize:32}}>🧪</Text></View>
-        <View style={styles.infoContainer}>
-          <Text variant="titleMedium" style={{fontWeight:'bold'}}>{item.name}</Text>
-          <View style={{flexDirection:'row', alignItems:'center', marginTop: 2}}>
-             <Text style={{fontSize:10, color:'#666'}}>Sold by: {item.sellerName || 'Verified Seller'}</Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text variant="titleLarge" style={{color: theme.colors.primary, fontWeight:'bold'}}>
-              ₹{item.pricePerUnit}
+      <View style={styles.imageContainer}>
+        <Text style={{fontSize: 32}}>🧪</Text>
+      </View>
+      
+      <View style={styles.infoContainer}>
+        <View>
+          <Text numberOfLines={1} style={styles.productName}>{item.name}</Text>
+          <Text numberOfLines={1} style={styles.sellerText}>Sold by: {item.sellerName || 'Verified Seller'}</Text>
+        </View>
+        
+        <View style={styles.bottomRow}>
+          <View>
+            <Text style={[styles.priceText, { color: theme.colors.primary }]}>
+              ₹{item.pricePerUnit || item.price || 0} <Text style={styles.unitText}>/{item.unit || 'unit'}</Text>
             </Text>
-            <IconButton icon="arrow-right" size={20} />
+            <Text style={styles.moqText}>MOQ: {item.moq || 1}</Text>
           </View>
+          
+          <IconButton 
+            icon="chevron-right" 
+            size={20} 
+            iconColor="#9CA3AF" 
+            style={{ margin: 0, padding: 0 }} 
+          />
         </View>
       </View>
-    </Card>
+    </TouchableOpacity>
   );
 
   return (
@@ -62,6 +70,7 @@ export default function ProductListingScreen() {
         onChangeText={setSearchQuery}
         value={searchQuery}
         style={styles.searchBar}
+        inputStyle={{minHeight: 40, padding: 0}}
       />
 
       <FlatList
@@ -71,7 +80,7 @@ export default function ProductListingScreen() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={{padding: 40, alignItems:'center'}}>
-            <Text>No products found.</Text>
+            <Text style={{color: '#9CA3AF'}}>No products found.</Text>
           </View>
         }
       />
@@ -80,13 +89,38 @@ export default function ProductListingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 8, backgroundColor: 'white' },
-  searchBar: { margin: 16, backgroundColor: 'white' },
-  listContent: { paddingHorizontal: 16, paddingBottom: 20 },
-  card: { marginBottom: 12, backgroundColor: 'white' },
-  cardContent: { flexDirection: 'row', padding: 12 },
-  imageContainer: { width: 80, height: 80, backgroundColor: '#F3F4F6', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
-  infoContainer: { flex: 1, justifyContent: 'space-between' },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 4 },
+  searchBar: { marginHorizontal: 12, marginBottom: 12, backgroundColor: '#FFFFFF', borderRadius: 8, height: 44, borderWidth: 1, borderColor: '#E5E7EB', elevation: 0 },
+  listContent: { paddingHorizontal: 12, paddingBottom: 20 },
+  
+  // 🔥 HIGH-DENSITY CARD STYLES
+  card: { 
+    flexDirection: 'row', 
+    backgroundColor: '#FFFFFF', 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB', 
+    borderRadius: 8, 
+    padding: 8, 
+    marginBottom: 8 
+  },
+  imageContainer: { 
+    width: 80, 
+    height: 80, 
+    backgroundColor: '#F1F5F9', 
+    borderRadius: 6, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  infoContainer: { 
+    flex: 1, 
+    marginLeft: 12, 
+    justifyContent: 'space-between' 
+  },
+  productName: { fontWeight: 'bold', fontSize: 14, color: '#1F2937' },
+  sellerText: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  priceText: { fontWeight: 'bold', fontSize: 14 },
+  unitText: { fontSize: 11, color: '#64748B', fontWeight: 'normal' },
+  moqText: { fontSize: 10, color: '#64748B', marginTop: 2 },
 });

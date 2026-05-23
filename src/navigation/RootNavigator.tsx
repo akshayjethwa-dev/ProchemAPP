@@ -1,5 +1,3 @@
-// src/navigation/RootNavigator.tsx
-
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, SafeAreaView, TouchableOpacity, Text, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -10,12 +8,10 @@ import { auth, db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { RootStackParamList } from './types';
 
-// Navigators
 import BuyerNavigator from './BuyerNavigator';
 import SellerNavigator from './SellerNavigator';
 import AdminNavigator from './AdminNavigator';
 
-// Screens
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegistrationScreen from '../screens/RegistrationScreen';
@@ -39,7 +35,6 @@ export const RootNavigator = () => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u: FirebaseUser | null) => {
-      // 🚀 IF IMPERSONATING: Ignore Firebase Auth state changes
       if (useAppStore.getState().adminImpersonating) {
         if (initializing) setInitializing(false);
         return;
@@ -80,7 +75,6 @@ export const RootNavigator = () => {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* 🚀 ADMIN IMPERSONATION BANNER */}
       {adminImpersonating && (
         <SafeAreaView style={{ backgroundColor: '#D32F2F' }}>
           <View style={{ padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Platform.OS === 'android' ? 25 : 0 }}>
@@ -94,9 +88,18 @@ export const RootNavigator = () => {
         </SafeAreaView>
       )}
 
-      {/* 🚀 THE FIX: A dynamic key on NavigationContainer forces a hard reset of the navigation tree when impersonation toggles */}
       <NavigationContainer key={adminImpersonating ? 'impersonating-mode' : 'admin-mode'}>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator 
+          screenOptions={{ 
+            headerShown: false,
+            headerBackTitle: '', // FIX: Properly hide back text
+            headerTintColor: '#1F2937', 
+            headerShadowVisible: false, 
+            headerStyle: { backgroundColor: '#FFFFFF' }, // FIX: Removed border properties
+            headerTitleStyle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
+            headerTitleAlign: 'center',
+          }}
+        >
           {!user ? (
             <Stack.Group>
               <Stack.Screen name="Splash" component={SplashScreen} />
@@ -112,26 +115,19 @@ export const RootNavigator = () => {
             </Stack.Group>
           ) : (
             <Stack.Group>
-              
-              {/* ✅ ADMIN & SUB-ADMIN CHECK: Allow both admin and sub_admin into the AdminApp */}
               {((user.userType === 'admin' || user.userType === 'sub_admin') && !adminImpersonating) ? (
                 <Stack.Screen name="AdminApp" component={AdminNavigator} />
-              
-              /* 🏭 SELLER CHECK */
               ) : viewMode === 'seller' ? (
                 <>
                   <Stack.Screen name="SellerApp" component={SellerNavigator} />
                   <Stack.Screen name="AddChemical" component={SellerAddChemical} />
                 </>
-
-              /* 🛒 BUYER CHECK (Default) */
               ) : (
                 <>
                   <Stack.Screen name="BuyerApp" component={BuyerNavigator} />
                 </>
               )}
               
-              {/* Shared Screens */}
               <Stack.Screen name="ProductDetail" component={ProductDetail} />
               <Stack.Screen name="Negotiation" component={NegotiationScreen} />
               <Stack.Screen name="OrderTracking" component={OrderTracking} />

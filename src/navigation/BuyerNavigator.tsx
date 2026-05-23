@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, Badge, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
-import { db, auth } from '../config/firebase'; // Ensure auth is imported
+import { db, auth } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 
 import BuyerHome from '../screens/BuyerHome';
@@ -25,14 +25,13 @@ import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
 import CompareScreen from '../screens/CompareScreen';
 import BuyerRequirementsScreen from '../screens/BuyerRequirementsScreen'; 
 
-// ✅ New Screen Imports
-import CartScreen from '../screens/CartScreen'; // Moved to Stack
+import CartScreen from '../screens/CartScreen'; 
 import BusinessGrowthScreen from '../screens/BusinessGrowthScreen';
 
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
   ProductDetail: { product: any };
-  Cart: undefined; // Added here since it's no longer a tab
+  Cart: undefined; 
   Checkout: { negotiatedItem?: any }; 
   AddressList: undefined;
   AddAddress: undefined;
@@ -58,43 +57,28 @@ function BuyerTabs() {
   const [quotedRequirements, setQuotedRequirements] = useState(0);
 
   useEffect(() => {
-    // Wait until Firebase Auth actually confirms the user is logged in
     const currentUser = auth.currentUser;
     if (!user?.uid || !currentUser) return;
 
-    // 1. Listen for standard RFQ negotiations
     const qRfq = query(
       collection(db, 'rfqs'),
       where('buyerId', '==', user.uid),
       where('status', '==', 'NEGOTIATING') 
     );
 
-    const unsubRfq = onSnapshot(
-      qRfq, 
-      (snapshot) => {
+    const unsubRfq = onSnapshot(qRfq, (snapshot) => {
         setActiveNegotiations(snapshot.docs.length);
-      },
-      (error: any) => {
-        console.warn("RFQ Snapshot Error (Check Rules):", error.message);
-      }
-    );
+      }, (error: any) => console.warn(error.message));
 
-    // 2. Listen for Custom Requirements that have received a Quote
     const qReq = query(
       collection(db, 'customRequirements'),
       where('buyerId', '==', user.uid),
       where('status', '==', 'QUOTED') 
     );
 
-    const unsubReq = onSnapshot(
-      qReq, 
-      (snapshot) => {
+    const unsubReq = onSnapshot(qReq, (snapshot) => {
         setQuotedRequirements(snapshot.docs.length);
-      },
-      (error: any) => {
-        console.warn("Requirements Snapshot Error (Check Rules):", error.message);
-      }
-    );
+      }, (error: any) => console.warn(error.message));
 
     return () => {
       unsubRfq();
@@ -109,65 +93,29 @@ function BuyerTabs() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: '#64748B',
+        tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: { 
-          height: 65 + insets.bottom, 
-          paddingBottom: 10 + insets.bottom, 
+          height: Platform.OS === 'ios' ? 60 + insets.bottom : 60, 
+          paddingBottom: Platform.OS === 'ios' ? insets.bottom : 10, 
           paddingTop: 10, 
-          backgroundColor: 'white' 
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 1,
+          borderTopColor: '#E5E7EB', 
+          elevation: 0, 
         },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '700' }
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' }
       }}
     >
-      <Tab.Screen 
-        name="HomeTab" 
-        component={BuyerHome} 
-        options={{
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ color }) => <IconButton icon="home" iconColor={color} size={24} />
-        }}
-      />
-      <Tab.Screen 
-        name="Categories" 
-        component={CategoriesScreen} 
-        options={{
-          tabBarLabel: 'Categories',
-          tabBarIcon: ({ color }) => <IconButton icon="view-grid" iconColor={color} size={24} />
-        }}
-      />
-      {/* ✅ Premium Growth Package Tab (Replaces Cart) */}
-      <Tab.Screen 
-        name="Growth" 
-        component={BusinessGrowthScreen} 
-        options={{
-          tabBarLabel: 'Premium',
-          tabBarIcon: ({ color }) => (
-            <IconButton icon="crown" iconColor="#EAB308" size={28} style={{ margin: 0 }} />
-          )
-        }}
-      />
-      <Tab.Screen 
-        name="Orders" 
-        component={OrderHistoryScreen} 
-        options={{
-          tabBarLabel: 'Orders',
-          tabBarIcon: ({ color }) => <IconButton icon="clipboard-text" iconColor={color} size={24} />
-        }}
-      />
-      <Tab.Screen 
-        name="Account" 
-        component={AccountScreen} 
-        options={{
+      <Tab.Screen name="HomeTab" component={BuyerHome} options={{ tabBarLabel: 'Home', tabBarIcon: ({ color }) => <IconButton icon="home" iconColor={color} size={24} style={{ margin: 0 }} /> }} />
+      <Tab.Screen name="Categories" component={CategoriesScreen} options={{ tabBarLabel: 'Categories', tabBarIcon: ({ color }) => <IconButton icon="view-grid" iconColor={color} size={24} style={{ margin: 0 }} /> }} />
+      <Tab.Screen name="Growth" component={BusinessGrowthScreen} options={{ tabBarLabel: 'Premium', tabBarIcon: ({ color }) => <IconButton icon="crown" iconColor="#EAB308" size={24} style={{ margin: 0 }} /> }} />
+      <Tab.Screen name="Orders" component={OrderHistoryScreen} options={{ tabBarLabel: 'Orders', tabBarIcon: ({ color }) => <IconButton icon="clipboard-text" iconColor={color} size={24} style={{ margin: 0 }} /> }} />
+      <Tab.Screen name="Account" component={AccountScreen} options={{
           tabBarLabel: 'Account',
           tabBarIcon: ({ color }) => (
             <View>
-              <IconButton icon="account" iconColor={color} size={24} />
-              {totalAlerts > 0 && (
-                <Badge 
-                  style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#EF4444' }} 
-                  size={10} 
-                />
-              )}
+              <IconButton icon="account" iconColor={color} size={24} style={{ margin: 0 }} />
+              {totalAlerts > 0 && <Badge style={{ position: 'absolute', top: 2, right: 2, backgroundColor: '#EF4444' }} size={10} />}
             </View>
           )
         }}
@@ -181,59 +129,30 @@ export default function BuyerNavigator() {
     <Stack.Navigator 
       screenOptions={{ 
         headerShown: false,
-        headerBackTitle: '' 
+        headerBackTitle: '', // FIX: Uses empty string instead of boolean
+        headerTintColor: '#1F2937', 
+        headerShadowVisible: false, 
+        headerStyle: { backgroundColor: '#FFFFFF' }, // FIX: Removed border properties
+        headerTitleStyle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
+        headerTitleAlign: 'center', 
       }}
     >
       <Stack.Screen name="BuyerTabs" component={BuyerTabs} />
       <Stack.Screen name="ProductDetail" component={ProductDetail} />
       
-      {/* ✅ Added Cart to Stack Navigator */}
-      <Stack.Screen 
-        name="Cart" 
-        component={CartScreen} 
-        options={{ headerShown: true, title: 'Your Cart' }} 
-      />
-
-      <Stack.Screen 
-        name="Checkout" 
-        component={CheckoutScreen} 
-        options={{ headerShown: true, title: 'Checkout' }} 
-      />
-      <Stack.Screen 
-        name="AddressList" 
-        component={AddressListScreen} 
-        options={{ headerShown: true, title: 'Select Address' }} 
-      />
-      <Stack.Screen 
-        name="AddAddress" 
-        component={AddAddressScreen} 
-        options={{ headerShown: true, title: 'Add New Address' }} 
-      />
-      
+      {/* FIX: Removed headerStyle from individual options */}
+      <Stack.Screen name="Cart" component={CartScreen} options={{ headerShown: true, title: 'Your Cart' }} />
+      <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ headerShown: true, title: 'Checkout' }} />
+      <Stack.Screen name="AddressList" component={AddressListScreen} options={{ headerShown: true, title: 'Select Address' }} />
+      <Stack.Screen name="AddAddress" component={AddAddressScreen} options={{ headerShown: true, title: 'Add New Address' }} />
       <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} />
-      <Stack.Screen 
-        name="OrderTracking" 
-        component={OrderTracking} 
-        options={{ title: 'Order Details' }} 
-      />
-      <Stack.Screen 
-        name="PaymentSuccess" 
-        component={PaymentSuccessScreen} 
-        options={{ headerShown: false, gestureEnabled: false }} 
-      />
+      <Stack.Screen name="OrderTracking" component={OrderTracking} options={{ headerShown: true, title: 'Order Details' }} />
+      <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="NegotiationsList" component={NegotiationsListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />
       <Stack.Screen name="PostRequirement" component={PostRequirementScreen} options={{ headerShown: true, title: 'Post Custom Requirement' }} />
-      <Stack.Screen 
-        name="Compare" 
-        component={CompareScreen} 
-        options={{ headerShown: true, title: 'Compare Products' }} 
-      />
-      <Stack.Screen 
-        name="BuyerRequirements" 
-        component={BuyerRequirementsScreen} 
-        options={{ headerShown: true, title: 'My Sourcing Requests' }} 
-      />
+      <Stack.Screen name="Compare" component={CompareScreen} options={{ headerShown: true, title: 'Compare Products' }} />
+      <Stack.Screen name="BuyerRequirements" component={BuyerRequirementsScreen} options={{ headerShown: true, title: 'My Sourcing Requests' }} />
     </Stack.Navigator>
   );
 }
