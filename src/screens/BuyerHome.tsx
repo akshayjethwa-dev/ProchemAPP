@@ -161,10 +161,6 @@ export default function BuyerHome() {
             <Text style={styles.actionIcon}>📦</Text>
             <Text style={styles.actionTitle}>Orders</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]} onPress={() => {}}>
-            <Text style={styles.actionIcon}>⭐</Text>
-            <Text style={styles.actionTitle}>Saved</Text>
-          </TouchableOpacity>
         </View>
 
         {/* 4. Trust Badges */}
