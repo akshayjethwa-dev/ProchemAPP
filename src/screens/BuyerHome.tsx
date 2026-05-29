@@ -73,16 +73,35 @@ export default function BuyerHome() {
     }
   };
 
+  // 1. Unified Search Filter (Fixes Name & CAS Number search)
+  const lowerQuery = searchQuery.toLowerCase();
+  
   const displayProducts = [...products]
-    .filter(p => p.name?.toLowerCase().includes(searchQuery.toLowerCase()) && p.sellerId !== user?.uid)
+    .filter(p => {
+      // Safely check if name or casNumber exists and includes the query
+      const matchesName = p.name?.toLowerCase().includes(lowerQuery);
+      const matchesCas = p.casNumber?.toLowerCase().includes(lowerQuery);
+      const isNotOwnProduct = p.sellerId !== user?.uid;
+      
+      return (matchesName || matchesCas) && isNotOwnProduct;
+    })
     .sort((a, b) => {
+      // Prioritize Growth Package / Premium Sellers
       const aIsPremium = (a as any).sellerTier === 'GROWTH_PACKAGE' ? 1 : 0;
       const bIsPremium = (b as any).sellerTier === 'GROWTH_PACKAGE' ? 1 : 0;
       return bIsPremium - aIsPremium;
     });
 
-  const trendingProducts = displayProducts.slice(0, 4);
-  const spotProducts = displayProducts.slice(0, 10);
+  // 2. Spot Offers: Immediate, ready-to-dispatch inventory
+  const spotProducts = displayProducts
+    .filter(p => p.readyToDispatch === true || p.inStock === true)
+    .slice(0, 10);
+
+  // 3. Trending Chemicals: High demand / Top tier sellers 
+  // (We filter out the items already in 'spotProducts' so they don't show up twice on the dashboard)
+  const trendingProducts = displayProducts
+    .filter(p => !spotProducts.includes(p))
+    .slice(0, 10);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -92,7 +111,7 @@ export default function BuyerHome() {
           <View>
             <View style={styles.brandRow}>
               <Text style={styles.brandText}>PROCHEM</Text>
-              <View style={styles.b2bBadge}><Text style={styles.b2bText}>B2B</Text></View>
+              <View style={styles.b2bBadge}><Text style={styles.b2bText}>Find.Source.Grow</Text></View>
             </View>
             <View style={styles.greetingRow}>
               <Text style={styles.greetingText}>Hello, {user?.companyName || 'Business User'}</Text>
@@ -169,13 +188,16 @@ export default function BuyerHome() {
         {/* 5. Trending Section (Horizontal) */}
         {trendingProducts.length > 0 && (
           <View style={styles.trendingSection}>
-            <Text style={styles.sectionTitle}>Trending Intermediates</Text>
+            <View style={styles.sectionHeaderRow}>
+              {/* Note: Overriding padding/margin here so it doesn't double-up with sectionHeaderRow */}
+              <Text style={[styles.sectionTitle, { paddingHorizontal: 0, marginBottom: 0 }]}>Trending Intermediates</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Categories')}>
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingScroll}>
               {trendingProducts.map((p) => (
                 <TouchableOpacity key={p.id} style={styles.trendingCard} onPress={() => navigation.navigate('ProductDetail', { product: p })}>
-                  <View style={styles.trendingHeader}>
-                    <View style={styles.moleculeBadge}><Text style={styles.moleculeText}>C{Math.floor(Math.random() * 10)}H{Math.floor(Math.random() * 10)}</Text></View>
-                  </View>
                   <Text style={styles.trendingName} numberOfLines={1}>{p.name}</Text>
                   <Text style={styles.trendingCas}>CAS: {p.casNumber || 'N/A'}</Text>
                   <View style={styles.trendingFooter}>
@@ -195,9 +217,6 @@ export default function BuyerHome() {
         <View style={styles.spotSection}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Spot Offers</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Categories')}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
           </View>
 
           {loading ? (
