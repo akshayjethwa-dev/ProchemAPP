@@ -2,9 +2,8 @@
 const functions = require("firebase-functions/v1"); 
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore"); 
 const admin = require("firebase-admin");
-const Razorpay = require("razorpay");
-const crypto = require("crypto");
 const { Expo } = require("expo-server-sdk"); 
+const { Cashfree } = require("cashfree-pg"); // 🚀 Cashfree SDK Import
 
 // Import the reusable WhatsApp service
 const { sendWhatsApp } = require("./whatsappService");
@@ -196,139 +195,6 @@ exports.onDirectRfqCreated = onDocumentCreated(
   }
 );
 
-
-// ==========================================
-// EXISTING RAZORPAY FUNCTIONS
-// ==========================================
-exports.createRazorpayOrder = functions
-  .region("asia-south1")
-  .https.onCall(async (data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
-  const { amount, orderId } = data;
-  if (!amount || !orderId) throw new functions.https.HttpsError("invalid-argument", "Amount and Order ID are required.");
-
-  try {
-    const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    });
-
-    const options = { amount: amount * 100, currency: "INR", receipt: orderId, payment_capture: 1 };
-    const order = await razorpay.orders.create(options);
-
-    const totalAmount = amount;
-    const platformFee = totalAmount * 0.0475; 
-    const sellerPayout = totalAmount - (totalAmount * 0.0275); 
-
-    await admin.firestore().collection("orders").doc(orderId).update({
-      razorpayOrderId: order.id,
-      paymentStatus: "PENDING",
-      financials: { totalAmount, platformFee, sellerPayout, currency: "INR" },
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return { id: order.id, currency: order.currency, amount: order.amount, key: process.env.RAZORPAY_KEY_ID };
-  } catch (error) {
-    throw new functions.https.HttpsError("internal", error.message);
-  }
-});
-
-exports.verifyRazorpayPayment = functions
-  .region("asia-south1")
-  .https.onCall(async (data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
-  const { orderId, paymentId, signature, razorpayOrderId } = data;
-
-  const body = razorpayOrderId + "|" + paymentId;
-  const expectedSignature = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET).update(body.toString()).digest("hex");
-
-  if (expectedSignature !== signature) throw new functions.https.HttpsError("permission-denied", "Invalid payment signature.");
-
-  try {
-    await admin.firestore().collection("orders").doc(orderId).update({
-      status: "PENDING_SELLER", 
-      paymentStatus: "PAID",
-      paymentDetails: { razorpayPaymentId: paymentId, razorpayOrderId: razorpayOrderId, paidAt: admin.firestore.FieldValue.serverTimestamp() }
-    });
-
-    try {
-      const userId = context.auth.uid;
-      const userDoc = await admin.firestore().collection("users").doc(userId).get();
-      const userData = userDoc.data();
-
-      if (userData && userData.whatsappOptIn === true && userData.phoneNumber) {
-        await sendWhatsApp(userData.phoneNumber, `🎉 Prochem Alert: Your payment for order #${orderId.substring(0, 6)} was successful. The seller has been notified!`, null, {
-          templateName: "Payment_Success",
-          type: "transactional",
-          userId: userId
-        });
-      }
-    } catch (waError) {
-      console.error("Error sending WhatsApp notification:", waError);
-    }
-
-    return { success: true, message: "Payment verified and order updated." };
-  } catch (error) {
-    throw new functions.https.HttpsError("internal", "Failed to update order status.");
-  }
-});
-
-exports.createUpgradeOrder = functions
-  .region("asia-south1")
-  .https.onCall(async (data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
-  const { amount, planId } = data;
-  if (!amount || !planId) throw new functions.https.HttpsError("invalid-argument", "Amount and Plan ID are required.");
-
-  try {
-    const razorpay = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET });
-    const options = { amount: amount * 100, currency: "INR", receipt: `upg_${Date.now().toString().slice(-6)}_${context.auth.uid.substring(0, 5)}`, payment_capture: 1 };
-    const order = await razorpay.orders.create(options);
-    return { id: order.id, currency: order.currency, amount: order.amount, key: process.env.RAZORPAY_KEY_ID };
-  } catch (error) {
-    throw new functions.https.HttpsError("internal", error.message);
-  }
-});
-
-exports.verifyUpgradePayment = functions
-  .region("asia-south1")
-  .https.onCall(async (data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
-  const { orderId, paymentId, signature, planId } = data;
-
-  const body = orderId + "|" + paymentId;
-  const expectedSignature = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET).update(body.toString()).digest("hex");
-
-  if (expectedSignature !== signature) throw new functions.https.HttpsError("permission-denied", "Invalid payment signature.");
-
-  try {
-    await admin.firestore().collection("transactions").add({
-      userId: context.auth.uid, type: "SUBSCRIPTION_UPGRADE", planId, razorpayOrderId: orderId, razorpayPaymentId: paymentId, status: "SUCCESS", createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    await admin.firestore().collection("users").doc(context.auth.uid).update({
-      subscriptionTier: "GROWTH_PACKAGE", subscriptionPlan: planId, subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    try {
-      const userDoc = await admin.firestore().collection("users").doc(context.auth.uid).get();
-      const userData = userDoc.data();
-      if (userData && userData.whatsappOptIn === true && userData.phoneNumber) {
-        await sendWhatsApp(userData.phoneNumber, `🚀 Prochem Alert: Your account has been upgraded to the ${planId} plan successfully! Enjoy your new features.`, null, {
-          templateName: "Subscription_Upgrade",
-          type: "transactional",
-          userId: context.auth.uid
-        });
-      }
-    } catch (waError) {
-      console.error("Error sending upgrade WhatsApp notification:", waError);
-    }
-
-    return { success: true, message: "Account upgraded successfully." };
-  } catch (error) {
-    throw new functions.https.HttpsError("internal", "Failed to update account status.");
-  }
-});
 
 // ==========================================
 // 🚀 TWILIO WHATSAPP INTEGRATION 
@@ -766,3 +632,160 @@ exports.onUserCreated = onDocumentCreated(
     return null;
   }
 );
+
+// ==========================================
+// 🚀 CASHFREE: CREATE ORDER
+// ==========================================
+exports.createCashfreeOrder = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    // type can be 'subscription' or 'product'
+    // referenceId is the plan ID or the order ID
+    const { amount, type, referenceId, customerDetails } = data;
+
+    if (!amount || !type || !referenceId) {
+      throw new functions.https.HttpsError("invalid-argument", "Amount, type, and referenceId are required.");
+    }
+
+    try {
+      // 1. Configure SDK
+      Cashfree.XClientId = process.env.CASHFREE_APP_ID;
+      Cashfree.XClientSecret = process.env.CASHFREE_SECRET_KEY;
+      Cashfree.XEnvironment = process.env.CASHFREE_ENVIRONMENT === "PRODUCTION" 
+          ? Cashfree.Environment.PRODUCTION 
+          : Cashfree.Environment.SANDBOX;
+
+      // 2. Generate a unique Cashfree Order ID
+      const cashfreeOrderId = `cf_${type}_${referenceId}_${Date.now()}`.substring(0, 50);
+
+      // 3. Create Request Object
+      const request = {
+        order_amount: amount,
+        order_currency: "INR",
+        order_id: cashfreeOrderId,
+        customer_details: {
+          customer_id: context.auth.uid.substring(0, 50),
+          customer_phone: customerDetails?.phone || "9999999999",
+          customer_email: customerDetails?.email || "user@prochem.in",
+          customer_name: customerDetails?.name || "Prochem User"
+        },
+        order_meta: {
+          return_url: "https://prochem.in/payment-status?order_id={order_id}"
+        },
+        order_tags: {
+          type: type,
+          referenceId: referenceId
+        }
+      };
+
+      // 4. Call Cashfree API
+      const response = await Cashfree.PGCreateOrder("2023-08-01", request);
+
+      // 5. If it's a product, update the initial order document with the new Cashfree ID
+      if (type === "product") {
+        await admin.firestore().collection("orders").doc(referenceId).update({
+          cashfreeOrderId: cashfreeOrderId,
+          paymentStatus: "PENDING_GATEWAY",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Return the payment_session_id back to the React Native frontend
+      return { 
+        payment_session_id: response.data.payment_session_id,
+        order_id: cashfreeOrderId
+      };
+
+    } catch (error) {
+      console.error("Cashfree Order Error:", error.response?.data || error.message);
+      throw new functions.https.HttpsError("internal", "Failed to create Cashfree order.");
+    }
+});
+
+// ==========================================
+// 🚀 CASHFREE: WEBHOOK LISTENER
+// ==========================================
+exports.cashfreeWebhook = functions
+  .region("asia-south1")
+  .https.onRequest(async (req, res) => {
+    
+    // Webhooks must be POST requests
+    if (req.method !== 'POST') {
+       return res.status(405).send('Method Not Allowed');
+    }
+
+    try {
+      Cashfree.XClientId = process.env.CASHFREE_APP_ID;
+      Cashfree.XClientSecret = process.env.CASHFREE_SECRET_KEY;
+      Cashfree.XEnvironment = process.env.CASHFREE_ENVIRONMENT === "PRODUCTION" 
+          ? Cashfree.Environment.PRODUCTION 
+          : Cashfree.Environment.SANDBOX;
+
+      // 1. Extract Headers required for Signature Verification
+      const signature = req.headers["x-webhook-signature"];
+      const timestamp = req.headers["x-webhook-timestamp"];
+
+      if (!signature || !timestamp) {
+         return res.status(400).send("Missing security headers");
+      }
+
+      // 2. Verify Signature to prevent fraud
+      // SDK automatically throws an error if signature is invalid
+      Cashfree.PGVerifyWebhookSignature(signature, req.rawBody.toString(), timestamp);
+
+      const payload = req.body;
+      console.log("Verified Cashfree Webhook:", JSON.stringify(payload));
+
+      // 3. Process the Payment Success event
+      if (payload.type === "PAYMENT_SUCCESS_WEBHOOK") {
+          const orderData = payload.data.order;
+          const paymentData = payload.data.payment;
+          
+          const tags = orderData.order_tags || {};
+          const type = tags.type;                  // 'subscription' or 'product'
+          const referenceId = tags.referenceId;    // Plan ID or Order ID
+          const customerId = orderData.customer_details.customer_id;
+
+          if (type === "subscription") {
+              // Mark user as premium
+              await admin.firestore().collection("transactions").add({
+                  userId: customerId, 
+                  type: "SUBSCRIPTION_UPGRADE", 
+                  planId: referenceId, 
+                  cashfreeOrderId: orderData.order_id, 
+                  paymentId: paymentData.cf_payment_id,
+                  status: "SUCCESS", 
+                  createdAt: admin.firestore.FieldValue.serverTimestamp()
+              });
+
+              await admin.firestore().collection("users").doc(customerId).update({
+                  subscriptionTier: "GROWTH_PACKAGE", 
+                  subscriptionPlan: referenceId, 
+                  subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+              });
+
+          } else if (type === "product") {
+              // Update physical product order to PAID
+              await admin.firestore().collection("orders").doc(referenceId).update({
+                  status: "PENDING_SELLER", 
+                  paymentStatus: "PAID",
+                  paymentDetails: { 
+                      cashfreePaymentId: paymentData.cf_payment_id, 
+                      cashfreeOrderId: orderData.order_id, 
+                      paidAt: admin.firestore.FieldValue.serverTimestamp() 
+                  }
+              });
+          }
+      }
+
+      // 4. Acknowledge Receipt - Critical so Cashfree doesn't retry
+      res.status(200).send("OK");
+
+    } catch (error) {
+      console.error("Webhook Error / Forgery Attempt:", error.message);
+      // Return 400 if verification fails so it doesn't process forged data
+      res.status(400).send("Webhook verification failed");
+    }
+});

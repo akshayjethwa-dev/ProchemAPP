@@ -18,8 +18,17 @@ import {
 } from 'firebase/firestore';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-// @ts-ignore
-import RazorpayCheckout from 'react-native-razorpay'; 
+
+// 🚀 CASHFREE IMPORTS
+import { CFPaymentGatewayService, CFErrorResponse } from 'react-native-cashfree-pg-sdk';
+import { 
+  CFDropCheckoutPayment, 
+  CFEnvironment, 
+  CFSession, 
+  CFThemeBuilder,
+  CFPaymentComponentBuilder, // ✅ Added
+  CFPaymentModes             // ✅ Added
+} from 'cashfree-pg-api-contract';
 
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
@@ -344,7 +353,7 @@ function PremiumSellerHubContent() {
 }
 
 // ==========================================
-// 3. UPGRADE PAYMENT MODAL (Automated Flow)
+// 3. UPGRADE PAYMENT MODAL (Cashfree Integration)
 // ==========================================
 function UpgradePaymentModal({
   visible,
@@ -358,6 +367,25 @@ function UpgradePaymentModal({
   const { user } = useAppStore();
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // 🚀 Initialize Cashfree Callbacks
+  useEffect(() => {
+    CFPaymentGatewayService.setCallback({
+      onVerify: (orderID: string) => {
+        Alert.alert('Payment Successful! 🎉', 'Your account has been upgraded. Please refresh the app.');
+        setIsProcessing(false);
+        onClose();
+      },
+      onError: (error: CFErrorResponse, orderID: string) => {
+        Alert.alert('Payment Failed', error.getMessage() || 'Transaction failed or was cancelled.');
+        setIsProcessing(false);
+      }
+    });
+
+    return () => {
+      CFPaymentGatewayService.removeCallback();
+    };
+  }, [onClose]);
+
   if (!plan) return null;
 
   const handlePayNow = async () => {
@@ -369,104 +397,50 @@ function UpgradePaymentModal({
       const app = getApp();
       const functions = getFunctions(app, 'asia-south1'); 
       
-      // 1. Create the order on the backend
-      const createUpgradeOrder = httpsCallable(functions, 'createUpgradeOrder');
-      const orderResponse = await createUpgradeOrder({ 
+      // 1. Call Firebase to create the Cashfree Order Session
+      const createCashfreeOrder = httpsCallable(functions, 'createCashfreeOrder');
+      
+      const response = await createCashfreeOrder({ 
         amount: plan.amountRaw, 
-        planId: plan.key 
+        type: 'subscription',
+        referenceId: plan.key,
+        customerDetails: {
+          name: user?.companyName || user?.businessName || 'Prochem User',
+          email: user?.email || 'user@prochem.in',
+          phone: user?.phone || '9999999999'
+        }
       });
-      const { id: orderId, amount: orderAmount, key } = orderResponse.data as any;
 
-      // 2. Configure Razorpay Options
-      const options = {
-        description: `Upgrade to ${plan.title}`,
-        image: 'https://prochem.app/logo.png', // Optional
-        currency: 'INR',
-        key: key, 
-        amount: orderAmount,
-        name: 'Prochem Marketplace',
-        order_id: orderId,
-        prefill: {
-          email: user?.email || '',
-          contact: user?.phone || '',
-          name: user?.companyName || user?.businessName || 'Prochem User'
-        },
-        theme: { color: '#004AAD' }
-      };
+      const { payment_session_id, order_id } = response.data as any;
 
-      // 3A. WEB IMPLEMENTATION
-      if (Platform.OS === 'web') {
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.onerror = () => {
-          Alert.alert('Error', 'Razorpay SDK failed to load. Are you offline?');
-          setIsProcessing(false);
-        };
-        script.onload = async () => {
-          try {
-            const rzp = new (window as any).Razorpay({
-              ...options,
-              handler: async function (response: any) {
-                try {
-                  const verifyPayment = httpsCallable(functions, 'verifyUpgradePayment');
-                  await verifyPayment({
-                    paymentId: response.razorpay_payment_id,
-                    orderId: response.razorpay_order_id,
-                    signature: response.razorpay_signature,
-                    planId: plan.key
-                  });
-                  Alert.alert('Payment Successful! 🎉', 'Your account has been upgraded.');
-                  setIsProcessing(false);
-                  onClose();
-                } catch (err: any) {
-                  Alert.alert('Verification Failed', err.message);
-                  setIsProcessing(false);
-                }
-              }
-            });
-            rzp.on('payment.failed', function (response: any) {
-              Alert.alert('Payment Failed', response.error.description);
-              setIsProcessing(false);
-            });
-            rzp.open();
-          } catch (e) {
-            setIsProcessing(false);
-          }
-        };
-        document.body.appendChild(script);
+      // 2. Initialize the Cashfree Session
+      const session = new CFSession(
+        payment_session_id,
+        order_id,
+        CFEnvironment.SANDBOX // Change to PRODUCTION before going live
+      );
 
-      // 3B. MOBILE (ANDROID/IOS) IMPLEMENTATION - NATIVE CHECKOUT
-      } else {
-        RazorpayCheckout.open(options)
-          .then(async (data: any) => {
-            // ✅ SUCCESS CALLBACK
-            try {
-              // Verify Payment with Firebase Backend
-              const verifyPayment = httpsCallable(functions, 'verifyUpgradePayment');
-              await verifyPayment({
-                orderId: data.razorpay_order_id,
-                paymentId: data.razorpay_payment_id,
-                signature: data.razorpay_signature,
-                planId: plan.key
-              });
+      // 3. Customize the Payment Components (UPI, Cards, etc.)
+      const paymentModes = new CFPaymentComponentBuilder()
+        .add(CFPaymentModes.UPI)
+        .add(CFPaymentModes.CARD)
+        .add(CFPaymentModes.NB)
+        .add(CFPaymentModes.WALLET)
+        .build();
 
-              Alert.alert("Success!", `Payment processed! Payment ID: ${data.razorpay_payment_id}`);
-              setIsProcessing(false);
-              onClose();
-
-            } catch (verifyError) {
-              console.error("Verification Error:", verifyError);
-              Alert.alert("Verification Failed", "Payment received but account upgrade failed. Please contact support.");
-              setIsProcessing(false);
-            }
-          })
-          .catch((error: any) => {
-            // ❌ FAILURE CALLBACK
-            console.log("Payment Failed or Cancelled:", error);
-            Alert.alert(`Payment Failed`, `Code: ${error.code} | Description: ${error.description}`);
-            setIsProcessing(false);
-          });
-      }
+      // 4. Customize the Drop-in UI Theme
+      const theme = new CFThemeBuilder()
+        .setNavigationBarBackgroundColor('#004AAD')
+        .setNavigationBarTextColor('#FFFFFF')
+        .setButtonBackgroundColor('#F59E0B')
+        .setButtonTextColor('#FFFFFF')
+        .setPrimaryTextColor('#1E293B')
+        .setSecondaryTextColor('#64748B')
+        .build();
+        
+      // 5. Launch the Checkout UI (Pass session, paymentModes, theme)
+      const dropPayment = new CFDropCheckoutPayment(session, paymentModes, theme);
+      CFPaymentGatewayService.doPayment(dropPayment);
 
     } catch (error: any) {
       console.error(error);
@@ -527,7 +501,7 @@ function UpgradePaymentModal({
               <MaterialCommunityIcons name="information-outline" size={18} color="#004AAD" style={{ marginTop: 2 }} />
               <Text style={upgradeStyles.noteText}>
                 <Text style={{ fontWeight: '700' }}>Secure Checkout: </Text>
-                Your payment will be securely processed by Razorpay under Prochem Marketplace Private Limited.
+                Your payment will be securely processed under Prochem Marketplace Private Limited via Cashfree.
               </Text>
             </View>
 
@@ -887,19 +861,14 @@ const styles = StyleSheet.create({
   featureText: { fontSize: 15, color: '#334155', lineHeight: 22, fontWeight: '500' },
   comingSoonBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4, alignSelf: 'flex-start' },
   comingSoonText: { color: '#D97706', fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
-  
-  // ✅ Guarantee Card Styles
   guaranteeCard: { backgroundColor: '#F0F9FF', borderRadius: 16, padding: 20, borderColor: '#BAE6FD', borderWidth: 1 },
   guaranteeHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   guaranteeTitle: { fontSize: 18, fontWeight: 'bold', color: '#004AAD', marginLeft: 8 },
   guaranteeText: { fontSize: 14, color: '#334155', lineHeight: 22, marginBottom: 12 },
   guaranteeLink: { fontSize: 12, color: '#004AAD', fontWeight: 'bold', textDecorationLine: 'underline' },
-  
-  // ✅ T&C Modal Styles
   tcModalContent: { backgroundColor: 'white', padding: 24, margin: 20, borderRadius: 16, elevation: 10 },
   tcPoint: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
   tcPointText: { flex: 1, fontSize: 14, color: '#334155', lineHeight: 20 },
-
   pricingSection: { paddingHorizontal: 20, marginTop: 30, marginBottom: 20 },
   pricingHeader: { fontWeight: 'bold', textAlign: 'center', color: '#1E293B', marginBottom: 20 },
   pricingCard: { backgroundColor: 'white', marginBottom: 16, borderColor: '#E2E8F0', borderRadius: 16 },

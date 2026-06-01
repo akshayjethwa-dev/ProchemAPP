@@ -6,7 +6,9 @@ import {
   KeyboardAvoidingView, 
   Platform, 
   Alert,
-  ScrollView 
+  ScrollView,
+  Dimensions,
+  Image
 } from 'react-native';
 import { Text, TextInput, Button, useTheme, HelperText } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +16,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../config/firebase';
+
+const { width } = Dimensions.get('window');
 
 // ✅ Define your navigation types
 type RootStackParamList = {
@@ -111,9 +115,9 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.mainContainer}>
       <KeyboardAvoidingView
-        style={styles.container}
+        style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
@@ -121,38 +125,45 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          bounces={false}
         >
-          <View style={styles.content}>
-            {/* Logo Section */}
-            <View style={styles.logoContainer}>
-              <View style={styles.logoBox}>
-                <Text style={styles.logoText}>P</Text>
+          {/* Curved Header Section */}
+          <View style={styles.headerBackground}>
+            <SafeAreaView edges={['top']}>
+              <View style={styles.headerContent}>
+                <Image 
+  source={require('../../assets/logo.png')} 
+  style={styles.headerLogo}
+  resizeMode="contain"
+/>
+                <Text style={styles.headerTitle}>Welcome Back,</Text>
+                <Text style={styles.headerSubtitle}>Sign in to your Prochem account!</Text>
               </View>
-              <Text variant="headlineMedium" style={styles.title} numberOfLines={1}>
-                Welcome Back
-              </Text>
-              <Text variant="bodyMedium" style={styles.subtitle}>
-                Sign in to your business account
-              </Text>
-            </View>
+            </SafeAreaView>
+          </View>
 
-            {/* Form Section */}
-            <View style={styles.form}>
-              <TextInput
-                label="Email"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  setLoginError('');
-                }}
-                mode="outlined"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                style={styles.input}
-                left={<TextInput.Icon icon="email-outline" />}
-                error={loginError.includes('email') || loginError.includes('Account')}
-              />
+          {/* Overlapping Form Card */}
+          <View style={styles.formCard}>
+            <Text style={styles.cardTitle}>Glad to see you again!</Text>
+            
+            <TextInput
+              label="Email Address"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                setLoginError('');
+              }}
+              mode="outlined"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              textColor="#1E293B"
+              left={<TextInput.Icon icon="email-outline" color="#94A3B8" />}
+              error={loginError.includes('email') || loginError.includes('Account')}
+            />
 
+            <View style={styles.passwordContainer}>
               <TextInput
                 label="Password"
                 value={password}
@@ -163,117 +174,229 @@ export default function LoginScreen() {
                 mode="outlined"
                 secureTextEntry={secureTextEntry}
                 style={styles.input}
-                left={<TextInput.Icon icon="lock-outline" />}
+                outlineStyle={styles.inputOutline}
+                textColor="#1E293B"
+                left={<TextInput.Icon icon="lock-outline" color="#94A3B8" />}
                 error={loginError.includes('password') || loginError.includes('Incorrect') || loginError.includes('Invalid')}
                 right={
                   <TextInput.Icon
                     icon={secureTextEntry ? 'eye-off' : 'eye'}
                     onPress={() => setSecureTextEntry(!secureTextEntry)}
                     forceTextInputFocus={false}
+                    color="#94A3B8"
                   />
                 }
               />
+            </View>
 
-              <HelperText type="error" visible={!!loginError}>
+            {loginError ? (
+              <HelperText type="error" visible={!!loginError} style={styles.errorText}>
                 {loginError}
               </HelperText>
+            ) : null}
 
-              {/* Forgot Password Button */}
-              <TouchableOpacity style={styles.forgotPass} onPress={handleForgotPassword}>
-                <Text style={{ color: theme.colors.primary }}>
-                  {resetLoading ? 'Sending Email...' : 'Forgot Password?'}
-                </Text>
+            {/* Forgot Password Button */}
+            <TouchableOpacity style={styles.forgotPass} onPress={handleForgotPassword}>
+              <Text style={styles.forgotPassText}>
+                {resetLoading ? 'Sending...' : 'Forgot Password?'}
+              </Text>
+            </TouchableOpacity>
+
+            <Button
+              mode="contained"
+              onPress={handleLogin}
+              loading={loading}
+              disabled={loading}
+              style={styles.loginBtn}
+              contentStyle={styles.loginBtnContent}
+              labelStyle={styles.loginBtnLabel}
+            >
+              Sign In
+            </Button>
+
+            {/* Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Footer Section */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Don't have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Registration')}>
+                <Text style={styles.link}>Sign Up</Text>
               </TouchableOpacity>
-
-              <Button
-                mode="contained"
-                onPress={handleLogin}
-                loading={loading}
-                disabled={loading}
-                style={styles.loginBtn}
-                contentStyle={{ paddingVertical: 8 }}
-              >
-                Login
-              </Button>
-
-              {/* Footer Section */}
-              <View style={styles.footer}>
-                <Text>Don't have an account? </Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Registration')}>
-                  <Text style={[styles.link, { color: theme.colors.primary }]}>Sign Up</Text>
-                </TouchableOpacity>
-              </View>
             </View>
           </View>
+
+          {/* Bottom spacing for scroll */}
+          <View style={styles.bottomSpacer} />
+
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
+  mainContainer: { 
     flex: 1, 
-    backgroundColor: '#F8FAFC' 
+    backgroundColor: '#F8FAFC',
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
   },
-  content: { 
-    padding: 24,
-    paddingBottom: 40,
+  headerBackground: {
+    backgroundColor: '#004AAD',
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+    paddingBottom: 60, // Extra padding to allow the card to overlap
+    shadowColor: '#004AAD',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 10,
   },
-  logoContainer: { 
-    alignItems: 'center', 
-    marginBottom: 40 
+  headerContent: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 30,
   },
   logoBox: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#004AAD',
+    width: 64,
+    height: 64,
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-    elevation: 5
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   logoText: { 
-    fontSize: 40, 
-    color: 'white', 
-    fontWeight: 'bold' 
+    fontSize: 32, 
+    color: '#004AAD', 
+    fontWeight: '900' 
   },
-  title: { 
-    fontWeight: 'bold', 
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: '#E2E8F0',
+    textAlign: 'center',
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 24,
+    marginTop: -40, // Pulls the card up over the blue header
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#1E293B',
-    textAlign: 'center',
-  },
-  subtitle: { 
-    color: '#64748B', 
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  form: { 
-    width: '100%' 
+    marginBottom: 8,
+    textAlign: 'left',
   },
   input: { 
-    marginBottom: 12, 
-    backgroundColor: 'white' 
+    backgroundColor: '#F1F5F9', // Light gray background for input
+    fontSize: 16,
+  },
+  inputOutline: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'transparent', // Borderless look, relies on background color
+  },
+  passwordContainer: {
+    marginTop: 12,
+  },
+  errorText: {
+    paddingHorizontal: 0,
+    marginTop: 4,
+    marginBottom: -8,
   },
   forgotPass: { 
     alignSelf: 'flex-end', 
-    marginBottom: 24 
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  forgotPassText: {
+    color: '#004AAD',
+    fontWeight: '600',
+    fontSize: 14,
   },
   loginBtn: { 
-    borderRadius: 10, 
-    backgroundColor: '#004AAD' 
+    borderRadius: 14, 
+    backgroundColor: '#004AAD',
+    shadowColor: '#004AAD',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  loginBtnContent: { 
+    paddingVertical: 12,
+  },
+  loginBtnLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    color: '#94A3B8',
+    fontWeight: '600',
+    fontSize: 12,
   },
   footer: { 
     flexDirection: 'row', 
     justifyContent: 'center', 
-    marginTop: 30 
+    alignItems: 'center',
+  },
+  footerText: {
+    color: '#64748B',
+    fontSize: 15,
   },
   link: { 
-    fontWeight: 'bold' 
+    fontWeight: 'bold',
+    fontSize: 15,
+    color: '#004AAD',
+  },
+  headerLogo: {
+  width: 190,
+  height: 100,
+  marginBottom: 16,
+  borderRadius: 20, // Optional: if your logo looks better rounded
+},
+  bottomSpacer: {
+    height: 40,
   }
 });
