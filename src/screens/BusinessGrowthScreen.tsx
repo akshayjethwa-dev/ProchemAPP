@@ -19,23 +19,13 @@ import {
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// 🚀 CASHFREE IMPORTS
-import { CFPaymentGatewayService, CFErrorResponse } from 'react-native-cashfree-pg-sdk';
-import { 
-  CFDropCheckoutPayment, 
-  CFEnvironment, 
-  CFSession, 
-  CFThemeBuilder,
-  CFPaymentComponentBuilder, // ✅ Added
-  CFPaymentModes             // ✅ Added
-} from 'cashfree-pg-api-contract';
-
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
 
-const { width } = Dimensions.get('window');
+import { startCashfreePayment, removeCashfreeCallback } from '../services/cashfree/CashfreeService';
 
+const { width } = Dimensions.get('window');
 const WHATSAPP_NUMBER = '917984856652'; 
 
 const PLANS = {
@@ -367,24 +357,11 @@ function UpgradePaymentModal({
   const { user } = useAppStore();
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 🚀 Initialize Cashfree Callbacks
   useEffect(() => {
-    CFPaymentGatewayService.setCallback({
-      onVerify: (orderID: string) => {
-        Alert.alert('Payment Successful! 🎉', 'Your account has been upgraded. Please refresh the app.');
-        setIsProcessing(false);
-        onClose();
-      },
-      onError: (error: CFErrorResponse, orderID: string) => {
-        Alert.alert('Payment Failed', error.getMessage() || 'Transaction failed or was cancelled.');
-        setIsProcessing(false);
-      }
-    });
-
     return () => {
-      CFPaymentGatewayService.removeCallback();
+      removeCashfreeCallback();
     };
-  }, [onClose]);
+  }, []);
 
   if (!plan) return null;
 
@@ -396,55 +373,50 @@ function UpgradePaymentModal({
       
       const app = getApp();
       const functions = getFunctions(app, 'asia-south1'); 
-      
-      // 1. Call Firebase to create the Cashfree Order Session
       const createCashfreeOrder = httpsCallable(functions, 'createCashfreeOrder');
       
-      const response = await createCashfreeOrder({ 
+      // ✅ SANITIZE PHONE NUMBER TO PREVENT CASHFREE 500 ERROR
+      let safePhone = user?.phoneNumber || user?.phone || "9876543210";
+      safePhone = safePhone.replace(/[^0-9]/g, ''); // Remove all non-numeric chars (like +)
+      if (safePhone.length > 10) safePhone = safePhone.slice(-10); // Keep last 10 digits
+      if (safePhone.length < 10) safePhone = "9876543210"; // Fallback if malformed
+      
+      const response: any = await createCashfreeOrder({ 
         amount: plan.amountRaw, 
         type: 'subscription',
         referenceId: plan.key,
         customerDetails: {
           name: user?.companyName || user?.businessName || 'Prochem User',
           email: user?.email || 'user@prochem.in',
-          phone: user?.phone || '9999999999'
+          phone: safePhone // Passed the sanitized phone
         }
       });
 
-      const { payment_session_id, order_id } = response.data as any;
+      const paymentSessionId = response.data.payment_session_id;
+      const orderId = response.data.order_id || plan.key; 
 
-      // 2. Initialize the Cashfree Session
-      const session = new CFSession(
-        payment_session_id,
-        order_id,
-        CFEnvironment.SANDBOX // Change to PRODUCTION before going live
-      );
-
-      // 3. Customize the Payment Components (UPI, Cards, etc.)
-      const paymentModes = new CFPaymentComponentBuilder()
-        .add(CFPaymentModes.UPI)
-        .add(CFPaymentModes.CARD)
-        .add(CFPaymentModes.NB)
-        .add(CFPaymentModes.WALLET)
-        .build();
-
-      // 4. Customize the Drop-in UI Theme
-      const theme = new CFThemeBuilder()
-        .setNavigationBarBackgroundColor('#004AAD')
-        .setNavigationBarTextColor('#FFFFFF')
-        .setButtonBackgroundColor('#F59E0B')
-        .setButtonTextColor('#FFFFFF')
-        .setPrimaryTextColor('#1E293B')
-        .setSecondaryTextColor('#64748B')
-        .build();
+      if (!paymentSessionId) {
+        throw new Error("Could not retrieve payment session from server.");
+      }
         
-      // 5. Launch the Checkout UI (Pass session, paymentModes, theme)
-      const dropPayment = new CFDropCheckoutPayment(session, paymentModes, theme);
-      CFPaymentGatewayService.doPayment(dropPayment);
+      await startCashfreePayment(
+        paymentSessionId,
+        orderId,
+        async (verifiedId) => {
+          Alert.alert('Payment Successful! 🎉', 'Your account has been upgraded. Please refresh the app.');
+          setIsProcessing(false);
+          onClose();
+        },
+        (error) => {
+          console.error("Payment Error:", error);
+          setIsProcessing(false);
+          Alert.alert('Payment Failed', error?.message || 'Transaction failed or was cancelled.');
+        }
+      );
 
     } catch (error: any) {
       console.error(error);
-      Alert.alert("Error", "Could not initialize payment. Try again.");
+      Alert.alert("Error", error.message || "Could not initialize payment. Try again.");
       setIsProcessing(false);
     }
   };
@@ -606,7 +578,6 @@ function SalesPitchUI() {
           </Text>
         </View>
 
-        {/* Tab Toggle */}
         <View style={styles.toggleContainer}>
           <TouchableOpacity
             style={[styles.toggleButton, activeTab === 'buyers' && styles.toggleButtonActive]}
@@ -628,7 +599,6 @@ function SalesPitchUI() {
           </TouchableOpacity>
         </View>
 
-        {/* Features */}
         <View style={styles.featuresSection}>
           <Text variant="titleMedium" style={styles.sectionHeader}>
             What you get as a {activeTab === 'buyers' ? 'Buyer' : 'Seller'}:
@@ -654,7 +624,6 @@ function SalesPitchUI() {
           </View>
         </View>
 
-        {/* ✅ NEW: 100% Growth Guarantee Card */}
         <View style={{ paddingHorizontal: 20, marginTop: 25 }}>
           <Surface style={styles.guaranteeCard} elevation={2}>
             <View style={styles.guaranteeHeader}>
@@ -670,11 +639,9 @@ function SalesPitchUI() {
           </Surface>
         </View>
 
-        {/* Plan Selection */}
         <View style={styles.pricingSection}>
           <Text variant="titleLarge" style={styles.pricingHeader}>Choose Your Plan</Text>
 
-          {/* Standard Plan Card */}
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => setSelectedPlan('standard')}
@@ -710,7 +677,6 @@ function SalesPitchUI() {
             </Card>
           </TouchableOpacity>
 
-          {/* Growth Plan Card */}
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => setSelectedPlan('growth')}
@@ -751,7 +717,6 @@ function SalesPitchUI() {
         </View>
       </ScrollView>
 
-      {/* Bottom Bar */}
       <Surface
         style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}
         elevation={4}
@@ -784,7 +749,6 @@ function SalesPitchUI() {
         onClose={() => setShowUpgradeModal(false)}
       />
 
-      {/* ✅ NEW: Terms & Conditions Modal */}
       <Portal>
         <Modal visible={showTnCModal} onDismiss={() => setShowTnCModal(false)} contentContainerStyle={styles.tcModalContent}>
           <Text variant="titleLarge" style={{ fontWeight: 'bold', color: '#1E293B', marginBottom: 15 }}>

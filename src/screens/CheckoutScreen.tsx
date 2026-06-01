@@ -1,24 +1,19 @@
 // src/screens/CheckoutScreen.tsx
 
 import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { View, ScrollView, StyleSheet, Alert, BackHandler, Image, Clipboard, Platform } from 'react-native'; 
-import { Text, Card, Button, Divider, IconButton, TextInput, HelperText, useTheme, ActivityIndicator } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, Alert, BackHandler, ActivityIndicator } from 'react-native'; 
+import { Text, Card, Button, Divider, IconButton, useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native'; 
-import * as ImagePicker from 'expo-image-picker';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore'; // ✅ IMPORTED updateDoc
+import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
 import { useAppStore } from '../store/appStore';
-import { placeOrder } from '../services/orderService';
-import { db, storage } from '../config/firebase';
+import { placeOrder, updateOrderStatus } from '../services/orderService';
+import { db } from '../config/firebase';
 import { Address, User } from '../types';
 
-// 🏦 BANK DETAILS CONFIGURATION
-const BANK_DETAILS = {
-  accountName: "PROCHEM MARKETPLACE PRIVATE LIMITED",
-  accountNumber: "183205016827",
-  ifscCode: "ICIC0001832",
-  bankName: "ICICI Bank" 
-};
+// ✅ Imports our new multi-platform wrapper
+import { startCashfreePayment, removeCashfreeCallback } from '../services/cashfree/CashfreeService';
 
 export default function CheckoutScreen() {
   const navigation = useNavigation<any>();
@@ -26,28 +21,15 @@ export default function CheckoutScreen() {
   const theme = useTheme();
   const { cart, user, clearCart } = useAppStore();
   
-  // ✅ DYNAMIC CART (Check if we came from a Custom Offer)
   const negotiatedItem = route.params?.negotiatedItem;
   const activeCart = negotiatedItem ? [negotiatedItem] : cart;
   
-  // State
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
-  
-  // ✅ GST STATE LOGIC
   const [sellerState, setSellerState] = useState<string | null>(null);
   const [calculatingTax, setCalculatingTax] = useState(true);
 
-  // Payment Proof State
-  const [utrNumber, setUtrNumber] = useState('');
-  const [screenshotUri, setScreenshotUri] = useState<string | null>(null);
-
-  // Validation State
-  const [errors, setErrors] = useState({
-    address: false,
-    utr: false
-  });
+  const [errors, setErrors] = useState({ address: false });
 
   // --- NAVIGATION HANDLERS ---
   useLayoutEffect(() => {
@@ -60,12 +42,14 @@ export default function CheckoutScreen() {
   useEffect(() => {
     const backAction = () => { navigation.goBack(); return true; };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-    return () => backHandler.remove();
+    return () => {
+      backHandler.remove();
+      removeCashfreeCallback(); // ✅ Clean up native listeners on unmount
+    };
   }, []);
 
   // --- ADDRESS & SELLER LOGIC ---
   useEffect(() => {
-    // 1. Set Buyer Address
     if (route.params?.selectedAddress) {
       setSelectedAddress(route.params.selectedAddress);
       setErrors(prev => ({ ...prev, address: false })); 
@@ -77,7 +61,6 @@ export default function CheckoutScreen() {
       });
     }
 
-    // 2. Fetch Seller State
     fetchSellerDetails();
   }, [user, route.params]);
 
@@ -108,20 +91,15 @@ export default function CheckoutScreen() {
   };
 
   // --- FINANCIAL CALCULATIONS ---
-  const BUYER_PLATFORM_FEE_PERCENT = 0.015; // ✅ Updated to 1.5%
-
+  const BUYER_PLATFORM_FEE_PERCENT = 0.015; 
   const SELLER_PLATFORM_FEE_PERCENT = 0.01; 
   const SELLER_SAFETY_FEE_PERCENT = 0.0025;  
   const SELLER_FREIGHT_FEE_PERCENT = 0.0025;   
 
-  // ✅ Used activeCart instead of cart
   const productTotal = activeCart.reduce((sum, item) => sum + (item.pricePerUnit * item.quantity), 0);
-  
   const totalGstAmount = activeCart.reduce((sum, item) => sum + ((item.pricePerUnit * item.quantity) * ((item.gstPercent || 18) / 100)), 0);
   
-  let cgst = 0;
-  let sgst = 0;
-  let igst = 0;
+  let cgst = 0, sgst = 0, igst = 0;
   let isInterState = true; 
 
   if (selectedAddress?.state && sellerState) {
@@ -130,7 +108,6 @@ export default function CheckoutScreen() {
       cgst = totalGstAmount / 2;
       sgst = totalGstAmount / 2;
     } else {
-      isInterState = true;
       igst = totalGstAmount;
     }
   } else {
@@ -138,7 +115,6 @@ export default function CheckoutScreen() {
   }
 
   const productTotalWithTax = productTotal + totalGstAmount;
-  
   const platformFeeBuyer = productTotalWithTax * BUYER_PLATFORM_FEE_PERCENT;
   const finalPayableAmount = productTotalWithTax + platformFeeBuyer; 
 
@@ -147,156 +123,118 @@ export default function CheckoutScreen() {
   const freightFee = productTotalWithTax * SELLER_FREIGHT_FEE_PERCENT;
   const payoutAmount = productTotalWithTax - platformFeeSeller - safetyFee - freightFee;
 
-  // --- IMAGE PICKER ---
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.5,
-    });
 
-    if (!result.canceled) {
-      setScreenshotUri(result.assets[0].uri);
-    }
-  };
-
-  const uploadScreenshot = async (uri: string): Promise<string | null> => {
-    if (!uri) return null;
+  // --- SUCCESS HANDLER ---
+  const handlePaymentSuccess = async (orderId: string) => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const filename = `payment_proofs/${user?.uid}_${Date.now()}.jpg`;
-      const storageRef = ref(storage, filename);
-      await uploadBytes(storageRef, blob);
-      return await getDownloadURL(storageRef);
-    } catch (error) {
-      console.error("Upload failed", error);
-      Alert.alert("Upload Error", "Failed to upload screenshot.");
-      return null;
-    }
-  };
+      await updateOrderStatus(orderId, 'PENDING_SELLER'); 
+      await updateDoc(doc(db, 'orders', orderId), { paymentStatus: 'completed' });
 
-  // --- SUBMIT ORDER ---
-  const handlePlaceOrder = async () => {
-    // 1. Validation
-    let hasError = false;
-    const newErrors = { address: false, utr: false };
-
-    if (!selectedAddress) {
-      newErrors.address = true;
-      hasError = true;
-    }
-    if (!utrNumber || utrNumber.trim().length < 6) {
-      newErrors.utr = true;
-      hasError = true;
-    }
-
-    setErrors(newErrors);
-    if (hasError) {
-      Alert.alert("Required Fields", "Please select a Delivery Address and enter the Payment UTR.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      // 2. Upload Screenshot if exists
-      let proofUrl = null;
-      if (screenshotUri) {
-        setUploading(true);
-        proofUrl = await uploadScreenshot(screenshotUri);
-        setUploading(false);
-        if (!proofUrl) { setLoading(false); return; } 
-      }
-
-      // 3. Place Order
-      const orderId = await placeOrder({
-        buyerId: user!.uid,
-        sellerId: activeCart[0].sellerId, 
-        items: activeCart,
-        shippingAddress: JSON.stringify(selectedAddress),
-        
-        // Financials
-        subTotal: productTotal,
-        taxAmount: totalGstAmount,
-        cgst: cgst,
-        sgst: sgst,
-        igst: igst,
-        
-        platformFeeBuyer: platformFeeBuyer,
-        platformFeeSeller: platformFeeSeller,
-        safetyFee: safetyFee,
-        freightFee: freightFee,
-
-        totalAmount: finalPayableAmount,
-        payoutAmount: payoutAmount,
-        
-        status: 'PENDING_SELLER', 
-        paymentStatus: 'pending_verification',
-        paymentMode: 'BANK_TRANSFER',
-        paymentReference: utrNumber,
-        paymentScreenshot: proofUrl,
-        sellerPayoutStatus: 'PENDING',
-        createdAt: new Date().toISOString(),
-        date: new Date().toISOString(),
-      } as any);
-
-      // ✅ 3.5. IF THIS WAS A CUSTOM REQUIREMENT, MARK IT AS FULFILLED
       if (negotiatedItem && negotiatedItem.customRequirementId) {
-        try {
-          await updateDoc(doc(db, 'customRequirements', negotiatedItem.customRequirementId), {
-            status: 'FULFILLED',
-            finalOrderId: orderId
-          });
-        } catch (reqError) {
-          console.error("Failed to update custom requirement status:", reqError);
-        }
+        await updateDoc(doc(db, 'customRequirements', negotiatedItem.customRequirementId), {
+          status: 'FULFILLED',
+          finalOrderId: orderId
+        });
       }
 
-      // 4. NOTIFICATIONS
-      try {
-        await addDoc(collection(db, 'notifications'), {
-          userId: 'ALL_ADMINS',
-          type: 'ORDER',
-          title: 'New Manual Payment Order',
-          message: `Order #${orderId.slice(0,6).toUpperCase()} placed. UTR: ${utrNumber}`,
-          data: { orderId },
-          read: false,
-          createdAt: new Date().toISOString()
-        });
-      } catch (notifyError) {
-        console.warn("Notification skipped due to permissions/error:", notifyError);
-      }
-      
-      // ✅ Only clear the global cart if we were checking out from the normal cart
       if (!negotiatedItem) {
         clearCart();
       }
-      
-      setLoading(false);
-      
-      // 🚀 5. REDIRECT LOGIC TO PAYMENT SUCCESS SCREEN
+
       navigation.navigate('PaymentSuccess', {
         orderId: orderId.slice(0, 10).toUpperCase(),
         totalAmount: finalPayableAmount.toFixed(2),
         productName: activeCart.length > 1 ? 'Multiple Products' : activeCart[0]?.name,
         quantity: activeCart[0]?.quantity,
         unit: activeCart[0]?.unit || 'kg',
-        utr: utrNumber,
         buyerName: user?.companyName || user?.businessName || 'Prochem Buyer',
         date: new Date().toLocaleDateString()
       });
 
     } catch (error) {
-      console.error("Order Failure:", error);
+      console.error("Error in post-payment logic:", error);
+    } finally {
       setLoading(false);
-      setUploading(false);
-      Alert.alert('Error', 'Failed to place order. Please try again.');
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    Clipboard.setString(text);
+
+  // --- SUBMIT ORDER & TRIGGER CASHFREE ---
+  const handlePlaceOrder = async () => {
+    if (!selectedAddress) {
+      setErrors({ address: true });
+      Alert.alert("Required Fields", "Please select a Delivery Address.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // 1. Save the Order to Firestore FIRST
+      const orderId = await placeOrder({
+        buyerId: user!.uid,
+        sellerId: activeCart[0].sellerId, 
+        items: activeCart,
+        shippingAddress: JSON.stringify(selectedAddress),
+        subTotal: productTotal,
+        taxAmount: totalGstAmount,
+        cgst: cgst,
+        sgst: sgst,
+        igst: igst,
+        platformFeeBuyer: platformFeeBuyer,
+        platformFeeSeller: platformFeeSeller,
+        safetyFee: safetyFee,
+        freightFee: freightFee,
+        totalAmount: finalPayableAmount,
+        payoutAmount: payoutAmount,
+        status: 'PENDING_SELLER',  
+        paymentStatus: 'pending',
+        paymentMode: 'BANK_TRANSFER', 
+        sellerPayoutStatus: 'PENDING',
+        paymentReference: 'CASHFREE_GATEWAY', 
+        createdAt: new Date().toISOString(),
+        date: new Date().toISOString(),
+      } as any);
+
+      // 2. Call backend to get Cashfree session
+      const functions = getFunctions();
+      const createCashfreeOrderFn = httpsCallable(functions, 'createCashfreeOrder');
+      
+      const response: any = await createCashfreeOrderFn({
+        amount: finalPayableAmount.toFixed(2),
+        type: 'product',
+        referenceId: orderId,
+        customerDetails: {
+          phone: user?.phoneNumber || "9999999999", 
+          email: user?.email || "buyer@prochem.com",
+          name: user?.companyName || user?.businessName || "Prochem Buyer"
+        }
+      });
+
+      const paymentSessionId = response.data.payment_session_id;
+
+      if (!paymentSessionId) {
+        throw new Error("Could not retrieve payment session from server.");
+      }
+
+      // 3. ✅ Trigger our Multi-Platform Cashfree Wrapper
+      await startCashfreePayment(
+        paymentSessionId, 
+        orderId, 
+        handlePaymentSuccess, 
+        (error, oid) => {
+          console.error("Payment Error:", error);
+          setLoading(false);
+          // If on web, error.message might be different, fallback to standard message
+          Alert.alert("Payment Failed", error?.message || "The payment could not be completed.");
+        }
+      );
+
+    } catch (error: any) {
+      console.error("Order Generation Failure:", error);
+      setLoading(false);
+      Alert.alert('Error', error.message || 'Failed to initialize payment gateway.');
+    }
   };
 
   if (calculatingTax || activeCart.length === 0) {
@@ -305,7 +243,6 @@ export default function CheckoutScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      
       {/* 1. Address Section */}
       <Card style={[styles.card, errors.address && { borderColor: theme.colors.error, borderWidth: 1 }]}>
         <Card.Title title="Delivery To" left={(props) => <Text {...props}>📍</Text>} />
@@ -335,17 +272,17 @@ export default function CheckoutScreen() {
            {!isInterState ? (
              <>
                 <View style={styles.row}>
-                  <Text>CGST (9%)</Text>
+                  <Text>CGST</Text>
                   <Text>₹{cgst.toFixed(2)}</Text>
                 </View>
                 <View style={styles.row}>
-                  <Text>SGST (9%)</Text>
+                  <Text>SGST</Text>
                   <Text>₹{sgst.toFixed(2)}</Text>
                 </View>
              </>
            ) : (
              <View style={styles.row}>
-                <Text>IGST (18%)</Text>
+                <Text>IGST</Text>
                 <Text>₹{igst.toFixed(2)}</Text>
              </View>
            )}
@@ -361,59 +298,12 @@ export default function CheckoutScreen() {
            </View>
            
            <Text style={{fontSize: 12, color: '#D97706', marginTop: 10, fontStyle: 'italic', textAlign: 'center'}}>
-             * Delivery charges will apply. We will connect with you soon with the exact price.
+             * Delivery charges are not included and will be billed separately.
            </Text>
         </Card.Content>
       </Card>
 
-      {/* 3. BANK TRANSFER DETAILS */}
-      <Card style={[styles.card, { borderColor: theme.colors.primary, borderWidth: 1 }]}>
-        <Card.Title title="Step 1: Transfer Payment" subtitle="RTGS / NEFT / IMPS" left={(props) => <IconButton icon="bank" {...props} />} />
-        <Card.Content style={{backgroundColor: '#F0F4F8', padding: 10, borderRadius: 8}}>
-          <DetailRow label="Account Name" value={BANK_DETAILS.accountName} onCopy={() => copyToClipboard(BANK_DETAILS.accountName)} />
-          <DetailRow label="Account No" value={BANK_DETAILS.accountNumber} onCopy={() => copyToClipboard(BANK_DETAILS.accountNumber)} />
-          <DetailRow label="IFSC Code" value={BANK_DETAILS.ifscCode} onCopy={() => copyToClipboard(BANK_DETAILS.ifscCode)} />
-          <DetailRow label="Bank" value={BANK_DETAILS.bankName} />
-          <Text style={{fontSize:11, color:'#666', marginTop: 10, fontStyle:'italic'}}>
-             *Please transfer exactly ₹{finalPayableAmount.toFixed(2)} to the account above.
-          </Text>
-        </Card.Content>
-      </Card>
-
-      {/* 4. UPLOAD PROOF */}
-      <Card style={[styles.card, errors.utr && { borderColor: theme.colors.error, borderWidth: 1 }]}>
-        <Card.Title title="Step 2: Upload Proof" subtitle="Verify your payment" left={(props) => <IconButton icon="upload" {...props} />} />
-        <Card.Content>
-          <TextInput
-            label="UTR / Reference Number *"
-            placeholder="e.g. CMS12345678"
-            value={utrNumber}
-            onChangeText={(text) => {
-               setUtrNumber(text);
-               if(text) setErrors(prev => ({...prev, utr: false}));
-            }}
-            mode="outlined"
-            style={{marginBottom: 5, backgroundColor:'white'}}
-            activeOutlineColor={theme.colors.primary}
-            error={errors.utr}
-          />
-          <HelperText type="error" visible={errors.utr}>
-            Transaction ID (UTR) is required.
-          </HelperText>
-
-          <Text style={{fontWeight:'bold', marginBottom: 10, marginTop: 5}}>Payment Screenshot (Optional)</Text>
-          <View style={{flexDirection:'row', alignItems:'center'}}>
-            <Button mode="outlined" icon="camera" onPress={pickImage}>
-              {screenshotUri ? 'Change Image' : 'Select Image'}
-            </Button>
-            {screenshotUri && (
-              <Image source={{ uri: screenshotUri }} style={{ width: 50, height: 50, borderRadius: 4, marginLeft: 15 }} />
-            )}
-          </View>
-        </Card.Content>
-      </Card>
-
-      {/* 5. SUBMIT BUTTON */}
+      {/* 3. SUBMIT BUTTON */}
       <Button 
         mode="contained" 
         onPress={handlePlaceOrder} 
@@ -421,26 +311,13 @@ export default function CheckoutScreen() {
         disabled={loading}
         style={{backgroundColor: theme.colors.primary, marginTop: 10, marginBottom: 30}} 
         contentStyle={{height: 50}}
-        icon="check-circle"
+        icon="shield-check"
       >
-        {uploading ? 'Uploading Proof...' : 'Place Order'}
+        {loading ? 'Processing...' : 'Pay Securely'}
       </Button>
-
     </ScrollView>
   );
 }
-
-const DetailRow = ({ label, value, onCopy }: any) => (
-  <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 8, alignItems:'center'}}>
-    <View style={{flex:1}}>
-      <Text style={{fontSize:12, color:'#666'}}>{label}</Text>
-      <Text style={{fontWeight:'bold', fontSize:15}}>{value}</Text>
-    </View>
-    {onCopy && (
-      <IconButton icon="content-copy" size={18} onPress={onCopy} />
-    )}
-  </View>
-);
 
 const styles = StyleSheet.create({
   container: { padding: 16, backgroundColor: '#F8FAFC', flexGrow: 1 },
