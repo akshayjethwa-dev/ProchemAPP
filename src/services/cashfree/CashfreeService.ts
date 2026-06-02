@@ -1,3 +1,4 @@
+// src/services/cashfree/CashfreeService.ts
 import { CFPaymentGatewayService } from 'react-native-cashfree-pg-sdk';
 import { CFDropCheckoutPayment, CFEnvironment, CFSession, CFThemeBuilder } from 'cashfree-pg-api-contract';
 
@@ -20,7 +21,7 @@ export const startCashfreePayment = async (
     const session = new CFSession(
       paymentSessionId,
       orderId,
-      CFEnvironment.SANDBOX // Change to PRODUCTION for live
+      CFEnvironment.PRODUCTION // ✅ Changed to PRODUCTION for live
     );
 
     const cfTheme = new CFThemeBuilder()

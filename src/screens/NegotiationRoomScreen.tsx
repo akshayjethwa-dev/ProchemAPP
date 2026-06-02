@@ -52,7 +52,16 @@ export default function NegotiationRoomScreen() {
 
     const setupConversation = async () => {
       try {
-        const q = query(collection(db, 'conversations'), where('rfqId', '==', activeRfq.id));
+        // ✅ FIX FOR ERROR 2: Explicitly include the user's ID in the query to satisfy Firestore security rules
+        let q;
+        if (isAdminView) {
+          q = query(collection(db, 'conversations'), where('rfqId', '==', activeRfq.id));
+        } else if (viewMode === 'buyer') {
+          q = query(collection(db, 'conversations'), where('rfqId', '==', activeRfq.id), where('buyerUserId', '==', user.uid));
+        } else {
+          q = query(collection(db, 'conversations'), where('rfqId', '==', activeRfq.id), where('sellerUserId', '==', user.uid));
+        }
+
         const snap = await getDocs(q);
         
         if (!snap.empty) {
@@ -74,7 +83,7 @@ export default function NegotiationRoomScreen() {
     };
 
     setupConversation();
-  }, [activeRfq, user, conversationId, isAdminView]);
+  }, [activeRfq, user, conversationId, isAdminView, viewMode]);
 
   // Subscribe to new message subcollection
   useEffect(() => {
@@ -262,7 +271,6 @@ export default function NegotiationRoomScreen() {
     setIsProcessing(true);
     try {
       if (conversationId) {
-        // 🚀 TASK 5.5: Close conversation due to success
         await updateDoc(doc(db, 'conversations', conversationId), {
           status: 'won',
           updatedAt: Date.now()
@@ -348,7 +356,6 @@ export default function NegotiationRoomScreen() {
     ]);
   };
 
-  // 🚀 TASK 5.5: Manual Close Action
   const closeNegotiation = async () => {
     Alert.alert(
       "End Negotiation",
@@ -493,7 +500,6 @@ export default function NegotiationRoomScreen() {
            </Text>
         </Chip>
 
-        {/* 🚀 TASK 5.5: Close Chat Icon in Header */}
         {!isAdminView && activeRfq?.status !== 'CONVERTED' && activeRfq?.status !== 'REJECTED' && (
           <IconButton 
             icon="close-circle-outline" 

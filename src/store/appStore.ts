@@ -18,6 +18,9 @@ interface AppState {
   originalAdminUser: User | null;
 
   setUser: (user: User | null) => void;
+  // 👇 ADD THIS NEW METHOD
+  updateUser: (updates: Partial<User>) => void;
+  
   setProducts: (products: Product[]) => void;
   addToCart: (item: CartItem) => void;
   removeFromCart: (id: string) => void;
@@ -39,8 +42,6 @@ interface AppState {
   stopImpersonating: () => void;
 
   upgradeUserToPremium: (expiryDate: string | Date, paymentRef: string) => void;
-  
-  // 🚀 THIS FIXES THE ERROR: Explicitly declaring the function in the AppState interface
   updateUserCredits: (updates: Partial<User>) => void;
 }
 
@@ -60,6 +61,13 @@ export const useAppStore = create<AppState>()(
       hasSeenOnboarding: false,
 
       setUser: (user) => set({ user }),
+      
+      // 👇 IMPLEMENT THE NEW METHOD HERE
+      updateUser: (updates) => set((state) => {
+        if (!state.user) return state;
+        return { user: { ...state.user, ...updates } };
+      }),
+
       setProducts: (products) => set({ products }),
       
       addToCart: (item) => set((state) => {
@@ -127,7 +135,6 @@ export const useAppStore = create<AppState>()(
         };
       }),
 
-      // 🚀 The implementation of the function
       updateUserCredits: (updates) => set((state) => {
         if (!state.user) return state;
         return { user: { ...state.user, ...updates } };

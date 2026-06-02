@@ -11,7 +11,7 @@ export const startCashfreePayment = async (
 ) => {
   try {
     const cashfree = await load({
-      mode: "sandbox" // Change to "production" for live
+      mode: "production" // ✅ Changed to "production" for live
     });
 
     if (!cashfree) {

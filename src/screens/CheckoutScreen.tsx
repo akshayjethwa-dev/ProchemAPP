@@ -5,6 +5,9 @@ import { View, ScrollView, StyleSheet, Alert, BackHandler, ActivityIndicator } f
 import { Text, Card, Button, Divider, IconButton, useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native'; 
 import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
+
+// ✅ FIX 1: Import getApp to use with getFunctions
+import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { useAppStore } from '../store/appStore';
@@ -197,15 +200,23 @@ export default function CheckoutScreen() {
       } as any);
 
       // 2. Call backend to get Cashfree session
-      const functions = getFunctions();
+      // ✅ FIX 2: Added `asia-south1` region
+      const app = getApp();
+      const functions = getFunctions(app, 'asia-south1');
       const createCashfreeOrderFn = httpsCallable(functions, 'createCashfreeOrder');
+      
+      // ✅ FIX 3: SANITIZE PHONE NUMBER TO PREVENT CASHFREE 500 ERROR
+      let safePhone = user?.phoneNumber || user?.phone || "9876543210";
+      safePhone = safePhone.replace(/[^0-9]/g, ''); // Remove all non-numeric chars (like +)
+      if (safePhone.length > 10) safePhone = safePhone.slice(-10); // Keep last 10 digits
+      if (safePhone.length < 10) safePhone = "9876543210"; // Fallback if malformed
       
       const response: any = await createCashfreeOrderFn({
         amount: finalPayableAmount.toFixed(2),
         type: 'product',
         referenceId: orderId,
         customerDetails: {
-          phone: user?.phoneNumber || "9999999999", 
+          phone: safePhone, // Passed the sanitized phone
           email: user?.email || "buyer@prochem.com",
           name: user?.companyName || user?.businessName || "Prochem Buyer"
         }

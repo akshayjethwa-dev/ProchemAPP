@@ -1,9 +1,11 @@
+// src/screens/NegotiationsListScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Text, Avatar, IconButton, Chip, useTheme, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore'; 
+// REMOVED orderBy FROM IMPORTS TO PREVENT THE INDEX ERROR
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { RFQ } from '../types';
@@ -16,35 +18,36 @@ export default function NegotiationsListScreen() {
   const { user, viewMode } = useAppStore();
   const isBuyer = viewMode === 'buyer';
 
-  // ✅ FIXED: Native check for admin or sub_admin alongside the route parameter
   const isAdminView = route.params?.isAdminView || user?.userType === 'admin' || user?.userType === 'sub_admin';
 
-  // REAL-TIME STATE
   const [rfqsList, setRfqsList] = useState<RFQ[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ATTACH FIREBASE LISTENER
   useEffect(() => {
     if (!user && !isAdminView) return;
 
     let q;
     if (isAdminView) {
-      // ✅ ADMIN MODE: Fetch all negotiations from everyone
-      q = query(
-        collection(db, 'rfqs'),
-        orderBy('updatedAt', 'desc')
-      );
+      // ✅ ADMIN MODE: Fetch all without orderBy to avoid index error
+      q = query(collection(db, 'rfqs'));
     } else {
-      // USER MODE: Fetch only my negotiations
+      // ✅ USER MODE: Fetch by user ID without orderBy
       q = query(
         collection(db, 'rfqs'),
-        where(isBuyer ? 'buyerId' : 'sellerId', '==', user?.uid),
-        orderBy('updatedAt', 'desc')
+        where(isBuyer ? 'buyerId' : 'sellerId', '==', user?.uid)
       );
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RFQ));
+      
+      // ✅ FIX FOR ERROR 1: Sort the data on the client side instead of Firebase
+      data.sort((a, b) => {
+        const timeA = new Date(a.updatedAt).getTime() || 0;
+        const timeB = new Date(b.updatedAt).getTime() || 0;
+        return timeB - timeA; // Descending order (newest first)
+      });
+      
       setRfqsList(data);
       setLoading(false);
     }, (error) => {

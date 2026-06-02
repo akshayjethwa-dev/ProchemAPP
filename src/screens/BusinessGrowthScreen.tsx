@@ -14,7 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-  collection, query, where, onSnapshot, addDoc, serverTimestamp
+  collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, updateDoc
 } from 'firebase/firestore';
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -403,9 +403,26 @@ function UpgradePaymentModal({
         paymentSessionId,
         orderId,
         async (verifiedId) => {
-          Alert.alert('Payment Successful! 🎉', 'Your account has been upgraded. Please refresh the app.');
-          setIsProcessing(false);
-          onClose();
+          try {
+            // 1. Optimistic Database Update (Fallback if webhook is delayed)
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+              subscriptionTier: 'GROWTH_PACKAGE',
+              updatedAt: serverTimestamp()
+            });
+      
+            // 2. Update Local Zustand State (so the UI flips to Premium immediately)
+            useAppStore.getState().updateUser({ subscriptionTier: 'GROWTH_PACKAGE' });
+      
+            Alert.alert('Payment Successful! 🎉', 'Welcome to the Premium Hub. Your features are now unlocked!');
+            setIsProcessing(false);
+            onClose();
+          } catch (err) {
+            console.error("Failed to update user status:", err);
+            Alert.alert('Payment processing', 'Payment succeeded. Your account will be upgraded momentarily.');
+            setIsProcessing(false);
+            onClose();
+          }
         },
         (error) => {
           console.error("Payment Error:", error);
