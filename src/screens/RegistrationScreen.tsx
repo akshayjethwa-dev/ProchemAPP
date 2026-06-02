@@ -225,13 +225,15 @@ export default function RegistrationScreen() {
                   resizeMode="contain"
                 />
                 <Text style={styles.headerTitle}>Create Account</Text>
-                <Text style={styles.headerSubtitle}>Join Prochem and grow your business today.</Text>
+                <Text style={styles.headerSubtitle}>Buy, Sell & Source Chemicals across India</Text>
               </View>
             </SafeAreaView>
           </View>
 
           {/* Floating Form Card */}
           <View style={styles.formCard}>
+
+            <Text style={styles.cardSubtitle}>Join Prochem and grow your business today.</Text>
             
             {/* 3. Full Name */}
             <TextInput
@@ -566,6 +568,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#E0E7FF', // Light blue text so it's readable
     textAlign: 'center',
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 24,
+    lineHeight: 20,
   },
   formCard: {
     backgroundColor: '#FFFFFF',

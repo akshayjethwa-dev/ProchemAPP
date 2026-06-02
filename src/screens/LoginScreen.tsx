@@ -139,7 +139,7 @@ export default function LoginScreen() {
                   style={styles.headerLogo}
                   resizeMode="contain"
                 />
-                <Text style={styles.taglineText}>Industrial chemicals and supply solutions</Text>
+                <Text style={styles.taglineText}>India's Trusted Chemical Marketplace</Text>
                 
                 {/* 2. Welcome Back & Glad to see you again */}
                 <View style={styles.welcomeContainer}>
