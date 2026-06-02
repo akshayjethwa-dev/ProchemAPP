@@ -24,6 +24,7 @@
     "buffer": "^6.0.3",
     "cashfree-pg-api-contract": "^2.1.1",
     "expo": "~54.0.31",
+    "expo-checkbox": "~5.0.8",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",

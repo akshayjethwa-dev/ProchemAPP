@@ -8,7 +8,8 @@ import {
   Alert,
   ScrollView,
   Dimensions,
-  Image
+  Image,
+  StatusBar
 } from 'react-native';
 import { Text, TextInput, Button, useTheme, HelperText } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -116,10 +118,10 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.mainContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
@@ -127,25 +129,34 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Curved Header Section */}
+          {/* Stunning Background Header */}
           <View style={styles.headerBackground}>
             <SafeAreaView edges={['top']}>
               <View style={styles.headerContent}>
+                {/* 1. Prochem Logo & Tagline */}
                 <Image 
-  source={require('../../assets/logo.png')} 
-  style={styles.headerLogo}
-  resizeMode="contain"
-/>
-                <Text style={styles.headerTitle}>Welcome Back,</Text>
-                <Text style={styles.headerSubtitle}>Sign in to your Prochem account!</Text>
+                  source={require('../../assets/logo.png')} 
+                  style={styles.headerLogo}
+                  resizeMode="contain"
+                />
+                <Text style={styles.taglineText}>Industrial chemicals and supply solutions</Text>
+                
+                {/* 2. Welcome Back & Glad to see you again */}
+                <View style={styles.welcomeContainer}>
+                  <Text style={styles.welcomeSmallText}>Welcome back,</Text>
+                  <Text style={styles.welcomeBigText}>Glad to see you again!</Text>
+                </View>
               </View>
             </SafeAreaView>
           </View>
 
-          {/* Overlapping Form Card */}
+          {/* Floating Form Card */}
           <View style={styles.formCard}>
-            <Text style={styles.cardTitle}>Glad to see you again!</Text>
             
+            {/* 2. Sign in subtitle */}
+            <Text style={styles.cardSubtitle}>Sign in to continue to your business account.</Text>
+            
+            {/* 3. Email Input */}
             <TextInput
               label="Email Address"
               value={email}
@@ -158,11 +169,12 @@ export default function LoginScreen() {
               autoCapitalize="none"
               style={styles.input}
               outlineStyle={styles.inputOutline}
-              textColor="#1E293B"
-              left={<TextInput.Icon icon="email-outline" color="#94A3B8" />}
+              textColor="#0F172A"
+              left={<TextInput.Icon icon="email-outline" color="#64748B" />}
               error={loginError.includes('email') || loginError.includes('Account')}
             />
 
+            {/* 4. Password Input */}
             <View style={styles.passwordContainer}>
               <TextInput
                 label="Password"
@@ -175,15 +187,15 @@ export default function LoginScreen() {
                 secureTextEntry={secureTextEntry}
                 style={styles.input}
                 outlineStyle={styles.inputOutline}
-                textColor="#1E293B"
-                left={<TextInput.Icon icon="lock-outline" color="#94A3B8" />}
+                textColor="#0F172A"
+                left={<TextInput.Icon icon="lock-outline" color="#64748B" />}
                 error={loginError.includes('password') || loginError.includes('Incorrect') || loginError.includes('Invalid')}
                 right={
                   <TextInput.Icon
                     icon={secureTextEntry ? 'eye-off' : 'eye'}
                     onPress={() => setSecureTextEntry(!secureTextEntry)}
                     forceTextInputFocus={false}
-                    color="#94A3B8"
+                    color="#64748B"
                   />
                 }
               />
@@ -195,24 +207,35 @@ export default function LoginScreen() {
               </HelperText>
             ) : null}
 
-            {/* Forgot Password Button */}
+            {/* 5. Forgot Password */}
             <TouchableOpacity style={styles.forgotPass} onPress={handleForgotPassword}>
               <Text style={styles.forgotPassText}>
-                {resetLoading ? 'Sending...' : 'Forgot Password?'}
+                {resetLoading ? 'Sending link...' : 'Forgot Password?'}
               </Text>
             </TouchableOpacity>
 
+            {/* 6. Login Button with Arrow */}
             <Button
               mode="contained"
               onPress={handleLogin}
               loading={loading}
               disabled={loading}
+              icon="arrow-right" // Adds the arrow
               style={styles.loginBtn}
-              contentStyle={styles.loginBtnContent}
+              contentStyle={styles.loginBtnContent} // flex-direction: row-reverse puts arrow on right
               labelStyle={styles.loginBtnLabel}
             >
-              Sign In
+              Login
             </Button>
+
+            {/* 7. Security Banner */}
+            <View style={styles.safetyBanner}>
+              <MaterialCommunityIcons name="shield-lock-outline" size={24} color="#059669" style={{ marginTop: 2 }} />
+              <View style={styles.safetyTextContainer}>
+                <Text style={styles.safetyTitle}>Your security is our priority</Text>
+                <Text style={styles.safetySubtext}>We use industry-standard encryption to protect your data.</Text>
+              </View>
+            </View>
 
             {/* Divider */}
             <View style={styles.dividerContainer}>
@@ -221,13 +244,42 @@ export default function LoginScreen() {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Footer Section */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Registration')}>
-                <Text style={styles.link}>Sign Up</Text>
-              </TouchableOpacity>
+            {/* 8. Register Section */}
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>New to Prochem?</Text>
+              <Button 
+                mode="outlined" 
+                onPress={() => navigation.navigate('Registration')}
+                style={styles.registerBtn}
+                labelStyle={styles.registerBtnLabel}
+                textColor="#2563EB"
+              >
+                Create your account
+              </Button>
             </View>
+
+            {/* 9. App Features / Marketing */}
+            <View style={styles.featuresContainer}>
+              <View style={styles.featureItem}>
+                <View style={styles.featureIconBox}>
+                  <MaterialCommunityIcons name="lock-outline" size={22} color="#2563EB" />
+                </View>
+                <Text style={styles.featureText}>Secure</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <View style={styles.featureIconBox}>
+                  <MaterialCommunityIcons name="headset" size={22} color="#2563EB" />
+                </View>
+                <Text style={styles.featureText}>24/7 Support</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <View style={styles.featureIconBox}>
+                  <MaterialCommunityIcons name="handshake-outline" size={22} color="#2563EB" />
+                </View>
+                <Text style={styles.featureText}>B2B Network</Text>
+              </View>
+            </View>
+
           </View>
 
           {/* Bottom spacing for scroll */}
@@ -242,7 +294,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   mainContainer: { 
     flex: 1, 
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F1F5F9', // Soft slate background
   },
   keyboardView: {
     flex: 1,
@@ -251,82 +303,74 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   headerBackground: {
-    backgroundColor: '#004AAD',
+    backgroundColor: '#2563EB', // Vibrant Blue Header
+    paddingBottom: 70, // Extra padding to allow the card to overlap
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
-    paddingBottom: 60, // Extra padding to allow the card to overlap
-    shadowColor: '#004AAD',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 10,
   },
   headerContent: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 30,
+    paddingTop: 10,
+    paddingBottom: 20,
   },
-  logoBox: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+  headerLogo: {
+    width: 160,
+    height: 60,
+    marginBottom: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF', // Helps logo pop against blue
   },
-  logoText: { 
-    fontSize: 32, 
-    color: '#004AAD', 
-    fontWeight: '900' 
+  taglineText: {
+    fontSize: 13,
+    color: '#E0E7FF',
+    fontWeight: '500',
+    marginBottom: 30,
+    letterSpacing: 0.5,
   },
-  headerTitle: {
-    fontSize: 32,
+  welcomeContainer: {
+    width: '100%',
+    alignItems: 'flex-start',
+  },
+  welcomeSmallText: {
+    fontSize: 16,
+    color: '#BFDBFE',
+    marginBottom: 4,
+  },
+  welcomeBigText: {
+    fontSize: 30,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#E2E8F0',
-    textAlign: 'center',
   },
   formCard: {
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 24,
+    marginHorizontal: 16,
     marginTop: -40, // Pulls the card up over the blue header
     borderRadius: 24,
     padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
     elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1E293B',
-    marginBottom: 8,
-    textAlign: 'left',
+  cardSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 24,
+    lineHeight: 20,
   },
   input: { 
-    backgroundColor: '#F1F5F9', // Light gray background for input
-    fontSize: 16,
+    backgroundColor: '#F8FAFC', 
+    fontSize: 15,
   },
   inputOutline: {
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'transparent', // Borderless look, relies on background color
+    borderColor: '#E2E8F0',
   },
   passwordContainer: {
-    marginTop: 12,
+    marginTop: 16,
   },
   errorText: {
     paddingHorizontal: 0,
@@ -335,30 +379,56 @@ const styles = StyleSheet.create({
   },
   forgotPass: { 
     alignSelf: 'flex-end', 
-    marginTop: 16,
+    marginTop: 12,
     marginBottom: 24,
   },
   forgotPassText: {
-    color: '#004AAD',
+    color: '#2563EB',
     fontWeight: '600',
     fontSize: 14,
   },
   loginBtn: { 
-    borderRadius: 14, 
-    backgroundColor: '#004AAD',
-    shadowColor: '#004AAD',
+    borderRadius: 12, 
+    backgroundColor: '#2563EB',
+    elevation: 4,
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 5,
   },
   loginBtnContent: { 
-    paddingVertical: 12,
+    paddingVertical: 10,
+    flexDirection: 'row-reverse', // Puts the arrow on the right side
   },
   loginBtnLabel: {
     fontSize: 16,
     fontWeight: 'bold',
     letterSpacing: 0.5,
+  },
+  safetyBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#ECFDF5',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: '#D1FAE5'
+  },
+  safetyTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  safetyTitle: {
+    color: '#065F46',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  safetySubtext: {
+    color: '#059669',
+    fontSize: 12,
+    lineHeight: 18,
   },
   dividerContainer: {
     flexDirection: 'row',
@@ -376,26 +446,53 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 12,
   },
-  footer: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
+  registerContainer: {
     alignItems: 'center',
+    marginBottom: 10,
   },
-  footerText: {
+  registerText: {
     color: '#64748B',
-    fontSize: 15,
+    fontSize: 14,
+    marginBottom: 12,
   },
-  link: { 
+  registerBtn: {
+    width: '100%',
+    borderRadius: 12,
+    borderColor: '#2563EB',
+    borderWidth: 1.5,
+  },
+  registerBtnLabel: {
+    fontSize: 15,
     fontWeight: 'bold',
-    fontSize: 15,
-    color: '#004AAD',
+    paddingVertical: 4,
   },
-  headerLogo: {
-  width: 190,
-  height: 100,
-  marginBottom: 16,
-  borderRadius: 20, // Optional: if your logo looks better rounded
-},
+  featuresContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 24,
+    marginTop: 24,
+  },
+  featureItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  featureIconBox: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  featureText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   bottomSpacer: {
     height: 40,
   }

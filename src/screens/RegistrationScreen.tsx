@@ -8,6 +8,8 @@ import {
   Platform,
   TouchableOpacity,
   Dimensions,
+  Image,
+  StatusBar,
 } from 'react-native';
 import {
   Text,
@@ -21,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { registerUser } from '../services/authService';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -43,12 +46,16 @@ export default function RegistrationScreen() {
   const [loading, setLoading] = useState(false);
 
   // Form State
+  const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
+  const [countryCode, setCountryCode] = useState('+91');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [password, setPassword] = useState('');
   const [gstin, setGstin] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
+  const [secureConfirmTextEntry, setSecureConfirmTextEntry] = useState(true);
 
   // Terms & Conditions & Opt-ins
   const [acceptTerms, setAcceptTerms] = useState(false);
@@ -56,13 +63,23 @@ export default function RegistrationScreen() {
 
   // Error States
   const [errors, setErrors] = useState({
+    fullName: '',
     companyName: '',
     email: '',
     phoneNumber: '',
-    password: '',
     gstin: '',
+    password: '',
+    confirmPassword: '',
     terms: '',
   });
+
+  // Real-time password validation variables
+  const hasMinLength = password.length >= 8;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  const isPasswordValid = hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial;
 
   const showAlert = (title: string, message: string, onOk?: () => void) => {
     if (Platform.OS === 'web') {
@@ -76,14 +93,20 @@ export default function RegistrationScreen() {
   const validate = () => {
     let isValid = true;
     let newErrors = {
+      fullName: '',
       companyName: '',
       email: '',
       phoneNumber: '',
-      password: '',
       gstin: '',
+      password: '',
+      confirmPassword: '',
       terms: '',
     };
 
+    if (!fullName.trim()) {
+      newErrors.fullName = 'Full Name is required';
+      isValid = false;
+    }
     if (!companyName.trim()) {
       newErrors.companyName = 'Company Name is required';
       isValid = false;
@@ -92,20 +115,43 @@ export default function RegistrationScreen() {
       newErrors.email = 'Valid Email is required';
       isValid = false;
     }
-    if (!phoneNumber.trim() || phoneNumber.length < 10) {
-      newErrors.phoneNumber = 'Valid 10-digit Phone Number is required';
+    if (!countryCode.trim()) {
+      newErrors.phoneNumber = 'Country Code is required';
+      isValid = false;
+    } else if (!phoneNumber.trim() || phoneNumber.length < 5) {
+      newErrors.phoneNumber = 'Valid Phone Number is required';
       isValid = false;
     }
-    if (!password || password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+    
+    // STRICT GSTIN VALIDATION
+    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$/;
+    if (!gstin) {
+      newErrors.gstin = 'GST Number is required';
+      isValid = false;
+    } else if (!gstRegex.test(gstin)) {
+      newErrors.gstin = 'Invalid GST format (e.g., 22AAAAA0000A1Z5)';
       isValid = false;
     }
-    if (!gstin || gstin.length !== 15) {
-      newErrors.gstin = 'Enter a valid 15-digit GST Number';
+
+    // PASSWORD VALIDATION
+    if (!password) {
+      newErrors.password = 'Password is required';
+      isValid = false;
+    } else if (!isPasswordValid) {
+      newErrors.password = 'Please meet all the password requirements listed below.';
       isValid = false;
     }
+
+    if (!confirmPassword) {
+      newErrors.confirmPassword = 'Confirm Password is required';
+      isValid = false;
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+      isValid = false;
+    }
+    
     if (!acceptTerms) {
-      newErrors.terms = 'You must accept the Terms & Conditions';
+      newErrors.terms = 'You must accept the Terms & Conditions and Privacy Policy';
       isValid = false;
     }
 
@@ -124,9 +170,11 @@ export default function RegistrationScreen() {
     setLoading(true);
     try {
       const registrationData: any = {
+        fullName: fullName.trim(),
         email: email.trim(),
         password,
         companyName: companyName.trim(),
+        countryCode: countryCode.trim(),
         phoneNumber: phoneNumber.trim(),
         userType: role || 'buyer',
         gstin: gstin.toUpperCase(),
@@ -156,10 +204,10 @@ export default function RegistrationScreen() {
 
   return (
     <View style={styles.mainContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -167,30 +215,54 @@ export default function RegistrationScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Curved Header Section */}
+          {/* Stunning Background Header */}
           <View style={styles.headerBackground}>
             <SafeAreaView edges={['top']}>
               <View style={styles.headerContent}>
-                <Text style={styles.headerTitle}>Create Your Account</Text>
-                <Text style={styles.headerSubtitle}>Join Prochem and grow your business with us</Text>
+                <Image 
+                  source={require('../../assets/icon.png')} // Fallback if logo is missing
+                  style={styles.logoImage} 
+                  resizeMode="contain"
+                />
+                <Text style={styles.headerTitle}>Create Account</Text>
+                <Text style={styles.headerSubtitle}>Join Prochem and grow your business today.</Text>
               </View>
             </SafeAreaView>
           </View>
 
-          {/* Overlapping Form Card */}
+          {/* Floating Form Card */}
           <View style={styles.formCard}>
-            <Text style={styles.cardTitle}>Sign Up</Text>
             
+            {/* 3. Full Name */}
             <TextInput
-              label="Company Name"
+              label="Full Name *"
+              value={fullName}
+              onChangeText={(text) => {
+                setFullName(text);
+                if (errors.fullName) setErrors({ ...errors, fullName: '' });
+              }}
+              mode="outlined"
+              textColor="#0F172A"
+              left={<TextInput.Icon icon="account-outline" color="#64748B" />}
+              error={!!errors.fullName}
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+            />
+            <HelperText type="error" visible={!!errors.fullName} style={styles.errorText}>
+              {errors.fullName}
+            </HelperText>
+
+            {/* 4. Company Name */}
+            <TextInput
+              label="Company Name *"
               value={companyName}
               onChangeText={(text) => {
                 setCompanyName(text);
                 if (errors.companyName) setErrors({ ...errors, companyName: '' });
               }}
               mode="outlined"
-              textColor="#1E293B"
-              left={<TextInput.Icon icon="office-building" color="#94A3B8" />}
+              textColor="#0F172A"
+              left={<TextInput.Icon icon="office-building" color="#64748B" />}
               error={!!errors.companyName}
               style={styles.input}
               outlineStyle={styles.inputOutline}
@@ -199,28 +271,9 @@ export default function RegistrationScreen() {
               {errors.companyName}
             </HelperText>
 
+            {/* 5. Email */}
             <TextInput
-              label="GST Number (GSTIN)"
-              value={gstin}
-              onChangeText={(text) => {
-                setGstin(text.toUpperCase());
-                if (errors.gstin) setErrors({ ...errors, gstin: '' });
-              }}
-              mode="outlined"
-              maxLength={15}
-              placeholder="22AAAAA0000A1Z5"
-              textColor="#1E293B"
-              left={<TextInput.Icon icon="certificate" color="#94A3B8" />}
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              error={!!errors.gstin}
-            />
-            <HelperText type={errors.gstin ? "error" : "info"} visible={true} style={styles.errorText}>
-              {errors.gstin || "Enter your 15-digit GSTIN for verification."}
-            </HelperText>
-
-            <TextInput
-              label="Email Address"
+              label="Email Address *"
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
@@ -229,8 +282,8 @@ export default function RegistrationScreen() {
               mode="outlined"
               keyboardType="email-address"
               autoCapitalize="none"
-              textColor="#1E293B"
-              left={<TextInput.Icon icon="email-outline" color="#94A3B8" />}
+              textColor="#0F172A"
+              left={<TextInput.Icon icon="email-outline" color="#64748B" />}
               error={!!errors.email}
               style={styles.input}
               outlineStyle={styles.inputOutline}
@@ -239,28 +292,71 @@ export default function RegistrationScreen() {
               {errors.email}
             </HelperText>
 
-            <TextInput
-              label="Phone Number"
-              value={phoneNumber}
-              onChangeText={(text) => {
-                setPhoneNumber(text.replace(/[^0-9]/g, ''));
-                if (errors.phoneNumber) setErrors({ ...errors, phoneNumber: '' });
-              }}
-              mode="outlined"
-              keyboardType="phone-pad"
-              maxLength={10}
-              textColor="#1E293B"
-              left={<TextInput.Icon icon="phone" color="#94A3B8" />}
-              error={!!errors.phoneNumber}
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-            />
-            <HelperText type="error" visible={!!errors.phoneNumber} style={styles.errorText}>
+            {/* 6. Mobile with Manual Country Code */}
+            <View style={styles.phoneRowContainer}>
+              <View style={styles.countryCodeInputContainer}>
+                <TextInput
+                  label="Code *"
+                  value={countryCode}
+                  onChangeText={(text) => {
+                    setCountryCode(text);
+                    if (errors.phoneNumber) setErrors({ ...errors, phoneNumber: '' });
+                  }}
+                  mode="outlined"
+                  keyboardType="phone-pad"
+                  maxLength={5}
+                  textColor="#0F172A"
+                  style={styles.input}
+                  outlineStyle={styles.inputOutline}
+                />
+              </View>
+              
+              <View style={styles.phoneInputBox}>
+                <TextInput
+                  label="Mobile Number *"
+                  value={phoneNumber}
+                  onChangeText={(text) => {
+                    setPhoneNumber(text.replace(/[^0-9]/g, ''));
+                    if (errors.phoneNumber) setErrors({ ...errors, phoneNumber: '' });
+                  }}
+                  mode="outlined"
+                  keyboardType="phone-pad"
+                  maxLength={15}
+                  textColor="#0F172A"
+                  error={!!errors.phoneNumber}
+                  style={styles.input}
+                  outlineStyle={styles.inputOutline}
+                />
+              </View>
+            </View>
+            <HelperText type="error" visible={!!errors.phoneNumber} style={[styles.errorText, { marginTop: -10 }]}>
               {errors.phoneNumber}
             </HelperText>
 
+            {/* 7. GST Number */}
             <TextInput
-              label="Password"
+              label="GST Number *"
+              value={gstin}
+              onChangeText={(text) => {
+                setGstin(text.toUpperCase());
+                if (errors.gstin) setErrors({ ...errors, gstin: '' });
+              }}
+              mode="outlined"
+              maxLength={15}
+              placeholder="e.g. 22AAAAA0000A1Z5"
+              textColor="#0F172A"
+              left={<TextInput.Icon icon="certificate-outline" color="#64748B" />}
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              error={!!errors.gstin}
+            />
+            <HelperText type={errors.gstin ? "error" : "info"} visible={true} style={styles.errorText}>
+              {errors.gstin || "Admin will manually verify this GSTIN."}
+            </HelperText>
+
+            {/* 8. Password */}
+            <TextInput
+              label="Password *"
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
@@ -268,13 +364,13 @@ export default function RegistrationScreen() {
               }}
               mode="outlined"
               secureTextEntry={secureTextEntry}
-              textColor="#1E293B"
-              left={<TextInput.Icon icon="lock-outline" color="#94A3B8" />}
+              textColor="#0F172A"
+              left={<TextInput.Icon icon="lock-outline" color="#64748B" />}
               right={
                 <TextInput.Icon
                   icon={secureTextEntry ? 'eye-off' : 'eye'}
                   onPress={() => setSecureTextEntry(!secureTextEntry)}
-                  color="#94A3B8"
+                  color="#64748B"
                   forceTextInputFocus={false}
                 />
               }
@@ -282,23 +378,76 @@ export default function RegistrationScreen() {
               style={styles.input}
               outlineStyle={styles.inputOutline}
             />
-            <HelperText type="error" visible={!!errors.password} style={styles.errorText}>
+            
+            {/* REAL-TIME PASSWORD CHECKLIST */}
+            {password.length > 0 && !isPasswordValid && (
+              <View style={styles.passwordRulesContainer}>
+                <Text style={[styles.ruleText, hasMinLength ? styles.ruleMet : styles.ruleUnmet]}>
+                  <MaterialCommunityIcons name={hasMinLength ? "check-circle" : "close-circle"} size={14} /> At least 8 characters
+                </Text>
+                <Text style={[styles.ruleText, hasUpper && hasLower ? styles.ruleMet : styles.ruleUnmet]}>
+                  <MaterialCommunityIcons name={hasUpper && hasLower ? "check-circle" : "close-circle"} size={14} /> Both uppercase & lowercase letters
+                </Text>
+                <Text style={[styles.ruleText, hasNumber ? styles.ruleMet : styles.ruleUnmet]}>
+                  <MaterialCommunityIcons name={hasNumber ? "check-circle" : "close-circle"} size={14} /> At least one number (0-9)
+                </Text>
+                <Text style={[styles.ruleText, hasSpecial ? styles.ruleMet : styles.ruleUnmet]}>
+                  <MaterialCommunityIcons name={hasSpecial ? "check-circle" : "close-circle"} size={14} /> At least one special character (@$!%*?&)
+                </Text>
+              </View>
+            )}
+
+            <HelperText type="error" visible={!!errors.password} style={[styles.errorText, { paddingHorizontal: 4 }]}>
               {errors.password}
             </HelperText>
+
+            {/* 9. Confirm Password */}
+            <TextInput
+              label="Confirm Password *"
+              value={confirmPassword}
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
+              }}
+              mode="outlined"
+              secureTextEntry={secureConfirmTextEntry}
+              textColor="#0F172A"
+              left={<TextInput.Icon icon="lock-check-outline" color="#64748B" />}
+              right={
+                <TextInput.Icon
+                  icon={secureConfirmTextEntry ? 'eye-off' : 'eye'}
+                  onPress={() => setSecureConfirmTextEntry(!secureConfirmTextEntry)}
+                  color="#64748B"
+                  forceTextInputFocus={false}
+                />
+              }
+              error={!!errors.confirmPassword}
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+            />
+            <HelperText type="error" visible={!!errors.confirmPassword} style={styles.errorText}>
+              {errors.confirmPassword}
+            </HelperText>
+
+            {/* 10. Data Safety Banner */}
+            <View style={styles.safetyBanner}>
+              <MaterialCommunityIcons name="shield-check" size={20} color="#059669" />
+              <Text style={styles.safetyText}>Your data is 100% safe and encrypted with us.</Text>
+            </View>
 
             {/* WHATSAPP OPT-IN CHECKBOX */}
             <View style={styles.optInContainer}>
               <Checkbox.Android
                 status={whatsappOptIn ? 'checked' : 'unchecked'}
                 onPress={() => setWhatsappOptIn(!whatsappOptIn)}
-                color="#25D366" // WhatsApp Green
+                color="#25D366" 
               />
               <Text style={styles.optInText}>
-                Receive order updates and market alerts on WhatsApp from Prochem.
+                Get order updates and alerts on WhatsApp.
               </Text>
             </View>
 
-            {/* TERMS CHECKBOX */}
+            {/* 11. TERMS AND PRIVACY CHECKBOX */}
             <View style={styles.termsContainer}>
               <Checkbox.Android
                 status={acceptTerms ? 'checked' : 'unchecked'}
@@ -306,14 +455,16 @@ export default function RegistrationScreen() {
                   setAcceptTerms(!acceptTerms);
                   setErrors({ ...errors, terms: '' });
                 }}
-                color="#004AAD"
+                color="#2563EB"
               />
               <View style={styles.termsTextWrap}>
-                <Text style={{ color: '#64748B', fontSize: 13 }}>I accept the </Text>
+                <Text style={{ color: '#64748B', fontSize: 13, lineHeight: 20 }}>I agree to the </Text>
                 <TouchableOpacity onPress={openTerms}>
-                  <Text style={styles.termsLink}>
-                    Terms and Conditions
-                  </Text>
+                  <Text style={styles.termsLink}>Terms & Conditions</Text>
+                </TouchableOpacity>
+                <Text style={{ color: '#64748B', fontSize: 13, lineHeight: 20 }}> and </Text>
+                <TouchableOpacity onPress={openTerms}>
+                  <Text style={styles.termsLink}>Privacy Policy</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -324,48 +475,51 @@ export default function RegistrationScreen() {
               </HelperText>
             ) : null}
 
+            {/* 12. Submit Button */}
             <Button
               mode="contained"
               onPress={handleRegister}
               loading={loading}
-              disabled={loading}
-              style={styles.btn}
+              disabled={loading || !acceptTerms}
+              style={[styles.btn, !acceptTerms && { backgroundColor: '#94A3B8' }]}
               contentStyle={styles.btnContent}
               labelStyle={styles.btnLabel}
             >
               Create Account
             </Button>
 
-            <Button 
-              mode="outlined" 
-              icon="information-outline" 
-              onPress={() => navigation.navigate('AboutProchem')} 
-              style={styles.infoBtn}
-              contentStyle={styles.infoBtnContent}
-              labelStyle={{ fontSize: 15, fontWeight: '600' }}
-              textColor="#004AAD"
-            >
-              What is Prochem?
-            </Button>
-
-            {/* Divider */}
-            <View style={styles.dividerContainer}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Footer Section */}
+            {/* 13. Login Link */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>Already have an account? </Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                <Text style={styles.footerLink}>Login</Text>
+                <Text style={styles.footerLink}>Log in</Text>
               </TouchableOpacity>
             </View>
+
+            {/* 14. App Features */}
+            <View style={styles.featuresContainer}>
+              <View style={styles.featureItem}>
+                <View style={styles.featureIconBox}>
+                  <MaterialCommunityIcons name="lock-outline" size={22} color="#2563EB" />
+                </View>
+                <Text style={styles.featureText}>Secure</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <View style={styles.featureIconBox}>
+                  <MaterialCommunityIcons name="headset" size={22} color="#2563EB" />
+                </View>
+                <Text style={styles.featureText}>Support</Text>
+              </View>
+              <View style={styles.featureItem}>
+                <View style={styles.featureIconBox}>
+                  <MaterialCommunityIcons name="handshake-outline" size={22} color="#2563EB" />
+                </View>
+                <Text style={styles.featureText}>B2B Net</Text>
+              </View>
+            </View>
+
           </View>
-
           <View style={styles.bottomSpacer} />
-
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -375,7 +529,7 @@ export default function RegistrationScreen() {
 const styles = StyleSheet.create({
   mainContainer: { 
     flex: 1, 
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F1F5F9', // Changed to soft slate background to make the white card pop
   },
   keyboardView: {
     flex: 1,
@@ -384,151 +538,167 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   headerBackground: {
-    backgroundColor: '#004AAD',
+    backgroundColor: '#2563EB', // Vibrant Blue Header
+    paddingBottom: 70, // Space for the card to overlap
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
-    paddingBottom: 60, // Extra padding for the overlap
-    shadowColor: '#004AAD',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 10,
   },
   headerContent: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 30,
+    paddingTop: 30,
+    paddingBottom: 10,
+  },
+  logoImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF', // Ensures logo pops against dark blue
   },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 8,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: '#E2E8F0',
+    fontSize: 15,
+    color: '#E0E7FF', // Light blue text so it's readable
     textAlign: 'center',
   },
   formCard: {
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 24,
-    marginTop: -40, // Pulls the card up over the blue header
     borderRadius: 24,
     padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
+    marginHorizontal: 16,
+    marginTop: -40, // THIS is what pulls the card up over the blue header
     elevation: 8,
-  },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1E293B',
-    marginBottom: 20,
-    textAlign: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
   },
   input: { 
-    backgroundColor: '#F1F5F9', // Light gray background
+    backgroundColor: '#F8FAFC', 
     fontSize: 15,
   },
   inputOutline: {
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: '#E2E8F0',
   },
   errorText: {
     paddingHorizontal: 0,
-    marginTop: 4,
-    marginBottom: -4,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  // --- New Password Rules Styles ---
+  passwordRulesContainer: {
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  ruleText: {
+    fontSize: 13,
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  ruleMet: {
+    color: '#059669', // Emerald Green for matched rules
+  },
+  ruleUnmet: {
+    color: '#EF4444', // Red for missing rules
+  },
+  // ---------------------------------
+  phoneRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  countryCodeInputContainer: {
+    width: 80,
+    marginRight: 10,
+    marginTop: 6,
+  },
+  phoneInputBox: {
+    flex: 1,
+  },
+  safetyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#D1FAE5'
+  },
+  safetyText: {
+    color: '#059669',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   optInContainer: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     marginBottom: 12, 
-    marginTop: 12, 
-    backgroundColor: '#F0FDF4', 
-    padding: 12, 
-    borderRadius: 14, 
-    borderWidth: 1, 
-    borderColor: '#BBF7D0' 
   },
   optInText: { 
     flex: 1, 
-    color: '#166534', 
+    color: '#475569', 
     marginLeft: 4,
     fontSize: 13,
-    lineHeight: 18
   },
   termsContainer: { 
     flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 4, 
-    marginTop: 4 
+    alignItems: 'flex-start', 
+    marginBottom: 16, 
   },
   termsTextWrap: { 
     flex: 1, 
     flexDirection: 'row', 
     flexWrap: 'wrap', 
     marginLeft: 4,
-    alignItems: 'center'
+    marginTop: 8,
   },
   termsLink: { 
-    color: '#004AAD', 
+    color: '#2563EB', 
     fontWeight: '700', 
-    textDecorationLine: 'underline',
-    fontSize: 13
+    fontSize: 13,
+    lineHeight: 20
   },
   btn: { 
-    marginTop: 20, 
-    borderRadius: 14, 
-    backgroundColor: '#004AAD',
-    shadowColor: '#004AAD',
+    marginTop: 10, 
+    borderRadius: 12, 
+    backgroundColor: '#2563EB',
+    elevation: 4,
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 5,
   },
   btnContent: { 
-    paddingVertical: 12 
+    paddingVertical: 10 
   },
   btnLabel: { 
     fontSize: 16, 
     fontWeight: 'bold',
     letterSpacing: 0.5,
   },
-  infoBtn: {
-    marginTop: 16, 
-    borderRadius: 14, 
-    borderColor: '#004AAD',
-    borderWidth: 1,
-    backgroundColor: '#F8FAFC' // Slight contrast background
-  },
-  infoBtnContent: {
-    paddingVertical: 8
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E2E8F0',
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: '#94A3B8',
-    fontWeight: '600',
-    fontSize: 12,
-  },
   footer: { 
     flexDirection: 'row', 
     justifyContent: 'center', 
     alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 30,
   },
   footerText: {
     color: '#64748B',
@@ -536,10 +706,36 @@ const styles = StyleSheet.create({
   },
   footerLink: { 
     fontWeight: 'bold', 
-    color: '#004AAD',
+    color: '#2563EB',
     fontSize: 15
   },
+  featuresContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 24,
+  },
+  featureItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  featureIconBox: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  featureText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   bottomSpacer: {
-    height: 40,
-  }
+    height: 60,
+  },
 });
