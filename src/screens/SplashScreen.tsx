@@ -36,7 +36,8 @@ export default function SplashScreen() {
       <View style={styles.backgroundDecorations}>
         {/* Simulating a connected network spread */}
         <MaterialCommunityIcons name="earth" size={350} color="rgba(255,255,255,0.03)" style={styles.bgIcon1} />
-        <MaterialCommunityIcons name="chart-network" size={250} color="rgba(255,255,255,0.04)" style={styles.bgIcon2} />
+        {/* FIXED: Replaced invalid "chart-network" with "lan" */}
+        <MaterialCommunityIcons name="lan" size={250} color="rgba(255,255,255,0.04)" style={styles.bgIcon2} />
         <MaterialCommunityIcons name="molecule" size={180} color="rgba(255,255,255,0.05)" style={styles.bgIcon3} />
         <MaterialCommunityIcons name="map-marker-path" size={200} color="rgba(255,255,255,0.04)" style={styles.bgIcon4} />
       </View>
@@ -167,7 +168,7 @@ const styles = StyleSheet.create({
   
   topSection: {
     alignItems: 'center',
-    paddingTop: height * 0.06, // Slightly reduced to fit small screens perfectly
+    paddingTop: height * 0.06, 
     paddingHorizontal: 24,
   },
   logoWrapper: {
@@ -199,7 +200,7 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     paddingHorizontal: 20,
-    alignItems: 'center', // Centers the grid horizontally
+    alignItems: 'center', 
   },
   featuresGrid: {
     backgroundColor: '#FFFFFF',
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   featureTile: {
-    width: '48%', // Leaves a small gap between the two tiles
+    width: '48%', 
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
     padding: 14,
@@ -262,7 +263,7 @@ const styles = StyleSheet.create({
   },
   buttonContent: {
     height: 60,
-    flexDirection: 'row-reverse', // Puts icon on the right side
+    flexDirection: 'row-reverse',
   },
   buttonLabel: {
     fontSize: 18, 
