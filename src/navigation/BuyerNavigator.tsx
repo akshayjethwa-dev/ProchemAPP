@@ -95,8 +95,9 @@ function BuyerTabs() {
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: { 
-          height: Platform.OS === 'ios' ? 60 + insets.bottom : 60, 
-          paddingBottom: Platform.OS === 'ios' ? insets.bottom : 10, 
+          // 2. APPLY INSETS TO BOTH PLATFORMS
+          height: 60 + insets.bottom, 
+          paddingBottom: Math.max(insets.bottom, 10), 
           paddingTop: 10, 
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
@@ -129,18 +130,16 @@ export default function BuyerNavigator() {
     <Stack.Navigator 
       screenOptions={{ 
         headerShown: false,
-        headerBackTitle: '', // FIX: Uses empty string instead of boolean
+        headerBackTitle: '', 
         headerTintColor: '#1F2937', 
         headerShadowVisible: false, 
-        headerStyle: { backgroundColor: '#FFFFFF' }, // FIX: Removed border properties
+        headerStyle: { backgroundColor: '#FFFFFF' },
         headerTitleStyle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
         headerTitleAlign: 'center', 
       }}
     >
       <Stack.Screen name="BuyerTabs" component={BuyerTabs} />
       <Stack.Screen name="ProductDetail" component={ProductDetail} />
-      
-      {/* FIX: Removed headerStyle from individual options */}
       <Stack.Screen name="Cart" component={CartScreen} options={{ headerShown: true, title: 'Your Cart' }} />
       <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ headerShown: true, title: 'Checkout' }} />
       <Stack.Screen name="AddressList" component={AddressListScreen} options={{ headerShown: true, title: 'Select Address' }} />

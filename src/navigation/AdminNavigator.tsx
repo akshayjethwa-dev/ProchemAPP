@@ -99,8 +99,9 @@ export default function AdminNavigator() {
         headerShown: false,
         tabBarStyle: { 
           backgroundColor: '#1E293B',
+          // 🚀 FIX: Standardize safe area spacing for Android/iOS
           height: 60 + insets.bottom,
-          paddingBottom: 8 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 10),
           paddingTop: 8
         }, 
         tabBarActiveTintColor: '#4FC3F7',

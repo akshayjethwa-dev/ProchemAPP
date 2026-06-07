@@ -1,5 +1,7 @@
 import React from 'react';
-import { SafeAreaView, View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+// 1. IMPORT SafeAreaView FROM react-native-safe-area-context
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
 
 interface AppScreenProps {
@@ -9,7 +11,7 @@ interface AppScreenProps {
 
 export const AppScreen: React.FC<AppScreenProps> = ({ children, style }) => {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={[styles.container, style]}>
         {children}
       </View>

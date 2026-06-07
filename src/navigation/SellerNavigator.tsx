@@ -42,8 +42,9 @@ function SellerTabs() {
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: { 
-          height: Platform.OS === 'ios' ? 60 + insets.bottom : 60, 
-          paddingBottom: Platform.OS === 'ios' ? insets.bottom : 10, 
+          // 🚀 FIX: Apply dynamic padding for both platforms safely
+          height: 60 + insets.bottom, 
+          paddingBottom: Math.max(insets.bottom, 10), 
           paddingTop: 10, 
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
