@@ -1,5 +1,5 @@
 // File: functions/index.js
-const functions = require("firebase-functions/v1"); 
+const functions = require("firebase-functions/v1"); // 🟢 Added back to fix the ReferenceError
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore"); 
 const admin = require("firebase-admin");
 const { Expo } = require("expo-server-sdk"); 
@@ -611,12 +611,27 @@ exports.onUserCreated = onDocumentCreated(
       try {
         const companyName = userData.companyName || "Valued User";
         
-        // Exact formatting matching your template, mapping companyName to {{1}}
-        const msg = `Welcome to Prochem, ${companyName}. Your account is created. Start by browsing market requirements now.`;
+        // Exact formatting matching the approved Twilio template, mapping companyName to {{1}}
+        const msg = `🧪 *Welcome to Prochem!*
+
+Hi ${companyName}, your account is now active.
+
+*What you can do on Prochem:*
+• 🔍 Browse chemicals & pharma products
+• 📋 Post your requirements to get seller quotes
+• 💬 Negotiate price directly via this chat
+• 📦 Track your orders in real-time
+
+Here's how to get started:
+✅ *Step 1:* Complete your company profile
+✅ *Step 2:* Add your chemicals/products
+✅ *Step 3:* Start receiving live buyer requirements
+
+_Prochem — India's Trusted B2B Chemical Marketplace_`;
         
         // Use "marketing" for Twilio/WhatsApp category routing
         await sendWhatsApp(userData.phoneNumber, msg, null, {
-          templateName: "prochem_welcome", // Change this if your template has a specific name in Twilio
+          templateName: "prochem_welcome", 
           type: "marketing", 
           userId: userId
         });
