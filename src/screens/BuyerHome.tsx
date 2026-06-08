@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Dimensions, RefreshControl, Share, Alert, TouchableOpacity } from 'react-native';
 import { Text, Searchbar, IconButton, Card, Button, useTheme, ActivityIndicator, Badge } from 'react-native-paper'; 
-import { SafeAreaView } from 'react-native-safe-area-context';
+// 🚀 FIX: Swapped SafeAreaView for useSafeAreaInsets
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot, doc, updateDoc, increment } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
@@ -14,6 +15,7 @@ const { width } = Dimensions.get('window');
 export default function BuyerHome() {
   const navigation = useNavigation<any>();
   const theme = useTheme();
+  const insets = useSafeAreaInsets(); // 🚀 FIX: Get device safe area
   
   const { user, products, setProducts, updateUserCredits } = useAppStore();
   const cartCount = useAppStore(state => state.cart?.length || 0);
@@ -104,9 +106,9 @@ export default function BuyerHome() {
     .slice(0, 10);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      {/* 1. Header Section */}
-      <View style={styles.header}>
+    <View style={styles.container}>
+      {/* 🚀 FIX: Applied dynamic padding to the top of the header based on device notch */}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 10) + 10 }]}>
         <View style={styles.headerTop}>
           <View>
             <View style={styles.brandRow}>
@@ -277,13 +279,14 @@ export default function BuyerHome() {
         </View>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { backgroundColor: '#004AAD', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40 },
+  // 🚀 FIX: Removed fixed paddingTop here so it doesn't double up
+  header: { backgroundColor: '#004AAD', paddingHorizontal: 20, paddingBottom: 40 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   brandRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   brandText: { color: 'white', fontSize: 22, fontWeight: '900', letterSpacing: 1 },

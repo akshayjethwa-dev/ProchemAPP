@@ -2,7 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Text, Card, ActivityIndicator, Button, useTheme, IconButton, Badge } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// 🚀 FIX: Swapped SafeAreaView for useSafeAreaInsets
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { getAdminStats, backfillUserSubscriptions } from '../../services/adminService';
 import { logoutUser } from '../../services/authService';
@@ -15,6 +16,8 @@ import { useAppStore } from '../../store/appStore';
 export default function AdminDashboard() {
   const theme = useTheme();
   const navigation = useNavigation<any>(); 
+  const insets = useSafeAreaInsets(); // 🚀 FIX: Fetching top safe area bounds
+
   const [stats, setStats] = useState({ totalUsers: 0, totalProducts: 0, totalOrders: 0 });
   const [loading, setLoading] = useState(true);
   
@@ -92,8 +95,9 @@ export default function AdminDashboard() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <View style={styles.container}>
+      {/* 🚀 FIX: Apply safe area spacing directly to the header so background color flows underneath the notch */}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 10) + 15 }]}>
         <Text variant="headlineSmall" style={{color:'white', fontWeight:'bold'}}>
           {isSubAdmin ? 'Sub-Admin Console' : 'Admin Console'}
         </Text>
@@ -258,13 +262,14 @@ export default function AdminDashboard() {
         )}
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { backgroundColor: '#1E293B', padding: 20, flexDirection:'row', justifyContent:'space-between', alignItems:'center' },
+  // 🚀 FIX: Removed uniform padding, leaving horizontal/bottom to allow dynamic paddingTop to work cleanly
+  header: { backgroundColor: '#1E293B', paddingHorizontal: 20, paddingBottom: 20, flexDirection:'row', justifyContent:'space-between', alignItems:'center' },
   content: { padding: 16 },
   grid: { flexDirection: 'row', gap: 10, flexWrap:'wrap' },
   card: { flex: 1, minWidth: '45%', marginBottom: 10 }

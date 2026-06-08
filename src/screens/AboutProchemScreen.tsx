@@ -21,7 +21,7 @@ export default function AboutProchemScreen() {
           <View style={styles.logoCircle}>
              <MaterialCommunityIcons name="flask" size={40} color="white" />
           </View>
-          <Text variant="headlineSmall" style={styles.brandName}>PROCHEM</Text>
+          <Text variant="headlineSmall" style={styles.brandName}>PROCHEM MARKETPLACE PRIVATE LIMITED</Text>
           <Text style={styles.version}>Version 2.1.1</Text>
         </View>
 
