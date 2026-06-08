@@ -632,6 +632,8 @@ _Prochem — India's Trusted B2B Chemical Marketplace_`;
         // Use "marketing" for Twilio/WhatsApp category routing
         await sendWhatsApp(userData.phoneNumber, msg, null, {
           templateName: "prochem_welcome", 
+          templateSid: "HXcb7cb50a9601acbe304cc5a01fc1b89b",
+          templateVariables: { "1": companyName },
           type: "marketing", 
           userId: userId
         });
