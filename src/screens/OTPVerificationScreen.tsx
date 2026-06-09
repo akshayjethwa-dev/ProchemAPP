@@ -6,10 +6,17 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 
+// ✅ Import Firebase Auth methods
+import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
+import { auth } from '../config/firebase';
+
 export default function OTPVerificationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<any>();
+  
+  // ✅ Extract both mobile and verificationId from route params
   const mobile = route.params?.mobile || '';
+  const verificationId = route.params?.verificationId || '';
   const theme = useTheme();
 
   const [otp, setOtp] = useState('');
@@ -29,26 +36,49 @@ export default function OTPVerificationScreen() {
       return;
     }
 
+    if (!verificationId) {
+      Alert.alert('Error', 'Missing Verification ID. Please request a new OTP.');
+      return;
+    }
+
     setLoading(true);
     
-    // Simulate API Call / Firebase Phone Auth
-    setTimeout(() => {
-      setLoading(false);
-      if (otp === '123456') {
-        // ✅ SUCCESS: Phone is verified. 
-        // We do NOT redirect to a Role Selection screen since users can be both Buyers & Sellers.
-        // In a real implementation, once Firebase Auth succeeds here, the `onAuthStateChanged` 
-        // listener in RootNavigator will automatically route the user to the Dashboard/Onboarding.
-        Alert.alert('Success', 'Phone number verified successfully!');
+    try {
+      // ✅ 1. Create a Firebase credential using the verification ID and the user's entered OTP
+      const credential = PhoneAuthProvider.credential(verificationId, otp);
+
+      // ✅ 2. Sign in to Firebase with this credential
+      const userCredential = await signInWithCredential(auth, credential);
+
+      // Success! Phone is verified. 
+      // The onAuthStateChanged listener in RootNavigator will catch the new user state 
+      // and automatically route the user to the dashboard or onboarding.
+      console.log('Successfully logged in with UID:', userCredential.user.uid);
+
+    } catch (error: any) {
+      console.error('OTP Verification Error:', error);
+      
+      // Handle common Firebase verification errors gracefully
+      if (error.code === 'auth/invalid-verification-code') {
+        Alert.alert('Error', 'Invalid OTP. Please check the code and try again.');
+      } else if (error.code === 'auth/code-expired') {
+        Alert.alert('Error', 'The OTP has expired. Please go back and request a new one.');
       } else {
-        Alert.alert('Error', 'Invalid OTP. Try 123456');
+        Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
       }
-    }, 1500);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResend = () => {
-    setResendTimer(30);
-    Alert.alert('Sent', 'OTP resent successfully!');
+    // For React Native Firebase Web SDK flows, it's often cleanest to have the user 
+    // go back to the previous screen to trigger the Recaptcha again for a new SMS.
+    Alert.alert(
+      'Resend OTP', 
+      'To securely send a new OTP, please go back and request a new code.',
+      [{ text: 'Go Back', onPress: () => navigation.goBack() }]
+    );
   };
 
   return (
@@ -72,7 +102,6 @@ export default function OTPVerificationScreen() {
             style={styles.input}
             contentStyle={styles.inputText}
           />
-          <Text style={styles.hint}>For testing use: 123456</Text>
         </View>
 
         <Button 
@@ -91,8 +120,8 @@ export default function OTPVerificationScreen() {
           disabled={resendTimer > 0}
           style={styles.resendContainer}
         >
-          <Text style={{ color: resendTimer > 0 ? '#999' : theme.colors.primary, fontWeight: 'bold' }}>
-            {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : "Didn't receive code? Resend"}
+          <Text style={{ color: resendTimer > 0 ? '#9CA3AF' : theme.colors.primary, fontWeight: 'bold' }}>
+            {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : "Didn't receive code? Request again"}
           </Text>
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -109,7 +138,6 @@ const styles = StyleSheet.create({
   inputContainer: { marginBottom: 30 },
   input: { backgroundColor: '#F9FAFB', fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
   inputText: { textAlign: 'center', letterSpacing: 4, fontSize: 24 },
-  hint: { textAlign: 'center', color: '#9CA3AF', marginTop: 10 },
   verifyBtn: { borderRadius: 12, marginBottom: 20 },
   resendContainer: { alignItems: 'center', padding: 10 },
 });

@@ -4,7 +4,8 @@ export type RootStackParamList = {
   // Auth
   Splash: undefined;
   Login: undefined;
-  OTPVerification: { mobile: string };
+  MobileLogin: undefined; // ✅ ADDED THIS LINE
+  OTPVerification: { mobile: string; verificationId: string };
   RoleSelection: undefined;
   Registration: { role: UserRole; mobile: string };
   LegalPages: undefined;

@@ -14,6 +14,7 @@ import AdminNavigator from './AdminNavigator';
 
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
+import MobileLoginScreen from '../screens/MobileLoginScreen';
 import RegistrationScreen from '../screens/RegistrationScreen';
 import OTPVerificationScreen from '../screens/OTPVerificationScreen';
 import LegalPagesScreen from '../screens/LegalPagesScreen';
@@ -112,6 +113,7 @@ export const RootNavigator = () => {
               {/* Fade is better for auth/splash screens to prevent jarring sliding */}
               <Stack.Screen name="Splash" component={SplashScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="MobileLogin" component={MobileLoginScreen} />
               <Stack.Screen name="Registration" component={RegistrationScreen} />
               <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
               <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
