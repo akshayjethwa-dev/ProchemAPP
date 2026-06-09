@@ -1,3 +1,4 @@
+// src/screens/LoginScreen.tsx
 import React, { useState } from 'react';
 import { 
   View, 
@@ -25,7 +26,7 @@ const { width } = Dimensions.get('window');
 type RootStackParamList = {
   Login: undefined;
   Registration: undefined;
-  // Add other screens if needed
+  OTPVerification: { mobile: string };
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -33,8 +34,16 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function LoginScreen() {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
+  
+  // Login Method Toggle State
+  const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
+
+  // Input States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  
+  // UI States
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [secureTextEntry, setSecureTextEntry] = useState(true);
@@ -73,7 +82,7 @@ export default function LoginScreen() {
     }
   };
 
-  const handleLogin = async () => {
+  const handleEmailLogin = async () => {
     setLoginError('');
     if (!email || !password) {
       setLoginError('Please enter both email and password.');
@@ -116,6 +125,18 @@ export default function LoginScreen() {
     }
   };
 
+  const handlePhoneLogin = () => {
+    setLoginError('');
+    if (!phone || phone.length < 10) {
+      setLoginError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    
+    // In production, trigger Firebase Phone Auth here.
+    // For now, navigate to OTP screen with the mobile number.
+    navigation.navigate('OTPVerification', { mobile: `+91${phone}` });
+  };
+
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
@@ -153,82 +174,137 @@ export default function LoginScreen() {
           {/* Floating Form Card */}
           <View style={styles.formCard}>
             
-            {/* 2. Sign in subtitle */}
             <Text style={styles.cardSubtitle}>Sign in to continue to your business account.</Text>
-            
-            {/* 3. Email Input */}
-            <TextInput
-              label="Email Address"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setLoginError('');
-              }}
-              mode="outlined"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              textColor="#0F172A"
-              left={<TextInput.Icon icon="email-outline" color="#64748B" />}
-              error={loginError.includes('email') || loginError.includes('Account')}
-            />
 
-            {/* 4. Password Input */}
-            <View style={styles.passwordContainer}>
-              <TextInput
-                label="Password"
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  setLoginError('');
-                }}
-                mode="outlined"
-                secureTextEntry={secureTextEntry}
-                style={styles.input}
-                outlineStyle={styles.inputOutline}
-                textColor="#0F172A"
-                left={<TextInput.Icon icon="lock-outline" color="#64748B" />}
-                error={loginError.includes('password') || loginError.includes('Incorrect') || loginError.includes('Invalid')}
-                right={
-                  <TextInput.Icon
-                    icon={secureTextEntry ? 'eye-off' : 'eye'}
-                    onPress={() => setSecureTextEntry(!secureTextEntry)}
-                    forceTextInputFocus={false}
-                    color="#64748B"
-                  />
-                }
-              />
+            {/* Login Method Toggle Tabs */}
+            <View style={styles.tabContainer}>
+              <TouchableOpacity 
+                style={[styles.tab, loginMethod === 'email' && styles.activeTab]}
+                onPress={() => { setLoginMethod('email'); setLoginError(''); }}
+              >
+                <Text style={[styles.tabText, loginMethod === 'email' && styles.activeTabText]}>Email</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.tab, loginMethod === 'phone' && styles.activeTab]}
+                onPress={() => { setLoginMethod('phone'); setLoginError(''); }}
+              >
+                <Text style={[styles.tabText, loginMethod === 'phone' && styles.activeTabText]}>Mobile (OTP)</Text>
+              </TouchableOpacity>
             </View>
 
-            {loginError ? (
-              <HelperText type="error" visible={!!loginError} style={styles.errorText}>
-                {loginError}
-              </HelperText>
-            ) : null}
+            {/* Email Form */}
+            {loginMethod === 'email' ? (
+              <>
+                <TextInput
+                  label="Email Address"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    setLoginError('');
+                  }}
+                  mode="outlined"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={styles.input}
+                  outlineStyle={styles.inputOutline}
+                  textColor="#0F172A"
+                  left={<TextInput.Icon icon="email-outline" color="#64748B" />}
+                  error={loginError.includes('email') || loginError.includes('Account')}
+                />
 
-            {/* 5. Forgot Password */}
-            <TouchableOpacity style={styles.forgotPass} onPress={handleForgotPassword}>
-              <Text style={styles.forgotPassText}>
-                {resetLoading ? 'Sending link...' : 'Forgot Password?'}
-              </Text>
-            </TouchableOpacity>
+                <View style={styles.passwordContainer}>
+                  <TextInput
+                    label="Password"
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      setLoginError('');
+                    }}
+                    mode="outlined"
+                    secureTextEntry={secureTextEntry}
+                    style={styles.input}
+                    outlineStyle={styles.inputOutline}
+                    textColor="#0F172A"
+                    left={<TextInput.Icon icon="lock-outline" color="#64748B" />}
+                    error={loginError.includes('password') || loginError.includes('Incorrect') || loginError.includes('Invalid')}
+                    right={
+                      <TextInput.Icon
+                        icon={secureTextEntry ? 'eye-off' : 'eye'}
+                        onPress={() => setSecureTextEntry(!secureTextEntry)}
+                        forceTextInputFocus={false}
+                        color="#64748B"
+                      />
+                    }
+                  />
+                </View>
 
-            {/* 6. Login Button with Arrow */}
-            <Button
-              mode="contained"
-              onPress={handleLogin}
-              loading={loading}
-              disabled={loading}
-              icon="arrow-right" // Adds the arrow
-              style={styles.loginBtn}
-              contentStyle={styles.loginBtnContent} // flex-direction: row-reverse puts arrow on right
-              labelStyle={styles.loginBtnLabel}
-            >
-              Login
-            </Button>
+                {loginError ? (
+                  <HelperText type="error" visible={!!loginError} style={styles.errorText}>
+                    {loginError}
+                  </HelperText>
+                ) : null}
 
-            {/* 7. Security Banner */}
+                <TouchableOpacity style={styles.forgotPass} onPress={handleForgotPassword}>
+                  <Text style={styles.forgotPassText}>
+                    {resetLoading ? 'Sending link...' : 'Forgot Password?'}
+                  </Text>
+                </TouchableOpacity>
+
+                <Button
+                  mode="contained"
+                  onPress={handleEmailLogin}
+                  loading={loading}
+                  disabled={loading}
+                  icon="arrow-right"
+                  style={styles.loginBtn}
+                  contentStyle={styles.loginBtnContent}
+                  labelStyle={styles.loginBtnLabel}
+                >
+                  Login with Email
+                </Button>
+              </>
+            ) : (
+              /* Phone Form */
+              <>
+                <TextInput
+                  label="Mobile Number"
+                  value={phone}
+                  onChangeText={(text) => {
+                    setPhone(text.replace(/[^0-9]/g, ''));
+                    setLoginError('');
+                  }}
+                  mode="outlined"
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  style={[styles.input, { marginTop: 8, marginBottom: 24 }]}
+                  outlineStyle={styles.inputOutline}
+                  textColor="#0F172A"
+                  left={<TextInput.Affix text="+91 " />}
+                  error={!!loginError}
+                />
+
+                {loginError ? (
+                  <HelperText type="error" visible={!!loginError} style={styles.errorText}>
+                    {loginError}
+                  </HelperText>
+                ) : null}
+
+                <Button
+                  mode="contained"
+                  onPress={handlePhoneLogin}
+                  loading={loading}
+                  disabled={loading}
+                  icon="message-processing-outline"
+                  style={styles.loginBtn}
+                  contentStyle={styles.loginBtnContent}
+                  labelStyle={styles.loginBtnLabel}
+                >
+                  Send OTP
+                </Button>
+              </>
+            )}
+
+            {/* Security Banner */}
             <View style={styles.safetyBanner}>
               <MaterialCommunityIcons name="shield-lock-outline" size={24} color="#059669" style={{ marginTop: 2 }} />
               <View style={styles.safetyTextContainer}>
@@ -244,7 +320,7 @@ export default function LoginScreen() {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* 8. Register Section */}
+            {/* Register Section */}
             <View style={styles.registerContainer}>
               <Text style={styles.registerText}>New to Prochem?</Text>
               <Button 
@@ -258,7 +334,7 @@ export default function LoginScreen() {
               </Button>
             </View>
 
-            {/* 9. App Features / Marketing */}
+            {/* App Features */}
             <View style={styles.featuresContainer}>
               <View style={styles.featureItem}>
                 <View style={styles.featureIconBox}>
@@ -282,7 +358,6 @@ export default function LoginScreen() {
 
           </View>
 
-          {/* Bottom spacing for scroll */}
           <View style={styles.bottomSpacer} />
 
         </ScrollView>
@@ -294,7 +369,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   mainContainer: { 
     flex: 1, 
-    backgroundColor: '#F1F5F9', // Soft slate background
+    backgroundColor: '#F1F5F9',
   },
   keyboardView: {
     flex: 1,
@@ -303,8 +378,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   headerBackground: {
-    backgroundColor: '#2563EB', // Vibrant Blue Header
-    paddingBottom: 70, // Extra padding to allow the card to overlap
+    backgroundColor: '#2563EB',
+    paddingBottom: 70,
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
   },
@@ -319,7 +394,7 @@ const styles = StyleSheet.create({
     height: 60,
     marginBottom: 8,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF', // Helps logo pop against blue
+    backgroundColor: '#FFFFFF',
   },
   taglineText: {
     fontSize: 13,
@@ -345,7 +420,7 @@ const styles = StyleSheet.create({
   formCard: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
-    marginTop: -40, // Pulls the card up over the blue header
+    marginTop: -40,
     borderRadius: 24,
     padding: 24,
     elevation: 8,
@@ -357,8 +432,36 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 14,
     color: '#64748B',
-    marginBottom: 24,
+    marginBottom: 20,
     lineHeight: 20,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  activeTab: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabText: {
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  activeTabText: {
+    color: '#2563EB',
   },
   input: { 
     backgroundColor: '#F8FAFC', 
@@ -398,7 +501,7 @@ const styles = StyleSheet.create({
   },
   loginBtnContent: { 
     paddingVertical: 10,
-    flexDirection: 'row-reverse', // Puts the arrow on the right side
+    flexDirection: 'row-reverse', 
   },
   loginBtnLabel: {
     fontSize: 16,

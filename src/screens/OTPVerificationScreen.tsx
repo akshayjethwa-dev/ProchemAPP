@@ -30,12 +30,16 @@ export default function OTPVerificationScreen() {
     }
 
     setLoading(true);
-    // Simulate API Call
+    
+    // Simulate API Call / Firebase Phone Auth
     setTimeout(() => {
       setLoading(false);
       if (otp === '123456') {
-        // Navigate to Role Selection after success
-        navigation.replace('RoleSelection');
+        // ✅ SUCCESS: Phone is verified. 
+        // We do NOT redirect to a Role Selection screen since users can be both Buyers & Sellers.
+        // In a real implementation, once Firebase Auth succeeds here, the `onAuthStateChanged` 
+        // listener in RootNavigator will automatically route the user to the Dashboard/Onboarding.
+        Alert.alert('Success', 'Phone number verified successfully!');
       } else {
         Alert.alert('Error', 'Invalid OTP. Try 123456');
       }

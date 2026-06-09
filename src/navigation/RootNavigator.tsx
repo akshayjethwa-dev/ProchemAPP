@@ -27,6 +27,9 @@ import EditProfileScreen from '../screens/EditProfileScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 
+// ✅ NEW: Import KYC Verification Screen
+import KYCVerificationScreen from '../screens/KYCVerificationScreen';
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
@@ -133,6 +136,9 @@ export const RootNavigator = () => {
                 </>
               )}
               
+              {/* ✅ NEW: Global KYC Screen added for Unverified user redirects */}
+              <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} options={{ animation: 'slide_from_bottom' }} />
+
               <Stack.Screen name="ProductDetail" component={ProductDetail} />
               <Stack.Screen name="Negotiation" component={NegotiationScreen} />
               <Stack.Screen name="OrderTracking" component={OrderTracking} />

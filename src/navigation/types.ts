@@ -25,6 +25,7 @@ export type RootStackParamList = {
   NotificationDetail: { notification: any }; 
   Compare: undefined;
   Onboarding: undefined;
+  KYCVerification: undefined;
 
   // Seller specific
   SellerDashboard: undefined;
