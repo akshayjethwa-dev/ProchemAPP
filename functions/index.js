@@ -12,6 +12,7 @@ const { defineSecret } = require("firebase-functions/params");
 const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
 const TWILIO_AUTH_TOKEN   = defineSecret("TWILIO_AUTH_TOKEN");
 const TWILIO_PHONE_NUMBER = defineSecret("TWILIO_PHONE_NUMBER");
+const TWILIO_MESSAGING_SERVICE_SID = defineSecret("TWILIO_MESSAGING_SERVICE_SID");
 
 admin.initializeApp();
 const expo = new Expo();
@@ -92,7 +93,7 @@ exports.onRequirementCreated = onDocumentCreated(
   {
     document: "customRequirements/{docId}",
     region: "asia-south1",
-    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER]
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, TWILIO_MESSAGING_SERVICE_SID]
   }, 
   async (event) => {
     const snap = event.data;
@@ -130,7 +131,14 @@ exports.onRequirementCreated = onDocumentCreated(
           
           sendPromises.push(
             sendWhatsApp(userData.phoneNumber, msg, null, {
-              templateName: "Broadcast_New_Requirement",
+              templateName: "prochem_market_alert",
+              templateSid: "HX24554dd2af8db376b1a1609f13cfffbc",
+              templateVariables: {
+                "1": productName,
+                "2": displayQty,
+                "3": displayPrice,
+                "4": docId
+              },
               type: "marketing",
               userId: userId
             }).catch(err => console.error(`Failed to send alert to ${userData.phoneNumber}`, err))
@@ -159,7 +167,7 @@ exports.onRequirementCreated = onDocumentCreated(
 exports.onDirectRfqCreated = onDocumentCreated(
   { document: "rfqs/{rfqId}", 
     region: "asia-south1",
-    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER]
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, TWILIO_MESSAGING_SERVICE_SID]
   },
   async (event) => {
     const rfqData = event.data.data();
@@ -179,10 +187,19 @@ exports.onDirectRfqCreated = onDocumentCreated(
           const location = rfqData.deliveryPincode || "Check App";
           
           // EXACT match for Twilio Template 1
-          const msg = `🔔 *New Negotiation Request — Prochem*\n\nHi ${companyName},\n\nA verified buyer wants to negotiate on your product:\n\n🧪 *Product:* ${rfqData.productName}\n📦 *Qty Requested:* ${rfqData.targetQuantity} ${rfqData.unit}\n💰 *Buyer's Target Price:* ₹${targetPrice} / ${rfqData.unit}\n📍 *Delivery Location:* ${location}\n\n*Negotiation ID:* #${rfqId}\n\nThe buyer is waiting. \nYou can negotiate directly here on WhatsApp.\nAll conversations go through Prochem — your contact details stay private.\n\n_Reply to this message to begin negotiation._\n\n_Prochem Marketplace_`;
+          const msg = `🔔 *New Negotiation Request — Prochem*\n\nHi ${companyName},\n\nA verified buyer wants to negotiate on your product:\n\n🧪 *Product:* ${rfqData.productName}\n📦 *Qty Requested:* ${rfqData.targetQuantity} ${rfqData.unit}\n💰 *Buyer's Target Price:* ₹${targetPrice} / ${rfqData.unit}\n📍 *Delivery Location:* ${location}\n\n*Negotiation ID:* #${rfqId}\n\nThe buyer is waiting. \nYou can negotiate directly here on WhatsApp.\nAll conversations go through Prochem — your contact details stay private.\n\n_Reply to this message to begin negotiation._\n\n_Prochem Marketplace Private Limited_`;
           
           await sendWhatsApp(sellerData.phoneNumber, msg, null, {
-            templateName: "Template_1_New_Rfq",
+            templateName: "new_negotiation_request",
+            templateSid: "HX1fee2eeead6d641cc946a9b17957ad8d", 
+            templateVariables: {
+                "1": companyName,
+                "2": rfqData.productName,
+                "3": `${rfqData.targetQuantity} ${rfqData.unit}`,
+                "4": targetPrice,
+                "5": location,
+                "6": rfqId
+            },
             type: "service",
             userId: rfqData.sellerId
           });
@@ -447,7 +464,7 @@ exports.onAppMessageCreated = onDocumentCreated(
   {
     document: "conversations/{conversationId}/messages/{messageId}",
     region: "asia-south1",
-    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER]
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, TWILIO_MESSAGING_SERVICE_SID]
   },
   async (event) => {
     const snap = event.data;
