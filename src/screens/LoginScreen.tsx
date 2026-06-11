@@ -256,7 +256,7 @@ export default function LoginScreen() {
               labelStyle={styles.mobileLoginBtnLabel}
               textColor="#0F172A"
             >
-              Continue with mobile number (OTP)
+              Continue with mobile number (OTP) (Coming soon)
             </Button>
 
             {/* Register Section */}

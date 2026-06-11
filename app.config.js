@@ -77,7 +77,7 @@ export default ({ config }) => {
     },
     android: {
       package: "com.prochem.app", // Updated to be slightly more unique
-      versionCode: 1, // ✅ ADDED: Mandatory integer for Google Play updates
+      // Removed versionCode as EAS remote versioning is handling it
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
