@@ -6,7 +6,6 @@ import { Text, Card, Button, Divider, IconButton, useTheme } from 'react-native-
 import { useNavigation, useRoute } from '@react-navigation/native'; 
 import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
 
-// ✅ FIX 1: Import getApp to use with getFunctions
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -15,7 +14,6 @@ import { placeOrder, updateOrderStatus } from '../services/orderService';
 import { db } from '../config/firebase';
 import { Address, User } from '../types';
 
-// ✅ Imports our new multi-platform wrapper
 import { startCashfreePayment, removeCashfreeCallback } from '../services/cashfree/CashfreeService';
 
 export default function CheckoutScreen() {
@@ -47,7 +45,7 @@ export default function CheckoutScreen() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => {
       backHandler.remove();
-      removeCashfreeCallback(); // ✅ Clean up native listeners on unmount
+      removeCashfreeCallback(); 
     };
   }, []);
 
@@ -128,15 +126,15 @@ export default function CheckoutScreen() {
 
 
   // --- SUCCESS HANDLER ---
-  const handlePaymentSuccess = async (orderId: string) => {
+  const handlePaymentSuccess = async (originalFirestoreOrderId: string) => {
     try {
-      await updateOrderStatus(orderId, 'PENDING_SELLER'); 
-      await updateDoc(doc(db, 'orders', orderId), { paymentStatus: 'completed' });
+      await updateOrderStatus(originalFirestoreOrderId, 'PENDING_SELLER'); 
+      await updateDoc(doc(db, 'orders', originalFirestoreOrderId), { paymentStatus: 'completed' });
 
       if (negotiatedItem && negotiatedItem.customRequirementId) {
         await updateDoc(doc(db, 'customRequirements', negotiatedItem.customRequirementId), {
           status: 'FULFILLED',
-          finalOrderId: orderId
+          finalOrderId: originalFirestoreOrderId
         });
       }
 
@@ -145,7 +143,7 @@ export default function CheckoutScreen() {
       }
 
       navigation.navigate('PaymentSuccess', {
-        orderId: orderId.slice(0, 10).toUpperCase(),
+        orderId: originalFirestoreOrderId.slice(0, 10).toUpperCase(),
         totalAmount: finalPayableAmount.toFixed(2),
         productName: activeCart.length > 1 ? 'Multiple Products' : activeCart[0]?.name,
         quantity: activeCart[0]?.quantity,
@@ -200,43 +198,43 @@ export default function CheckoutScreen() {
       } as any);
 
       // 2. Call backend to get Cashfree session
-      // ✅ FIX 2: Added `asia-south1` region
       const app = getApp();
       const functions = getFunctions(app, 'asia-south1');
       const createCashfreeOrderFn = httpsCallable(functions, 'createCashfreeOrder');
       
-      // ✅ FIX 3: SANITIZE PHONE NUMBER TO PREVENT CASHFREE 500 ERROR
       let safePhone = user?.phoneNumber || user?.phone || "9876543210";
-      safePhone = safePhone.replace(/[^0-9]/g, ''); // Remove all non-numeric chars (like +)
-      if (safePhone.length > 10) safePhone = safePhone.slice(-10); // Keep last 10 digits
-      if (safePhone.length < 10) safePhone = "9876543210"; // Fallback if malformed
+      safePhone = safePhone.replace(/[^0-9]/g, ''); 
+      if (safePhone.length > 10) safePhone = safePhone.slice(-10); 
+      if (safePhone.length < 10) safePhone = "9876543210"; 
       
       const response: any = await createCashfreeOrderFn({
         amount: finalPayableAmount.toFixed(2),
         type: 'product',
         referenceId: orderId,
         customerDetails: {
-          phone: safePhone, // Passed the sanitized phone
+          phone: safePhone, 
           email: user?.email || "buyer@prochem.com",
           name: user?.companyName || user?.businessName || "Prochem Buyer"
         }
       });
 
-      const paymentSessionId = response.data.payment_session_id;
+      const paymentSessionId = response.data?.payment_session_id;
+      
+      // ✅ FIX: Extract the actual `order_id` returned by the Cashfree backend
+      const cashfreeOrderId = response.data?.order_id || orderId;
 
       if (!paymentSessionId) {
         throw new Error("Could not retrieve payment session from server.");
       }
 
-      // 3. ✅ Trigger our Multi-Platform Cashfree Wrapper
+      // 3. Trigger our Multi-Platform Cashfree Wrapper
       await startCashfreePayment(
         paymentSessionId, 
-        orderId, 
-        handlePaymentSuccess, 
-        (error, oid) => {
+        cashfreeOrderId, // ✅ Pass the exact Cashfree Order ID to SDK
+        () => handlePaymentSuccess(orderId), // ✅ Use closure to keep original Firestore orderId for DB updates
+        (error) => {
           console.error("Payment Error:", error);
           setLoading(false);
-          // If on web, error.message might be different, fallback to standard message
           Alert.alert("Payment Failed", error?.message || "The payment could not be completed.");
         }
       );

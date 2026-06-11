@@ -87,7 +87,7 @@ exports.sendPushNotification = onDocumentCreated(
 });
 
 // ==========================================
-// 🚀 BROADCAST NEW REQUIREMENTS (EXISTING)
+// 🚀 BROADCAST NEW REQUIREMENTS (UPDATED BATCHING)
 // ==========================================
 exports.onRequirementCreated = onDocumentCreated(
   {
@@ -102,16 +102,23 @@ exports.onRequirementCreated = onDocumentCreated(
     const reqData = snap.data();
     const docId = event.params.docId;
     
-    const { buyerId, productName, quantity, unit, targetPrice } = reqData;
+    const buyerId = reqData.buyerId;
+    const productName = reqData.productName || "Product";
+    const quantity = reqData.quantity || "";
+    const unit = reqData.unit || "";
+    const targetPrice = reqData.targetPrice;
 
     try {
       const usersSnap = await admin.firestore().collection("users")
         .where("whatsappOptIn", "==", true)
         .get();
       
-      const sendPromises = [];
       const displayPrice = targetPrice ? `₹${targetPrice}` : "Negotiable";
-      const displayQty = `${quantity} ${unit}`;
+      const displayQty = `${quantity} ${unit}`.trim() || "Check App";
+      const msg = `🔔 *New Buyer Requirement — Prochem*\n\nA buyer is looking for:\n\n🧪 *Product:* ${productName}\n📦 *Quantity:* ${displayQty}\n💰 *Target Price:* ${displayPrice}\n\n*Requirement ID:* #${docId}\n\nReply *INTEREST ${docId}* to start negotiation via Prochem.\n\n_(This requirement is live — respond quickly to close the deal)_\n\n_Prochem Marketplace_`;
+
+      // 1. Gather targeted users FIRST
+      const usersToAlert = [];
 
       usersSnap.forEach((doc) => {
         const userData = doc.data();
@@ -127,29 +134,35 @@ exports.onRequirementCreated = onDocumentCreated(
         const wantsMarketAlerts = prefs.marketAlerts !== false; // defaults to true
 
         if (isSeller && !isExcluded && userData.phoneNumber && wantsMarketAlerts) {
-          const msg = `🔔 *New Buyer Requirement — Prochem*\n\nA buyer is looking for:\n\n🧪 *Product:* ${productName}\n📦 *Quantity:* ${displayQty}\n💰 *Target Price:* ${displayPrice}\n\n*Requirement ID:* #${docId}\n\nReply *INTEREST ${docId}* to start negotiation via Prochem.\n\n_(This requirement is live — respond quickly to close the deal)_\n\n_Prochem Marketplace_`;
-          
-          sendPromises.push(
-            sendWhatsApp(userData.phoneNumber, msg, null, {
-              templateName: "prochem_market_alert",
-              templateSid: "HX24554dd2af8db376b1a1609f13cfffbc",
-              templateVariables: {
-                "1": productName,
-                "2": displayQty,
-                "3": displayPrice,
-                "4": docId
-              },
-              type: "marketing",
-              userId: userId
-            }).catch(err => console.error(`Failed to send alert to ${userData.phoneNumber}`, err))
-          );
+          usersToAlert.push({ userId, phoneNumber: userData.phoneNumber });
         }
       });
 
+      console.log(`Found ${usersToAlert.length} sellers to broadcast requirement ${docId}.`);
+
+      // 2. Process strictly in sequence to prevent silent server crashes/timeouts
       const chunkSize = 10;
-      for (let i = 0; i < sendPromises.length; i += chunkSize) {
-        const chunk = sendPromises.slice(i, i + chunkSize);
-        await Promise.all(chunk);
+      for (let i = 0; i < usersToAlert.length; i += chunkSize) {
+        const chunk = usersToAlert.slice(i, i + chunkSize);
+        
+        // Await the completion of this batch of 10 before starting the next batch
+        await Promise.all(chunk.map(user => 
+          sendWhatsApp(user.phoneNumber, msg, null, {
+            templateName: "prochem_market_alert",
+            templateSid: "HX24554dd2af8db376b1a1609f13cfffbc",
+            templateVariables: {
+              "1": String(productName),
+              "2": String(displayQty),
+              "3": String(displayPrice),
+              "4": String(docId)
+            },
+            type: "marketing",
+            userId: user.userId
+          }).catch(err => {
+            // Rejections are handled and logged directly inside `whatsappService`
+            console.error(`Chunk broadcast failed for ${user.phoneNumber}:`, err.message);
+          })
+        ));
       }
 
       return true;
@@ -191,7 +204,7 @@ exports.onDirectRfqCreated = onDocumentCreated(
           
           await sendWhatsApp(sellerData.phoneNumber, msg, null, {
             templateName: "new_negotiation_request",
-            templateSid: "HX1fee2eeead6d641cc946a9b17957ad8d", 
+            templateSid: "HX1PbWWqgKDBDorh525uecKaGZD21FGSoCeR", 
             templateVariables: {
                 "1": companyName,
                 "2": rfqData.productName,
