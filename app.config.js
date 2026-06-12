@@ -42,6 +42,10 @@ export default ({ config }) => {
     name: "Prochem Marketplace",
     slug: "prochem-app",
     version: "2.1.2",
+    
+    // 👇 ADDED: The custom scheme for your app deep links 👇
+    scheme: "prochem",
+    
     orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -64,6 +68,12 @@ export default ({ config }) => {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.prochem.app", // Recommended to match Android package
+      
+      // 👇 ADDED: Associated Domains for iOS Universal Links 👇
+      associatedDomains: [
+        "applinks:app.prochemapp.com"
+      ],
+      
       // 👇 ADDED TO ALLOW IOS TO OPEN UPI APPS 👇
       infoPlist: {
         LSApplicationQueriesSchemes: [
@@ -88,8 +98,9 @@ export default ({ config }) => {
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       compileSdkVersion: 34,
       targetSdkVersion: 34,
-      // Note: This intentFilter makes YOUR app respond to upi:// links. 
+      
       intentFilters: [
+        // Note: This intentFilter makes YOUR app respond to upi:// links. 
         {
           action: "VIEW",
           data: [
@@ -98,6 +109,16 @@ export default ({ config }) => {
             { scheme: "phonepe" },
             { scheme: "paytmmp" }
           ]
+        },
+        // 👇 ADDED: Catches https://app.prochemapp.com links and opens the app 👇
+        {
+          action: "VIEW",
+          autoVerify: true,
+          data: [
+            { scheme: "https", host: "app.prochemapp.com", pathPrefix: "/negotiation" },
+            { scheme: "https", host: "app.prochemapp.com", pathPrefix: "/orders" }
+          ],
+          category: ["BROWSABLE", "DEFAULT"]
         }
       ]
     },

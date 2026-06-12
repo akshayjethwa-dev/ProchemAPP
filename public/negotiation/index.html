@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opening Prochem Marketplace...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f9fafb;
+            color: #111827;
+            text-align: center;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0284c7;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="loader"></div>
+    <h2>Opening Prochem App...</h2>
+    <p>If you are not redirected automatically, <a id="app-link" href="prochem://">click here to open the app</a>.</p>
+
+    <script>
+        // Extract the current path parameter (e.g., /negotiation/RFQ-9012)
+        const path = window.location.pathname; 
+        
+        // Construct the custom deep link scheme
+        // This transforms "https://app.prochem.in/negotiation/RFQ-9012" into "prochem://negotiation/RFQ-9012"
+        const appSchemeLink = "prochem:/" + path;
+
+        // Update the manual fallback link anchor text just in case
+        document.getElementById('app-link').setAttribute('href', appSchemeLink);
+
+        // Instantly attempt to force trigger the native app launch protocol
+        window.location.href = appSchemeLink;
+    </script>
+</body>
+</html>

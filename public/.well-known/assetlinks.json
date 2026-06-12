@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.prochem.app",
+      "sha256_cert_fingerprints": [
+        "76:AA:90:E9:F9:7A:E5:10:AA:D7:78:DB:8F:51:54:8C:AF:94:80:99:62:8F:45:2E:2E:F8:AF:BC:A1:A2:5A:A7"
+      ]
+    }
+  }
+]
