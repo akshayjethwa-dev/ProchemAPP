@@ -38,6 +38,11 @@ export const RootNavigator = () => {
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
+    if (!auth) {
+      console.error("Firebase auth is undefined. Check your .env variables!");
+      if (initializing) setInitializing(false);
+      return;
+    }
     const unsubscribe = onAuthStateChanged(auth, async (u: FirebaseUser | null) => {
       if (useAppStore.getState().adminImpersonating) {
         if (initializing) setInitializing(false);

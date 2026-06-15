@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -47,8 +47,10 @@ export default function RegistrationScreen() {
   const route = useRoute();
   const theme = useTheme();
 
-  // Ref for Native Recaptcha
-  const recaptchaVerifier = useRef(null);
+  // Native Recaptcha (Expo)
+  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
+  // Web Recaptcha (Firebase JS SDK)
+  const webRecaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
   const { role } = (route.params as { role?: string }) || { role: 'buyer' };
 
@@ -89,6 +91,35 @@ export default function RegistrationScreen() {
   const hasNumber = /\d/.test(password);
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const isPasswordValid = hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial;
+
+  // ✅ INITIALIZE RECAPTCHA ONCE WHEN SCREEN LOADS (WEB ONLY)
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      // Add `&& auth` to prevent crashing if Firebase isn't initialized
+      if (!webRecaptchaVerifier.current && auth) {
+        try {
+          webRecaptchaVerifier.current = new RecaptchaVerifier(
+            auth,
+            'recaptcha-container',
+            {
+              size: 'invisible',
+            }
+          );
+        } catch (e) {
+          console.error("Recaptcha initialization error:", e);
+        }
+      }
+    }
+    // Cleanup when user leaves the screen
+    return () => {
+      if (webRecaptchaVerifier.current) {
+        try {
+          webRecaptchaVerifier.current.clear();
+        } catch (e) {}
+        webRecaptchaVerifier.current = null;
+      }
+    };
+  }, []);
 
   const showAlert = (title: string, message: string, onOk?: () => void) => {
     if (Platform.OS === 'web') {
@@ -192,23 +223,22 @@ export default function RegistrationScreen() {
 
       // 3. ✅ BRANCHING LOGIC: Web vs Native
       if (Platform.OS === 'web') {
-        // ✅ WEB FIX: Clean up any stale/zombie Recaptcha instances from hot-reloads
-        if ((window as any).recaptchaVerifier) {
-          try {
-            (window as any).recaptchaVerifier.clear();
-          } catch (e) {}
-          (window as any).recaptchaVerifier = null;
+        // Prevent crash if auth is missing
+        if (!auth) {
+          showAlert("Configuration Error", "Firebase Auth is not initialized. Please check your .env variables.");
+          setLoading(false);
+          return;
         }
 
-        // Initialize a fresh Recaptcha instance
-        (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible',
-        });
-
+        // Fallback just in case it didn't initialize on mount
+        if (!webRecaptchaVerifier.current) {
+           webRecaptchaVerifier.current = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+        }
+        
         const confirmationResult = await signInWithPhoneNumber(
-          auth, 
-          fullMobile, 
-          (window as any).recaptchaVerifier
+          auth,
+          fullMobile,
+          webRecaptchaVerifier.current
         );
         verificationId = confirmationResult.verificationId;
       } else {
@@ -245,9 +275,9 @@ export default function RegistrationScreen() {
       console.error('OTP Send Error Full Object:', error);
       
       // Clean up the broken web recaptcha so the user can try again immediately
-      if (Platform.OS === 'web' && (window as any).recaptchaVerifier) {
-         try { (window as any).recaptchaVerifier.clear(); } catch(e) {}
-         (window as any).recaptchaVerifier = null;
+      if (Platform.OS === 'web' && webRecaptchaVerifier.current) {
+         try { webRecaptchaVerifier.current.clear(); } catch(e) {}
+         webRecaptchaVerifier.current = null;
       }
 
       // ✅ BETTER ERROR MESSAGES: Shows the exact Firebase error code to help debugging
@@ -257,6 +287,8 @@ export default function RegistrationScreen() {
         showAlert('Error', 'Too many requests. Please try again later.');
       } else if (error.code === 'auth/unauthorized-domain') {
         showAlert('Domain Blocked', 'Localhost is not whitelisted in your Firebase Console.');
+      } else if (error.code === 'auth/invalid-app-credential') {
+         showAlert('App Check Failed', 'ReCAPTCHA/App Check configuration mismatch. Ensure App Check enforcement is disabled or correctly set up in Firebase Console.');
       } else {
         // Prints the raw error code so we know exactly what went wrong
         showAlert('Failed to Send OTP', `Error: ${error.message || error.code || 'Unknown error'}`);
