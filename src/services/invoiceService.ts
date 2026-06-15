@@ -1,3 +1,4 @@
+// File: src/services/invoiceService.ts
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
@@ -6,8 +7,22 @@ import { db } from '../config/firebase';
 import { Order } from '../types';
 
 // --- Types ---
-// Cast 'order' to this to avoid TS errors for fields like sellerName, buyerGst, etc.
 type ExtendedOrder = any; 
+
+export interface ManualInvoiceData {
+  invoiceNo: string;
+  sellerName: string;
+  sellerAddress: string;
+  sellerGst: string;
+  sellerStateCode: string;
+  buyerName: string;
+  buyerAddress: string;
+  buyerGst: string;
+  buyerStateCode: string;
+  itemName: string;
+  amount: number;
+  taxRate: number;
+}
 
 // --- Constants ---
 const PROCHEM_DETAILS = {
@@ -24,7 +39,7 @@ const formatCurrency = (amount: number) =>
   `₹${(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const getDateStr = (date: any) => {
-  if (!date) return new Date().toLocaleDateString();
+  if (!date) return new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const d = new Date(date.seconds ? date.seconds * 1000 : date);
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 };
@@ -51,12 +66,9 @@ const fetchUserData = async (uid: string) => {
 // --- 1. GOODS INVOICE (Seller -> Buyer) ---
 const generateGoodsInvoiceHTML = async (order: Order) => {
   const o = order as ExtendedOrder;
-  
-  // Fetch Real Data
   const sellerData = await fetchUserData(order.sellerId);
   const buyerData = await fetchUserData(order.buyerId);
 
-  // Fallbacks if data is missing
   const seller = {
     name: sellerData?.companyName || o.sellerName || 'Seller Company',
     address: sellerData?.address || o.sellerAddress || 'Address Not Available',
@@ -88,66 +100,15 @@ const generateGoodsInvoiceHTML = async (order: Order) => {
   }).join('');
 
   const totalTaxable = o.items.reduce((acc: number, item: any) => acc + (item.quantity * item.pricePerUnit), 0);
-  const taxAmount = totalTaxable * 0.18; // Assuming flat 18% for demo
+  const taxAmount = totalTaxable * 0.18;
   const grandTotal = totalTaxable + taxAmount;
 
-  return `
-    <html>
-      <head>
-        <style>
-          body { font-family: 'Helvetica', sans-serif; padding: 20px; font-size: 12px; }
-          .box { border: 1px solid #000; padding: 0; }
-          .header { text-align: center; border-bottom: 1px solid #000; padding: 10px; background: #f0f0f0; }
-          .row { display: flex; border-bottom: 1px solid #000; }
-          .col { flex: 1; padding: 10px; }
-          .col-r { border-left: 1px solid #000; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { border: 1px solid #000; padding: 8px; text-align: left; }
-        </style>
-      </head>
-      <body>
-        <div class="box">
-          <div class="header"><h3>TAX INVOICE (GOODS)</h3></div>
-          <div class="row">
-            <div class="col">
-              <strong>Invoice No:</strong> SELL-${order.id.slice(0,6).toUpperCase()}<br>
-              <strong>Date:</strong> ${getDateStr(order.createdAt)}
-            </div>
-            <div class="col col-r">
-              <strong>Order ID:</strong> ${order.id.toUpperCase()}
-            </div>
-          </div>
-          <div class="row">
-            <div class="col">
-              <strong>SUPPLIER (SELLER):</strong><br>
-              ${seller.name}<br>${seller.address}<br>
-              <strong>GSTIN:</strong> ${seller.gstin}
-            </div>
-            <div class="col col-r">
-              <strong>BUYER:</strong><br>
-              ${buyer.name}<br>${buyer.address}<br>
-              <strong>GSTIN:</strong> ${buyer.gstin}
-            </div>
-          </div>
-          <div style="padding: 10px;">
-            <table>
-              <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Taxable Value</th></tr>
-              ${itemsRows}
-            </table>
-            <div style="text-align: right; margin-top: 15px;">
-              <p>Taxable Amount: ${formatCurrency(totalTaxable)}</p>
-              <p>${taxType} @ 18%: ${formatCurrency(taxAmount)}</p>
-              <h3>TOTAL AMOUNT: ${formatCurrency(grandTotal)}</h3>
-            </div>
-          </div>
-        </div>
-      </body>
-    </html>
-  `;
+  return buildInvoiceHTML('TAX INVOICE (GOODS)', `SELL-${order.id.slice(0,6).toUpperCase()}`, order.id.toUpperCase(), getDateStr(order.createdAt), seller, buyer, itemsRows, totalTaxable, taxAmount, taxType, grandTotal);
 };
 
-// --- 2. BUYER SERVICE INVOICE (Prochem -> Buyer) ---
+// --- 2. BUYER SERVICE INVOICE ---
 const generateProchemBuyerInvoiceHTML = async (order: Order) => {
+  // ... Keep existing logic ...
   const o = order as ExtendedOrder;
   const buyerData = await fetchUserData(order.buyerId);
   const buyerAddress = typeof o.shippingAddress === 'string' ? JSON.parse(o.shippingAddress) : o.shippingAddress || {};
@@ -161,9 +122,7 @@ const generateProchemBuyerInvoiceHTML = async (order: Order) => {
   };
 
   const platformFee = o.platformFeeBuyer || 500;
-  // ✅ FIX: Use 'o' to access fields that might miss in strict Order type
   const logisticsFee = o.logisticFee || o.shippingFee || 1000; 
-  
   const taxType = getTaxType(PROCHEM_DETAILS.stateCode, buyer.stateCode);
   
   const tax1 = platformFee * 0.18;
@@ -224,8 +183,9 @@ const generateProchemBuyerInvoiceHTML = async (order: Order) => {
   `;
 };
 
-// --- 3. SELLER SERVICE INVOICE (Prochem -> Seller) ---
+// --- 3. SELLER SERVICE INVOICE ---
 const generateProchemSellerInvoiceHTML = async (order: Order) => {
+  // ... Keep existing logic ...
   const o = order as ExtendedOrder;
   const sellerData = await fetchUserData(order.sellerId);
 
@@ -303,16 +263,91 @@ const generateProchemSellerInvoiceHTML = async (order: Order) => {
   `;
 };
 
-// --- EXPORTS ---
+// --- 4. MANUAL CUSTOM INVOICE (Admin Triggered) ---
+const generateManualInvoiceHTML = (data: ManualInvoiceData) => {
+  const seller = { name: data.sellerName, address: data.sellerAddress, gstin: data.sellerGst, stateCode: data.sellerStateCode || '27' };
+  const buyer = { name: data.buyerName, address: data.buyerAddress, gstin: data.buyerGst, stateCode: data.buyerStateCode || '24' };
+  
+  const taxType = getTaxType(seller.stateCode, buyer.stateCode);
+  const taxAmount = data.amount * (data.taxRate / 100);
+  const grandTotal = data.amount + taxAmount;
 
+  const itemsRows = `
+    <tr>
+      <td>${data.itemName}</td>
+      <td>1</td>
+      <td>${formatCurrency(data.amount)}</td>
+      <td>${formatCurrency(data.amount)}</td>
+    </tr>`;
+
+  return buildInvoiceHTML('CUSTOM TAX INVOICE', data.invoiceNo, 'MANUAL', getDateStr(new Date()), seller, buyer, itemsRows, data.amount, taxAmount, taxType, grandTotal);
+};
+
+// --- Helper for HTML Generation ---
+const buildInvoiceHTML = (title: string, invoiceNo: string, orderId: string, dateStr: string, seller: any, buyer: any, itemsRows: string, totalTaxable: number, taxAmount: number, taxType: string, grandTotal: number) => `
+  <html>
+    <head>
+      <style>
+        body { font-family: 'Helvetica', sans-serif; padding: 20px; font-size: 12px; }
+        .box { border: 1px solid #000; padding: 0; }
+        .header { text-align: center; border-bottom: 1px solid #000; padding: 10px; background: #f0f0f0; }
+        .row { display: flex; border-bottom: 1px solid #000; }
+        .col { flex: 1; padding: 10px; }
+        .col-r { border-left: 1px solid #000; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+      </style>
+    </head>
+    <body>
+      <div class="box">
+        <div class="header"><h3>${title}</h3></div>
+        <div class="row">
+          <div class="col">
+            <strong>Invoice No:</strong> ${invoiceNo}<br>
+            <strong>Date:</strong> ${dateStr}
+          </div>
+          <div class="col col-r">
+            <strong>Order ID:</strong> ${orderId}
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <strong>SUPPLIER (SELLER):</strong><br>
+            ${seller.name}<br>${seller.address}<br>
+            <strong>GSTIN:</strong> ${seller.gstin}
+          </div>
+          <div class="col col-r">
+            <strong>BUYER:</strong><br>
+            ${buyer.name}<br>${buyer.address}<br>
+            <strong>GSTIN:</strong> ${buyer.gstin}
+          </div>
+        </div>
+        <div style="padding: 10px;">
+          <table>
+            <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Taxable Value</th></tr>
+            ${itemsRows}
+          </table>
+          <div style="text-align: right; margin-top: 15px;">
+            <p>Taxable Amount: ${formatCurrency(totalTaxable)}</p>
+            <p>${taxType} @ ${Math.round((taxAmount/totalTaxable)*100) || 18}%: ${formatCurrency(taxAmount)}</p>
+            <h3>TOTAL AMOUNT: ${formatCurrency(grandTotal)}</h3>
+          </div>
+        </div>
+      </div>
+    </body>
+  </html>
+`;
+
+// --- EXPORTS ---
 export const generateInvoiceHtml = async (
-  type: 'GOODS' | 'SERVICE_BUYER' | 'SERVICE_SELLER', 
-  order: Order
+  type: 'GOODS' | 'SERVICE_BUYER' | 'SERVICE_SELLER' | 'MANUAL', 
+  payload: Order | ManualInvoiceData | any
 ) => {
   switch (type) {
-    case 'GOODS': return await generateGoodsInvoiceHTML(order);
-    case 'SERVICE_BUYER': return await generateProchemBuyerInvoiceHTML(order);
-    case 'SERVICE_SELLER': return await generateProchemSellerInvoiceHTML(order);
+    case 'GOODS': return await generateGoodsInvoiceHTML(payload as Order);
+    case 'SERVICE_BUYER': return await generateProchemBuyerInvoiceHTML(payload as Order);
+    case 'SERVICE_SELLER': return await generateProchemSellerInvoiceHTML(payload as Order);
+    case 'MANUAL': return generateManualInvoiceHTML(payload as ManualInvoiceData);
     default: return '<html><body>Invalid Invoice Type</body></html>';
   }
 };

@@ -87,13 +87,14 @@ exports.sendPushNotification = onDocumentCreated(
 });
 
 // ==========================================
-// 🚀 BROADCAST NEW REQUIREMENTS (UPDATED BATCHING)
+// 🚀 UTILITY-BASED BROADCAST (CLEAN SUB-DIRECTORY LINKS & RATE-LIMITS)
 // ==========================================
 exports.onRequirementCreated = onDocumentCreated(
   {
     document: "customRequirements/{docId}",
     region: "asia-south1",
-    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, TWILIO_MESSAGING_SERVICE_SID]
+    secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, TWILIO_MESSAGING_SERVICE_SID],
+    timeoutSeconds: 300 // Extra execution time safe-margin for long batch drip delays
   }, 
   async (event) => {
     const snap = event.data;
@@ -109,21 +110,21 @@ exports.onRequirementCreated = onDocumentCreated(
     const targetPrice = reqData.targetPrice;
 
     try {
-      const usersSnap = await admin.firestore().collection("users")
-        .where("whatsappOptIn", "==", true)
-        .get();
+      const usersSnap = await admin.firestore().collection("users").get();
       
       const displayPrice = targetPrice ? `₹${targetPrice}` : "Negotiable";
       const displayQty = `${quantity} ${unit}`.trim() || "Check App";
-      const msg = `🔔 *New Buyer Requirement — Prochem*\n\nA buyer is looking for:\n\n🧪 *Product:* ${productName}\n📦 *Quantity:* ${displayQty}\n💰 *Target Price:* ${displayPrice}\n\n*Requirement ID:* #${docId}\n\nReply *INTEREST ${docId}* to start negotiation via Prochem.\n\n_(This requirement is live — respond quickly to close the deal)_\n\n_Prochem Marketplace_`;
+      
+      // Clean text backup message structured line-by-line
+      const msg = `🔔 *New Buyer Requirement on Prochem*\n\n🧪 *Product:* ${productName}\n📦 *Quantity:* ${displayQty}\n💰 *Target Price:* ${displayPrice}\n🔢 *Requirement ID:* #${docId}\n\nPlease open the Prochem app to view full details and submit your quotation.`;
 
       const usersToAlert = [];
+      let debugLog = `Requirement #${docId} Evaluation Report:\n`;
 
       usersSnap.forEach((doc) => {
         const userData = doc.data();
         const userId = doc.id;
 
-        const isSeller = userData.userType === 'seller' || userData.userType === 'dual';
         const isExcluded = 
           userId === buyerId || 
           (reqData.excludedSellerIds && reqData.excludedSellerIds.includes(userId)) || 
@@ -131,38 +132,74 @@ exports.onRequirementCreated = onDocumentCreated(
 
         const prefs = userData.whatsappPreferences || {};
         const wantsMarketAlerts = prefs.marketAlerts !== false; 
+        const hasOptIn = userData.whatsappOptIn === true;
+        const hasPhone = !!userData.phoneNumber;
 
-        if (isSeller && !isExcluded && userData.phoneNumber && wantsMarketAlerts) {
-          usersToAlert.push({ userId, phoneNumber: userData.phoneNumber });
+        if (userId === buyerId) {
+           debugLog += `- Skipped ${userData.phoneNumber || userId}: This is the buyer.\n`;
+        } else if (!hasOptIn) {
+           debugLog += `- Skipped ${userData.phoneNumber || userId}: whatsappOptIn is missing/false.\n`;
+        } else if (!hasPhone) {
+           debugLog += `- Skipped ${userId}: No phone number on profile.\n`;
+        } else if (!wantsMarketAlerts) {
+           debugLog += `- Skipped ${userData.phoneNumber}: User turned off market alerts.\n`;
+        } else if (isExcluded) {
+           debugLog += `- Skipped ${userData.phoneNumber}: User explicitly excluded.\n`;
+        } else {
+           usersToAlert.push({ userId, phoneNumber: userData.phoneNumber });
+           debugLog += `✅ ADDED ${userData.phoneNumber} to broadcast list.\n`;
         }
       });
 
-      const chunkSize = 10;
+      if (usersToAlert.length === 0) {
+         console.log("No valid users found. Aborting. " + debugLog);
+         await admin.firestore().collection("whatsappLogs").add({
+            direction: "outbound",
+            toNumber: "SYSTEM_DIAGNOSTIC",
+            body: `Attempted to broadcast Requirement #${docId} (${productName}), but found 0 eligible users.\n\nLog:\n${debugLog}`,
+            templateName: "System_Diagnostic",
+            messageType: "debug",
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            status: "failed",
+            error: "No eligible users found. See body for details."
+         });
+         return null;
+      }
+
+      // 🚀 Batch Sender with 3-second pacing delays to comply with Meta high volume rules
+      const chunkSize = 10; 
+      
       for (let i = 0; i < usersToAlert.length; i += chunkSize) {
         const chunk = usersToAlert.slice(i, i + chunkSize);
         
         await Promise.all(chunk.map(user => 
           sendWhatsApp(user.phoneNumber, msg, null, {
-            templateName: "prochem_market_alert",
-            templateSid: "HX24554dd2af8db376b1a1609f13cfffbc", // Keep your existing market alert SID
+            templateName: "prochem_requirement_utility", 
+            templateSid: "HX22bc4b7900f3e532683be8f71cb1a1cc", // Update this when Twilio provides the SID
             templateVariables: {
               "1": String(productName),
               "2": String(displayQty),
               "3": String(displayPrice),
               "4": String(docId)
             },
-            type: "marketing",
+            type: "utility", 
             userId: user.userId
           }).catch(err => {
-            console.error(`Chunk broadcast failed for ${user.phoneNumber}:`, err.message);
+            console.error(`Broadcast transmission failed for ${user.phoneNumber}:`, err.message);
           })
         ));
+
+        if (i + chunkSize < usersToAlert.length) {
+          console.log(`Sent batch of ${chunk.length}. Pausing 3 seconds to avoid delivery blocks...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
       }
 
+      console.log(`Successfully processed broadcast out to ${usersToAlert.length} targets.`);
       return true;
 
     } catch (error) {
-      console.error("❌ Error broadcasting requirement:", error);
+      console.error("❌ Critical error intercepted during broadcast sequence:", error);
       return null;
     }
 });
@@ -197,7 +234,7 @@ exports.onDirectRfqCreated = onDocumentCreated(
           
           await sendWhatsApp(sellerData.phoneNumber, msg, null, {
             templateName: "new_negotiation_alert",
-            templateSid: "HX_NEW_NEGOTIATION_ALERT_SID", // 🚀 REPLACE WITH APPROVED SID
+            templateSid: "HX672fc71PbWWqgKDBDorh525uecKaGZD21FGSoCeR", // 🚀 REPLACE WITH APPROVED SID
             templateVariables: {
                 "1": companyName,
                 "2": rfqData.productName,
@@ -429,7 +466,7 @@ exports.onAppMessageCreated = onDocumentCreated(
              
              outMsg = `💰 *Formal Offer Received*\n_Prochem — Negotiation #${convData.rfqId}_\n\nThe supplier has sent you a confirmed offer:\n\n🧪 ${rfqData.productName}\n📦 Qty: ${messageData.proposedQty} ${rfqData.unit}\n💵 Price: ₹${messageData.proposedPrice}\n\n*Total Value: ₹${totalValue}* (excl. GST & fees)\n\n👉 Open in App to Accept: ${deepLink}`;
              templateUsed = "formal_offer_received";
-             templateSid = "HX_FORMAL_OFFER_RECEIVED_SID"; // 🚀 REPLACE WITH APPROVED SID
+             templateSid = "HX3b3ccf973fe8a1dcea5586c1714bc671"; // 🚀 REPLACE WITH APPROVED SID
              templateVariables = {
                  "1": convData.rfqId,
                  "2": rfqData.productName,
@@ -446,7 +483,7 @@ exports.onAppMessageCreated = onDocumentCreated(
 
              outMsg = `💬 *New Message — Prochem Negotiation*\n\n*Requirement:* ${rfqData.productName} (#${convData.rfqId})\n\n*Message:*\n"${actualMsg}"\n\n_To reply to this message securely, please open the app._`;
              templateUsed = "chat_message_relay";
-             templateSid = "HX_CHAT_MESSAGE_RELAY_SID"; // 🚀 REPLACE WITH APPROVED SID
+             templateSid = "HXde0a53b6349cdd5e03b33dd6a6638245"; // 🚀 REPLACE WITH APPROVED SID
              templateVariables = {
                  "1": rfqData.productName,
                  "2": convData.rfqId,
@@ -509,7 +546,7 @@ exports.onRfqUpdated = onDocumentUpdated(
                  
                  await sendWhatsApp(sellerData.phoneNumber, msg, null, {
                    templateName: "offer_accepted_alert",
-                   templateSid: "HX_OFFER_ACCEPTED_ALERT_SID", // 🚀 REPLACE WITH APPROVED SID
+                   templateSid: "HX71d16959f0a9fe8498278db4e34daab4", // 🚀 REPLACE WITH APPROVED SID
                    templateVariables: {
                        "1": rfqId,
                        "2": after.productName,

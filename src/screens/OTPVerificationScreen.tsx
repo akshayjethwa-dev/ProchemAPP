@@ -1,27 +1,33 @@
+// File: src/screens/OTPVerificationScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import { Text, TextInput, Button, IconButton, useTheme } from 'react-native-paper';
+import { Text, TextInput, Button, IconButton, useTheme, HelperText } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 
-// ✅ Import Firebase Auth methods
+// Firebase Auth
 import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { completeRegistrationAfterOTP } from '../services/authService';
 
 export default function OTPVerificationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<any>();
   
-  // ✅ Extract both mobile and verificationId from route params
+  // Extract route params
   const mobile = route.params?.mobile || '';
   const verificationId = route.params?.verificationId || '';
+  const mode = route.params?.mode || 'login'; // 'login' or 'registration'
+  const formData = route.params?.formData;
+  
   const theme = useTheme();
 
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(30);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -31,8 +37,9 @@ export default function OTPVerificationScreen() {
   }, []);
 
   const handleVerify = async () => {
+    setErrorMsg('');
     if (otp.length !== 6) {
-      Alert.alert('Error', 'Please enter a 6-digit OTP');
+      setErrorMsg('Please enter a 6-digit OTP');
       return;
     }
 
@@ -44,25 +51,37 @@ export default function OTPVerificationScreen() {
     setLoading(true);
     
     try {
-      // ✅ 1. Create a Firebase credential using the verification ID and the user's entered OTP
+      // 1. Create a Firebase credential using the verification ID and the OTP
       const credential = PhoneAuthProvider.credential(verificationId, otp);
 
-      // ✅ 2. Sign in to Firebase with this credential
+      // 2. Sign in to Firebase with this credential
       const userCredential = await signInWithCredential(auth, credential);
 
-      // Success! Phone is verified. 
-      // The onAuthStateChanged listener in RootNavigator will catch the new user state 
-      // and automatically route the user to the dashboard or onboarding.
-      console.log('Successfully logged in with UID:', userCredential.user.uid);
+      // 3. IF REGISTRATION MODE -> We must now save their profile and email/password
+      if (mode === 'registration' && formData) {
+        await completeRegistrationAfterOTP(userCredential.user, formData);
+        Alert.alert('Success', 'Account created! Admin will verify your GST details manually.', [
+          { 
+            text: 'Continue', 
+            onPress: () => {
+              // The App.tsx / RootNavigator will likely catch the auth state change automatically,
+              // but if you need to force navigation, you can do it here.
+            } 
+          }
+        ]);
+      } else {
+        // Success for standard login!
+        console.log('Successfully logged in with UID:', userCredential.user.uid);
+      }
 
     } catch (error: any) {
       console.error('OTP Verification Error:', error);
       
-      // Handle common Firebase verification errors gracefully
-      if (error.code === 'auth/invalid-verification-code') {
-        Alert.alert('Error', 'Invalid OTP. Please check the code and try again.');
+      // ✅ AC4: Inline errors for bad OTPs
+      if (error.code === 'auth/invalid-verification-code' || error.code === 'auth/invalid-credential') {
+        setErrorMsg('Invalid OTP. Please try again.');
       } else if (error.code === 'auth/code-expired') {
-        Alert.alert('Error', 'The OTP has expired. Please go back and request a new one.');
+        setErrorMsg('The OTP has expired. Please go back and request a new one.');
       } else {
         Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
       }
@@ -72,8 +91,6 @@ export default function OTPVerificationScreen() {
   };
 
   const handleResend = () => {
-    // For React Native Firebase Web SDK flows, it's often cleanest to have the user 
-    // go back to the previous screen to trigger the Recaptcha again for a new SMS.
     Alert.alert(
       'Resend OTP', 
       'To securely send a new OTP, please go back and request a new code.',
@@ -84,24 +101,36 @@ export default function OTPVerificationScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} disabled={loading} />
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.content}>
         <Text variant="displaySmall" style={styles.title}>Enter OTP</Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>Sent to {mobile}</Text>
+        <Text variant="bodyLarge" style={styles.subtitle}>
+          Sent to <Text style={{fontWeight: 'bold', color: '#111827'}}>{mobile}</Text>
+        </Text>
 
         <View style={styles.inputContainer}>
           <TextInput
             mode="outlined"
             label="6-Digit Code"
             value={otp}
-            onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, '').slice(0, 6))}
+            onChangeText={(text) => {
+              setOtp(text.replace(/[^0-9]/g, '').slice(0, 6));
+              setErrorMsg('');
+            }}
             keyboardType="number-pad"
             maxLength={6}
             style={styles.input}
             contentStyle={styles.inputText}
+            error={!!errorMsg}
+            disabled={loading}
           />
+          {errorMsg ? (
+            <HelperText type="error" visible={!!errorMsg} style={{ textAlign: 'center', marginTop: 8 }}>
+              {errorMsg}
+            </HelperText>
+          ) : null}
         </View>
 
         <Button 
@@ -117,7 +146,7 @@ export default function OTPVerificationScreen() {
 
         <TouchableOpacity 
           onPress={handleResend} 
-          disabled={resendTimer > 0}
+          disabled={resendTimer > 0 || loading}
           style={styles.resendContainer}
         >
           <Text style={{ color: resendTimer > 0 ? '#9CA3AF' : theme.colors.primary, fontWeight: 'bold' }}>

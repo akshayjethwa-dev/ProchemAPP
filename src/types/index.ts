@@ -31,6 +31,7 @@ export interface User {
   address?: string;
   addresses?: Address[];
   phoneNumber?: string;
+  phoneVerified?: boolean; // ✅ ADDED THIS LINE TO FIX THE ERROR
   pincode?: string;
   documents?: {
     gstin?: boolean;
@@ -43,8 +44,8 @@ export interface User {
   createdAt?: any;
   updatedAt?: any;
   subscriptionTier?: SubscriptionTier; 
-  subscriptionExpiry?: string | Date | null; // Can be a Firebase Timestamp string/Date
-  paymentHistory?: string[]; // Array of transaction/reference IDs
+  subscriptionExpiry?: string | Date | null; 
+  paymentHistory?: string[]; 
 
   premiumNegotiationCredits?: number; 
   liveQuoteCredits?: number;
@@ -113,23 +114,23 @@ export interface Product {
   sampleSize?: string;
   
   // 🚀 NEW: Logistics & Packaging
-  packagingType?: string; // e.g., '200L Drum', '25kg Bag'
+  packagingType?: string; 
   
   // 🚀 NEW: Commercial & Tax
-  gstPercent?: number;    // e.g., 5, 12, 18
+  gstPercent?: number;    
   moq?: number;
   
   // 🚀 NEW: Compliance & Safety
-  hazardClass?: string;   // e.g., 'Flammable', 'Corrosive', 'Non-Hazardous'
-  unNumber?: string;      // UN classification for transport
-  storageConditions?: string; // e.g., 'Store below 25°C in a dry place'
+  hazardClass?: string;   
+  unNumber?: string;      
+  storageConditions?: string; 
   manufactureDate?: string;
   expiryDate?: string;
 
   // 🚀 NEW: Documentation (URLs)
-  msdsUrl?: string;       // Material Safety Data Sheet
-  tdsUrl?: string;        // Technical Data Sheet
-  coaUrl?: string;        // Certificate of Analysis (Sample)
+  msdsUrl?: string;       
+  tdsUrl?: string;        
+  coaUrl?: string;        
 
   certifications?: string[];
   imageUrl?: string;
@@ -171,31 +172,29 @@ export interface Conversation {
   sellerUserId: string;
   rfqId: string;
   status: 'open' | 'closed';
-  createdAt?: any; // Uses Firebase serverTimestamp
-  updatedAt?: any; // Uses Firebase serverTimestamp
+  createdAt?: any; 
+  updatedAt?: any; 
 }
 
 // 🚀 NEW: Masked Negotiation Message Schema (Task 5.1)
-// This will live in a subcollection: conversations/{conversationId}/messages
 export interface ConversationMessage {
   id?: string;
-  conversationId?: string; // Helpful reference
+  conversationId?: string; 
   senderRole: 'buyer' | 'seller' | 'system';
   direction: 'toBuyer' | 'toSeller' | 'both'; 
   body: string;
   source: 'whatsapp' | 'app';
-  timestamp?: any; // Uses Firebase serverTimestamp
+  timestamp?: any; 
 }
 
 // 🚀 UPDATED: Negotiation Message Schema (for the chat room)
 export interface NegotiationMessage {
   id: string;
-  rfqId?: string; // Links back to the specific RFQ
+  rfqId?: string; 
   text: string;
   senderId: string;
   timestamp: number;
   isBuyer: boolean;
-  // B2B specific additions for counter-offers
   isOffer?: boolean;
   proposedPrice?: number;
   proposedQty?: number;
@@ -312,7 +311,7 @@ export interface Address {
 // 🚀 NEW: Live Market / Broadcast Types
 export interface BroadcastLead {
   id?: string;
-  originalOrderId?: string; // Optional: if this was generated from a failed order
+  originalOrderId?: string; 
   productName: string;
   rfqId?: string;
   excludedSellerId?: string;
@@ -321,7 +320,7 @@ export interface BroadcastLead {
   purity?: string;
   quantityRequired: string;
   unit: string;
-  deliveryRegion: string; // e.g., "Ahmedabad, Gujarat" (Keeps buyer anonymous)
+  deliveryRegion: string; 
   status: 'OPEN' | 'CLOSED';
   createdAt: any;
 }
@@ -334,7 +333,7 @@ export interface SupplierQuote {
   supplierName: string;
   pricePerUnit: number;
   availableQuantity: string;
-  dispatchDays: string; // e.g., "2-3 Days"
+  dispatchDays: string; 
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
   createdAt: any;
 }

@@ -69,6 +69,9 @@ export default ({ config }) => {
       supportsTablet: true,
       bundleIdentifier: "com.prochem.app", // Recommended to match Android package
       
+      // 👇 ADDED: iOS Firebase config
+      googleServicesFile: "./GoogleService-Info.plist",
+
       // 👇 ADDED: Associated Domains for iOS Universal Links 👇
       associatedDomains: [
         "applinks:app.prochemapp.com"

@@ -20,6 +20,7 @@ import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationS
 import AdminPayment from '../screens/admin/AdminPayment';
 import AdminCustomRequirementsScreen from '../screens/admin/AdminCustomRequirementsScreen';
 import AdminWhatsAppLogsScreen from '../screens/admin/AdminWhatsAppLogsScreen'; // NEW: Import Logs Screen
+import AdminManualInvoiceScreen from '../screens/admin/AdminManualInvoiceScreen';
 
 // Negotiation Screens
 import NegotiationsListScreen from '../screens/NegotiationsListScreen';
@@ -37,6 +38,7 @@ export type AdminStackParamList = {
   NegotiationRoom: { negotiationId: string; title: string }; 
   AdminBroadcastBids: undefined; 
   AdminWhatsAppLogs: undefined; // NEW: Add to Param List
+  AdminManualInvoice: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -82,6 +84,7 @@ function DashboardStackNavigator() {
         component={AdminWhatsAppLogsScreen} 
         options={{ headerShown: true, title: 'WhatsApp Logs', headerBackTitle: 'Back' }}
       />
+      <Stack.Screen name="AdminManualInvoice" component={AdminManualInvoiceScreen} options={{ headerShown: true, title: 'Custom Invoice Generator', headerBackTitle: 'Back' }} />
     </Stack.Navigator>
   );
 }

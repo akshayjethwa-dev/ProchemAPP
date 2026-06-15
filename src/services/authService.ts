@@ -5,7 +5,10 @@ import {
   signOut,
   sendPasswordResetEmail,
   updateProfile,
-  deleteUser
+  updateEmail,
+  updatePassword,
+  deleteUser,
+  fetchSignInMethodsForEmail
 } from 'firebase/auth';
 import { 
   doc, 
@@ -28,8 +31,84 @@ interface RegisterData {
   gstin: string;
   gstVerified?: boolean;
   verificationStatus?: string;
-  whatsappOptIn?: boolean; // 🚀 Added Opt-In property
+  whatsappOptIn?: boolean;
 }
+
+// ✅ NEW: Check if email exists before sending OTP
+export const checkEmailExists = async (email: string): Promise<boolean> => {
+  try {
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+    return methods.length > 0;
+  } catch (error) {
+    console.error("Error checking email:", error);
+    return false;
+  }
+};
+
+// ✅ NEW: Complete registration after phone is verified
+export const completeRegistrationAfterOTP = async (
+  firebaseUser: any, 
+  formData: RegisterData
+): Promise<any> => {
+  try {
+    // 1. Attach Email and Password to the phone-authenticated user
+    await updateEmail(firebaseUser, formData.email);
+    await updatePassword(firebaseUser, formData.password);
+    await updateProfile(firebaseUser, { displayName: formData.companyName });
+
+    // 2. Prepare user document
+    const userData: User = {
+      uid: firebaseUser.uid,
+      email: formData.email,
+      userType: formData.userType,
+      companyName: formData.companyName,
+      phoneNumber: formData.phoneNumber,
+      gstNumber: formData.gstin,
+      verified: false,
+      kycStatus: 'pending',
+      addresses: [], 
+      documents: { gstin: false, shopLicense: false, udyogAadhar: false },
+      createdAt: new Date().toISOString(),
+      
+      subscriptionTier: 'FREE',
+      subscriptionExpiry: null,
+      paymentHistory: [],
+      
+      whatsappOptIn: formData.whatsappOptIn ?? true, 
+      phoneVerified: true, // ✅ Flag marked as true
+    };
+
+    // 3. Save User to Firestore
+    await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+
+    // 4. Send Welcome Notification
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: firebaseUser.uid,
+        title: 'Welcome to Prochem! 🎉',
+        message: 'Your account has been created successfully. Our team will review your GST details shortly.',
+        type: 'system',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+      
+      await addDoc(collection(db, 'notifications'), {
+        userId: 'ALL_ADMINS',
+        title: 'New User Registration',
+        message: `${formData.companyName} just registered as a new ${formData.userType.toUpperCase()}.`,
+        type: 'admin_broadcast',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+    } catch (notifyError) {
+      console.warn("Failed to create signup notifications:", notifyError);
+    }
+
+    return { ...firebaseUser, ...userData };
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to complete registration.');
+  }
+};
 
 export const loginUser = async (email: string, password: string): Promise<any> => {
   try {
@@ -43,68 +122,6 @@ export const loginUser = async (email: string, password: string): Promise<any> =
     return user;
   } catch (error: any) {
     throw new Error(error.message || 'Login failed');
-  }
-};
-
-export const registerUser = async ({ 
-  email, password, companyName, phoneNumber, userType, gstin, verificationStatus, whatsappOptIn 
-}: RegisterData): Promise<any> => {
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    const userData: User = {
-      uid: user.uid,
-      email: email,
-      userType: userType,
-      companyName: companyName,
-      phoneNumber: phoneNumber,
-      gstNumber: gstin,
-      verified: false,
-      kycStatus: 'pending',
-      addresses: [], 
-      documents: { gstin: false, shopLicense: false, udyogAadhar: false },
-      createdAt: new Date().toISOString(),
-      
-      subscriptionTier: 'FREE',
-      subscriptionExpiry: null,
-      paymentHistory: [],
-      
-      // 🚀 Save the WhatsApp Opt-In status
-      whatsappOptIn: whatsappOptIn ?? true, 
-    };
-
-    // 1. Save User to Firestore
-    await setDoc(doc(db, 'users', user.uid), userData);
-    await updateProfile(user, { displayName: companyName });
-
-    // 2. Send Welcome Notification to the User
-    try {
-      await addDoc(collection(db, 'notifications'), {
-        userId: user.uid,
-        title: 'Welcome to Prochem! 🎉',
-        message: 'Your account has been created successfully. Our team will review your GST details shortly.',
-        type: 'system',
-        read: false,
-        createdAt: new Date().toISOString()
-      });
-      
-      // 3. Send Alert to Admins
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'ALL_ADMINS',
-        title: 'New User Registration',
-        message: `${companyName} just registered as a new ${userType.toUpperCase()}.`,
-        type: 'admin_broadcast',
-        read: false,
-        createdAt: new Date().toISOString()
-      });
-    } catch (notifyError) {
-      console.warn("Failed to create signup notifications:", notifyError);
-    }
-
-    return { ...user, ...userData };
-  } catch (error: any) {
-    throw new Error(error.message || 'Registration failed');
   }
 };
 
@@ -142,8 +159,9 @@ export const deleteUserAccount = async (): Promise<void> => {
 
 export default {
   loginUser,
-  registerUser,
   logoutUser,
   resetPassword,
   deleteUserAccount,
+  completeRegistrationAfterOTP,
+  checkEmailExists,
 };

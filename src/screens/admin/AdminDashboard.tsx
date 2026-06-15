@@ -228,6 +228,14 @@ export default function AdminDashboard() {
             </Card>
 
             <Text variant="titleMedium" style={{marginTop: 20, marginBottom: 10, fontWeight:'bold'}}>Quick Actions</Text>
+            <Card style={{marginBottom: 12, backgroundColor: 'white'}} onPress={() => navigation.navigate('AdminManualInvoice')}>
+              <Card.Title 
+                title="Create Custom Invoice" 
+                subtitle="Manually generate an invoice PDF"
+                left={(props) => <IconButton icon="file-document-edit" iconColor="#10B981" size={28} />}
+                right={(props) => <IconButton icon="chevron-right" {...props} />}
+              />
+            </Card>
             <Card style={{marginBottom: 20}} onPress={() => navigation.navigate('SendNotification')}>
               <Card.Title 
                 title="Send Broadcast Notification" 

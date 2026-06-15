@@ -246,29 +246,29 @@ export default function LoginScreen() {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* ✅ NEW: Mobile Login CTA */}
+            {/* ✅ NEW: Create Account CTA */}
             <Button
               mode="outlined"
-              icon="cellphone"
-              onPress={() => navigation.navigate('MobileLogin')}
-              style={styles.mobileLoginBtn}
-              contentStyle={styles.mobileLoginBtnContent}
-              labelStyle={styles.mobileLoginBtnLabel}
+              icon="account-plus-outline"
+              onPress={() => navigation.navigate('Registration')}
+              style={styles.createAccountBtn}
+              contentStyle={styles.createAccountBtnContent}
+              labelStyle={styles.createAccountBtnLabel}
               textColor="#0F172A"
             >
-              Continue with mobile number (OTP) (Coming soon)
+              Create your account
             </Button>
 
-            {/* Register Section */}
+            {/* Mobile Login Section */}
             <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>New to Prochem?</Text>
+              <Text style={styles.registerText}>Prefer logging in with OTP?</Text>
               <Button 
                 mode="text" 
-                onPress={() => navigation.navigate('Registration')}
+                onPress={() => navigation.navigate('MobileLogin')}
                 labelStyle={styles.registerBtnLabel}
                 textColor="#2563EB"
               >
-                Create your account
+                Continue with mobile number (Coming soon)
               </Button>
             </View>
 
@@ -459,16 +459,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 12,
   },
-  mobileLoginBtn: {
+  createAccountBtn: {
     borderRadius: 12,
     borderColor: '#CBD5E1',
     borderWidth: 1.5,
     marginBottom: 24,
   },
-  mobileLoginBtnContent: {
+  createAccountBtnContent: {
     paddingVertical: 8,
   },
-  mobileLoginBtnLabel: {
+  createAccountBtnLabel: {
     fontSize: 15,
     fontWeight: 'bold',
   },
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   registerText: {
     color: '#64748B',
     fontSize: 14,
-    marginBottom: -4, // Pulled slightly up to connect with the button text tighter
+    marginBottom: -4, 
   },
   registerBtnLabel: {
     fontSize: 15,
