@@ -1,5 +1,5 @@
 // File: src/screens/RegistrationScreen.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -90,6 +90,28 @@ export default function RegistrationScreen() {
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const isPasswordValid = hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial;
 
+  // ✅ Initialize ReCAPTCHA ONCE on mount
+  useEffect(() => {
+    if (Platform.OS === 'web' && webAuth) {
+      if (!webRecaptchaVerifier.current) {
+        try {
+          webRecaptchaVerifier.current = new RecaptchaVerifier(webAuth, 'recaptcha-container', { 
+            size: 'invisible' 
+          });
+        } catch (e) {
+          console.error("Recaptcha Init Error:", e);
+        }
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (webRecaptchaVerifier.current) {
+        try { webRecaptchaVerifier.current.clear(); } catch (e) {}
+      }
+    };
+  }, []);
+
   const showAlert = (title: string, message: string, onOk?: () => void) => {
     if (Platform.OS === 'web') {
       window.alert(`${title}\n\n${message}`);
@@ -112,12 +134,10 @@ export default function RegistrationScreen() {
     if (!countryCode.trim()) { newErrors.phoneNumber = 'Country Code is required'; isValid = false; } 
     else if (!phoneNumber.trim() || phoneNumber.length !== 10) { newErrors.phoneNumber = 'Please enter a valid 10-digit mobile number'; isValid = false; }
     
-    // STRICT GSTIN VALIDATION
     const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$/;
     if (!gstin) { newErrors.gstin = 'GST Number is required'; isValid = false; } 
     else if (!gstRegex.test(gstin)) { newErrors.gstin = 'Invalid GST format (e.g., 22AAAAA0000A1Z5)'; isValid = false; }
 
-    // PASSWORD VALIDATION
     if (!password) { newErrors.password = 'Password is required'; isValid = false; } 
     else if (!isPasswordValid) { newErrors.password = 'Please meet all the password requirements listed below.'; isValid = false; }
 
@@ -138,7 +158,6 @@ export default function RegistrationScreen() {
 
     setLoading(true);
     try {
-      // 1. Check if email is already in use before sending OTP
       const emailExists = await checkEmailExists(email.trim());
       if (emailExists) {
         setErrors(prev => ({ ...prev, email: 'This email is already registered.' }));
@@ -146,7 +165,6 @@ export default function RegistrationScreen() {
         return;
       }
 
-      // 2. Prepare full mobile number & form data payload
       const fullMobile = `${countryCode.trim()}${phoneNumber.trim()}`;
       const formData = {
         fullName: fullName.trim(),
@@ -160,25 +178,14 @@ export default function RegistrationScreen() {
         whatsappOptIn,
       };
 
-      // 3. ✅ BRANCHING LOGIC: Web vs Native
       if (Platform.OS === 'web') {
-        if (!webAuth) {
-          showAlert("Configuration Error", "Firebase Auth is not initialized. Please check your .env variables.");
+        if (!webAuth || !webRecaptchaVerifier.current) {
+          showAlert("Configuration Error", "Firebase Auth or ReCAPTCHA is not initialized.");
           setLoading(false);
           return;
         }
 
-        // ✅ FIX: Wipe any previous Recaptcha state completely before generating a new one
-        if (webRecaptchaVerifier.current) {
-           try { webRecaptchaVerifier.current.clear(); } catch(e) {}
-           webRecaptchaVerifier.current = null;
-        }
-
-        // Generate a fresh verifier attached to the DOM element
-        webRecaptchaVerifier.current = new RecaptchaVerifier(webAuth, 'recaptcha-container', { 
-          size: 'invisible' 
-        });
-        
+        // ✅ Simply use the existing, pre-warmed Recaptcha instance
         const confirmationResult = await webSignInWithPhoneNumber(webAuth, fullMobile, webRecaptchaVerifier.current);
         
         navigation.navigate('OTPVerification', {
@@ -189,7 +196,6 @@ export default function RegistrationScreen() {
         });
 
       } else {
-        // Native Flow: Handled silently by the native OS
         const confirmation = await nativeAuth().signInWithPhoneNumber(fullMobile);
         
         navigation.navigate('OTPVerification', {
@@ -203,21 +209,23 @@ export default function RegistrationScreen() {
     } catch (error: any) {
       console.error('OTP Send Error:', error);
       
-      // ✅ FIX: Clean up the broken web recaptcha so the user can try again immediately without refreshing
+      // ✅ If validation fails, reset recaptcha widget gracefully so they can click the button again
       if (Platform.OS === 'web' && webRecaptchaVerifier.current) {
-         try { webRecaptchaVerifier.current.clear(); } catch(e) {}
-         webRecaptchaVerifier.current = null;
+         try { 
+           webRecaptchaVerifier.current.clear(); 
+           // Re-initialize for the next attempt
+           webRecaptchaVerifier.current = new RecaptchaVerifier(webAuth, 'recaptcha-container', { 
+             size: 'invisible' 
+           });
+         } catch(e) {}
       }
 
-      // Exact Firebase error codes for better debugging
-      if (error.code === 'auth/invalid-phone-number') {
+      if (error.code === 'auth/invalid-app-credential') {
+        showAlert('Domain Error', 'Your current IP or Domain is not whitelisted in Firebase Console. Please add it to "Authorized Domains".');
+      } else if (error.code === 'auth/invalid-phone-number') {
         showAlert('Invalid Number', 'Please check your country code and mobile number format.');
       } else if (error.code === 'auth/captcha-check-failed') {
-        showAlert('Verification Failed', 'ReCAPTCHA token expired or is malformed. Please click verify again.');
-      } else if (error.code === 'auth/too-many-requests') {
-        showAlert('Error', 'Too many requests. Please try again later.');
-      } else if (error.code === 'auth/unauthorized-domain') {
-        showAlert('Domain Blocked', 'Localhost is not whitelisted in your Firebase Console.');
+        showAlert('Verification Failed', 'ReCAPTCHA token expired or is malformed. Please try again.');
       } else {
         showAlert('Failed to Send OTP', `Error: ${error.message || error.code || 'Unknown error'}`);
       }
@@ -234,9 +242,11 @@ export default function RegistrationScreen() {
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
       
-      {/* ✅ WEB ONLY: Invisible Div for Firebase v9 Recaptcha. Always render it, never conditionally hide it. */}
+      {/* Container MUST always exist in DOM for Recaptcha to bind to */}
       {Platform.OS === 'web' && <View nativeID="recaptcha-container" />}
 
+      {/* ... [KEEP THE REST OF YOUR UI EXACTLY THE SAME AS BEFORE] ... */}
+      
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -247,12 +257,12 @@ export default function RegistrationScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Stunning Background Header */}
+          {/* Header */}
           <View style={styles.headerBackground}>
             <SafeAreaView edges={['top']}>
               <View style={styles.headerContent}>
                 <Image 
-                  source={require('../../assets/icon.png')} // Fallback if logo is missing
+                  source={require('../../assets/icon.png')}
                   style={styles.logoImage} 
                   resizeMode="contain"
                 />
@@ -262,12 +272,10 @@ export default function RegistrationScreen() {
             </SafeAreaView>
           </View>
 
-          {/* Floating Form Card */}
+          {/* Form Card */}
           <View style={styles.formCard}>
-
             <Text style={styles.cardSubtitle}>Join Prochem and grow your business today.</Text>
             
-            {/* Full Name */}
             <TextInput
               label="Full Name *"
               value={fullName}
@@ -286,7 +294,6 @@ export default function RegistrationScreen() {
               {errors.fullName}
             </HelperText>
 
-            {/* Company Name */}
             <TextInput
               label="Company Name *"
               value={companyName}
@@ -305,7 +312,6 @@ export default function RegistrationScreen() {
               {errors.companyName}
             </HelperText>
 
-            {/* Email */}
             <TextInput
               label="Email Address *"
               value={email}
@@ -326,7 +332,6 @@ export default function RegistrationScreen() {
               {errors.email}
             </HelperText>
 
-            {/* Mobile with Manual Country Code */}
             <View style={styles.phoneRowContainer}>
               <View style={styles.countryCodeInputContainer}>
                 <TextInput
@@ -367,7 +372,6 @@ export default function RegistrationScreen() {
               {errors.phoneNumber}
             </HelperText>
 
-            {/* GST Number */}
             <TextInput
               label="GST Number *"
               value={gstin}
@@ -388,7 +392,6 @@ export default function RegistrationScreen() {
               {errors.gstin || "Admin will manually verify this GSTIN."}
             </HelperText>
 
-            {/* Password */}
             <TextInput
               label="Password *"
               value={password}
@@ -413,7 +416,6 @@ export default function RegistrationScreen() {
               outlineStyle={styles.inputOutline}
             />
             
-            {/* REAL-TIME PASSWORD CHECKLIST */}
             {password.length > 0 && !isPasswordValid && (
               <View style={styles.passwordRulesContainer}>
                 <Text style={[styles.ruleText, hasMinLength ? styles.ruleMet : styles.ruleUnmet]}>
@@ -435,7 +437,6 @@ export default function RegistrationScreen() {
               {errors.password}
             </HelperText>
 
-            {/* Confirm Password */}
             <TextInput
               label="Confirm Password *"
               value={confirmPassword}
@@ -463,13 +464,11 @@ export default function RegistrationScreen() {
               {errors.confirmPassword}
             </HelperText>
 
-            {/* Data Safety Banner */}
             <View style={styles.safetyBanner}>
               <MaterialCommunityIcons name="shield-check" size={20} color="#059669" />
               <Text style={styles.safetyText}>Your data is 100% safe and encrypted with us.</Text>
             </View>
 
-            {/* WHATSAPP OPT-IN CHECKBOX */}
             <View style={styles.optInContainer}>
               <Checkbox.Android
                 status={whatsappOptIn ? 'checked' : 'unchecked'}
@@ -481,7 +480,6 @@ export default function RegistrationScreen() {
               </Text>
             </View>
 
-            {/* TERMS AND PRIVACY CHECKBOX */}
             <View style={styles.termsContainer}>
               <Checkbox.Android
                 status={acceptTerms ? 'checked' : 'unchecked'}
@@ -509,7 +507,6 @@ export default function RegistrationScreen() {
               </HelperText>
             ) : null}
 
-            {/* Submit Button */}
             <Button
               mode="contained"
               onPress={handleRegisterOTP}
@@ -522,7 +519,6 @@ export default function RegistrationScreen() {
               Verify Mobile & Register
             </Button>
 
-            {/* Login Link */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>Already have an account? </Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -530,7 +526,6 @@ export default function RegistrationScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* App Features */}
             <View style={styles.featuresContainer}>
               <View style={styles.featureItem}>
                 <View style={styles.featureIconBox}>
@@ -551,7 +546,6 @@ export default function RegistrationScreen() {
                 <Text style={styles.featureText}>B2B Net</Text>
               </View>
             </View>
-
           </View>
           <View style={styles.bottomSpacer} />
         </ScrollView>
@@ -563,7 +557,7 @@ export default function RegistrationScreen() {
 const styles = StyleSheet.create({
   mainContainer: { 
     flex: 1, 
-    backgroundColor: '#F1F5F9', // Changed to soft slate background to make the white card pop
+    backgroundColor: '#F1F5F9',
   },
   keyboardView: {
     flex: 1,
@@ -572,8 +566,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   headerBackground: {
-    backgroundColor: '#2563EB', // Vibrant Blue Header
-    paddingBottom: 70, // Space for the card to overlap
+    backgroundColor: '#2563EB',
+    paddingBottom: 70,
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
   },
@@ -588,7 +582,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 16,
     marginBottom: 16,
-    backgroundColor: '#FFFFFF', // Ensures logo pops against dark blue
+    backgroundColor: '#FFFFFF',
   },
   headerTitle: {
     fontSize: 28,
@@ -598,7 +592,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 15,
-    color: '#E0E7FF', // Light blue text so it's readable
+    color: '#E0E7FF',
     textAlign: 'center',
   },
   cardSubtitle: {
@@ -612,7 +606,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 24,
     marginHorizontal: 16,
-    marginTop: -40, // THIS is what pulls the card up over the blue header
+    marginTop: -40,
     elevation: 8,
     shadowColor: '#000',
     shadowOpacity: 0.1,
@@ -633,7 +627,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 6,
   },
-  // --- New Password Rules Styles ---
   passwordRulesContainer: {
     marginTop: 8,
     marginBottom: 4,
@@ -650,12 +643,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   ruleMet: {
-    color: '#059669', // Emerald Green for matched rules
+    color: '#059669',
   },
   ruleUnmet: {
-    color: '#EF4444', // Red for missing rules
+    color: '#EF4444',
   },
-  // ---------------------------------
   phoneRowContainer: {
     flexDirection: 'row',
     alignItems: 'center',
