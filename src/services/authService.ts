@@ -5,10 +5,10 @@ import {
   signOut,
   sendPasswordResetEmail,
   updateProfile,
-  updateEmail,
-  updatePassword,
   deleteUser,
-  fetchSignInMethodsForEmail
+  fetchSignInMethodsForEmail,
+  EmailAuthProvider,
+  linkWithCredential
 } from 'firebase/auth';
 import { 
   doc, 
@@ -16,8 +16,7 @@ import {
   setDoc, 
   deleteDoc,
   collection,   
-  addDoc,       
-  serverTimestamp 
+  addDoc
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User, UserRole } from '../types';
@@ -34,7 +33,7 @@ interface RegisterData {
   whatsappOptIn?: boolean;
 }
 
-// ✅ NEW: Check if email exists before sending OTP
+// Check if email exists before sending OTP
 export const checkEmailExists = async (email: string): Promise<boolean> => {
   try {
     const methods = await fetchSignInMethodsForEmail(auth, email);
@@ -45,15 +44,27 @@ export const checkEmailExists = async (email: string): Promise<boolean> => {
   }
 };
 
-// ✅ NEW: Complete registration after phone is verified
+// Complete registration after phone is verified
 export const completeRegistrationAfterOTP = async (
   firebaseUser: any, 
   formData: RegisterData
 ): Promise<any> => {
   try {
-    // 1. Attach Email and Password to the phone-authenticated user
-    await updateEmail(firebaseUser, formData.email);
-    await updatePassword(firebaseUser, formData.password);
+    // 1. Link Email and Password to the phone-authenticated user
+    const credential = EmailAuthProvider.credential(formData.email, formData.password);
+    
+    try {
+      await linkWithCredential(firebaseUser, credential);
+    } catch (linkError: any) {
+      console.error("Linking error:", linkError);
+      if (linkError.code === 'auth/email-already-in-use') {
+        throw new Error('This email is already associated with another account.');
+      } else if (linkError.code === 'auth/operation-not-allowed') {
+        throw new Error('Email/Password login is not enabled in Firebase Console.');
+      }
+      throw new Error(linkError.message || 'Failed to attach email to account.');
+    }
+
     await updateProfile(firebaseUser, { displayName: formData.companyName });
 
     // 2. Prepare user document
@@ -75,7 +86,7 @@ export const completeRegistrationAfterOTP = async (
       paymentHistory: [],
       
       whatsappOptIn: formData.whatsappOptIn ?? true, 
-      phoneVerified: true, // ✅ Flag marked as true
+      phoneVerified: true, 
     };
 
     // 3. Save User to Firestore
