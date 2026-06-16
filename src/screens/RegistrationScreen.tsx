@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+// File: src/screens/RegistrationScreen.tsx
+import React, { useState, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -25,17 +26,22 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { checkEmailExists } from '../services/authService';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// ✅ Firebase Auth imports updated for Web + Native support
-import { auth } from '../config/firebase';
-import { PhoneAuthProvider, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+// 👇 1. Import Native Firebase conditionally
+let nativeAuth: any;
+if (Platform.OS !== 'web') {
+  nativeAuth = require('@react-native-firebase/auth').default;
+}
+
+// 👇 2. Import Web Firebase
+import { auth as webAuth } from '../config/firebase';
+import { RecaptchaVerifier, signInWithPhoneNumber as webSignInWithPhoneNumber } from 'firebase/auth';
 
 const { width } = Dimensions.get('window');
 
 type RootStackParamList = {
   Login: undefined;
   Registration: { role?: string } | undefined;
-  OTPVerification: { mobile: string; verificationId: string; mode: string; formData: any };
+  OTPVerification: { mobile: string; mode: string; formData: any; webConfirmation?: any; nativeConfirmation?: any };
   LegalPages: undefined; 
   AboutProchem: undefined; 
 };
@@ -47,10 +53,8 @@ export default function RegistrationScreen() {
   const route = useRoute();
   const theme = useTheme();
 
-  // Native Recaptcha (Expo)
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
   // Web Recaptcha (Firebase JS SDK)
-  const webRecaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
+  const webRecaptchaVerifier = useRef<any>(null);
 
   const { role } = (route.params as { role?: string }) || { role: 'buyer' };
 
@@ -74,14 +78,8 @@ export default function RegistrationScreen() {
 
   // Error States
   const [errors, setErrors] = useState({
-    fullName: '',
-    companyName: '',
-    email: '',
-    phoneNumber: '',
-    gstin: '',
-    password: '',
-    confirmPassword: '',
-    terms: '',
+    fullName: '', companyName: '', email: '', phoneNumber: '',
+    gstin: '', password: '', confirmPassword: '', terms: '',
   });
 
   // Real-time password validation variables
@@ -91,35 +89,6 @@ export default function RegistrationScreen() {
   const hasNumber = /\d/.test(password);
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const isPasswordValid = hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial;
-
-  // ✅ INITIALIZE RECAPTCHA ONCE WHEN SCREEN LOADS (WEB ONLY)
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      // Add `&& auth` to prevent crashing if Firebase isn't initialized
-      if (!webRecaptchaVerifier.current && auth) {
-        try {
-          webRecaptchaVerifier.current = new RecaptchaVerifier(
-            auth,
-            'recaptcha-container',
-            {
-              size: 'invisible',
-            }
-          );
-        } catch (e) {
-          console.error("Recaptcha initialization error:", e);
-        }
-      }
-    }
-    // Cleanup when user leaves the screen
-    return () => {
-      if (webRecaptchaVerifier.current) {
-        try {
-          webRecaptchaVerifier.current.clear();
-        } catch (e) {}
-        webRecaptchaVerifier.current = null;
-      }
-    };
-  }, []);
 
   const showAlert = (title: string, message: string, onOk?: () => void) => {
     if (Platform.OS === 'web') {
@@ -133,67 +102,29 @@ export default function RegistrationScreen() {
   const validate = () => {
     let isValid = true;
     let newErrors = {
-      fullName: '',
-      companyName: '',
-      email: '',
-      phoneNumber: '',
-      gstin: '',
-      password: '',
-      confirmPassword: '',
-      terms: '',
+      fullName: '', companyName: '', email: '', phoneNumber: '',
+      gstin: '', password: '', confirmPassword: '', terms: '',
     };
 
-    if (!fullName.trim()) {
-      newErrors.fullName = 'Full Name is required';
-      isValid = false;
-    }
-    if (!companyName.trim()) {
-      newErrors.companyName = 'Company Name is required';
-      isValid = false;
-    }
-    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Valid Email is required';
-      isValid = false;
-    }
-    if (!countryCode.trim()) {
-      newErrors.phoneNumber = 'Country Code is required';
-      isValid = false;
-    } else if (!phoneNumber.trim() || phoneNumber.length !== 10) {
-      newErrors.phoneNumber = 'Please enter a valid 10-digit mobile number';
-      isValid = false;
-    }
+    if (!fullName.trim()) { newErrors.fullName = 'Full Name is required'; isValid = false; }
+    if (!companyName.trim()) { newErrors.companyName = 'Company Name is required'; isValid = false; }
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) { newErrors.email = 'Valid Email is required'; isValid = false; }
+    if (!countryCode.trim()) { newErrors.phoneNumber = 'Country Code is required'; isValid = false; } 
+    else if (!phoneNumber.trim() || phoneNumber.length !== 10) { newErrors.phoneNumber = 'Please enter a valid 10-digit mobile number'; isValid = false; }
     
     // STRICT GSTIN VALIDATION
     const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$/;
-    if (!gstin) {
-      newErrors.gstin = 'GST Number is required';
-      isValid = false;
-    } else if (!gstRegex.test(gstin)) {
-      newErrors.gstin = 'Invalid GST format (e.g., 22AAAAA0000A1Z5)';
-      isValid = false;
-    }
+    if (!gstin) { newErrors.gstin = 'GST Number is required'; isValid = false; } 
+    else if (!gstRegex.test(gstin)) { newErrors.gstin = 'Invalid GST format (e.g., 22AAAAA0000A1Z5)'; isValid = false; }
 
     // PASSWORD VALIDATION
-    if (!password) {
-      newErrors.password = 'Password is required';
-      isValid = false;
-    } else if (!isPasswordValid) {
-      newErrors.password = 'Please meet all the password requirements listed below.';
-      isValid = false;
-    }
+    if (!password) { newErrors.password = 'Password is required'; isValid = false; } 
+    else if (!isPasswordValid) { newErrors.password = 'Please meet all the password requirements listed below.'; isValid = false; }
 
-    if (!confirmPassword) {
-      newErrors.confirmPassword = 'Confirm Password is required';
-      isValid = false;
-    } else if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-      isValid = false;
-    }
+    if (!confirmPassword) { newErrors.confirmPassword = 'Confirm Password is required'; isValid = false; } 
+    else if (password !== confirmPassword) { newErrors.confirmPassword = 'Passwords do not match'; isValid = false; }
     
-    if (!acceptTerms) {
-      newErrors.terms = 'You must accept the Terms & Conditions and Privacy Policy';
-      isValid = false;
-    }
+    if (!acceptTerms) { newErrors.terms = 'You must accept the Terms & Conditions and Privacy Policy'; isValid = false; }
 
     setErrors(newErrors);
     return isValid;
@@ -201,9 +132,7 @@ export default function RegistrationScreen() {
 
   const handleRegisterOTP = async () => {
     if (!validate()) {
-      if (!acceptTerms) {
-        showAlert("Required", "Please accept the Terms and Conditions to proceed.");
-      }
+      if (!acceptTerms) showAlert("Required", "Please accept the Terms and Conditions to proceed.");
       return;
     }
 
@@ -217,40 +146,8 @@ export default function RegistrationScreen() {
         return;
       }
 
-      // 2. Prepare full mobile number
+      // 2. Prepare full mobile number & form data payload
       const fullMobile = `${countryCode.trim()}${phoneNumber.trim()}`;
-      let verificationId = '';
-
-      // 3. ✅ BRANCHING LOGIC: Web vs Native
-      if (Platform.OS === 'web') {
-        // Prevent crash if auth is missing
-        if (!auth) {
-          showAlert("Configuration Error", "Firebase Auth is not initialized. Please check your .env variables.");
-          setLoading(false);
-          return;
-        }
-
-        // Fallback just in case it didn't initialize on mount
-        if (!webRecaptchaVerifier.current) {
-           webRecaptchaVerifier.current = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
-        }
-        
-        const confirmationResult = await signInWithPhoneNumber(
-          auth,
-          fullMobile,
-          webRecaptchaVerifier.current
-        );
-        verificationId = confirmationResult.verificationId;
-      } else {
-        // Native Flow: Use Expo Recaptcha Modal
-        const phoneProvider = new PhoneAuthProvider(auth);
-        verificationId = await phoneProvider.verifyPhoneNumber(
-          fullMobile,
-          recaptchaVerifier.current!
-        );
-      }
-
-      // 4. Package form data to pass to OTP screen
       const formData = {
         fullName: fullName.trim(),
         email: email.trim(),
@@ -263,34 +160,65 @@ export default function RegistrationScreen() {
         whatsappOptIn,
       };
 
-      // 5. Navigate to OTP screen
-      navigation.navigate('OTPVerification', {
-        mobile: fullMobile,
-        verificationId,
-        mode: 'registration',
-        formData,
-      });
+      // 3. ✅ BRANCHING LOGIC: Web vs Native
+      if (Platform.OS === 'web') {
+        if (!webAuth) {
+          showAlert("Configuration Error", "Firebase Auth is not initialized. Please check your .env variables.");
+          setLoading(false);
+          return;
+        }
+
+        // ✅ FIX: Wipe any previous Recaptcha state completely before generating a new one
+        if (webRecaptchaVerifier.current) {
+           try { webRecaptchaVerifier.current.clear(); } catch(e) {}
+           webRecaptchaVerifier.current = null;
+        }
+
+        // Generate a fresh verifier attached to the DOM element
+        webRecaptchaVerifier.current = new RecaptchaVerifier(webAuth, 'recaptcha-container', { 
+          size: 'invisible' 
+        });
+        
+        const confirmationResult = await webSignInWithPhoneNumber(webAuth, fullMobile, webRecaptchaVerifier.current);
+        
+        navigation.navigate('OTPVerification', {
+          mobile: fullMobile,
+          webConfirmation: confirmationResult,
+          mode: 'registration',
+          formData,
+        });
+
+      } else {
+        // Native Flow: Handled silently by the native OS
+        const confirmation = await nativeAuth().signInWithPhoneNumber(fullMobile);
+        
+        navigation.navigate('OTPVerification', {
+          mobile: fullMobile,
+          nativeConfirmation: confirmation,
+          mode: 'registration',
+          formData,
+        });
+      }
 
     } catch (error: any) {
-      console.error('OTP Send Error Full Object:', error);
+      console.error('OTP Send Error:', error);
       
-      // Clean up the broken web recaptcha so the user can try again immediately
+      // ✅ FIX: Clean up the broken web recaptcha so the user can try again immediately without refreshing
       if (Platform.OS === 'web' && webRecaptchaVerifier.current) {
          try { webRecaptchaVerifier.current.clear(); } catch(e) {}
          webRecaptchaVerifier.current = null;
       }
 
-      // ✅ BETTER ERROR MESSAGES: Shows the exact Firebase error code to help debugging
+      // Exact Firebase error codes for better debugging
       if (error.code === 'auth/invalid-phone-number') {
         showAlert('Invalid Number', 'Please check your country code and mobile number format.');
+      } else if (error.code === 'auth/captcha-check-failed') {
+        showAlert('Verification Failed', 'ReCAPTCHA token expired or is malformed. Please click verify again.');
       } else if (error.code === 'auth/too-many-requests') {
         showAlert('Error', 'Too many requests. Please try again later.');
       } else if (error.code === 'auth/unauthorized-domain') {
         showAlert('Domain Blocked', 'Localhost is not whitelisted in your Firebase Console.');
-      } else if (error.code === 'auth/invalid-app-credential') {
-         showAlert('App Check Failed', 'ReCAPTCHA/App Check configuration mismatch. Ensure App Check enforcement is disabled or correctly set up in Firebase Console.');
       } else {
-        // Prints the raw error code so we know exactly what went wrong
         showAlert('Failed to Send OTP', `Error: ${error.message || error.code || 'Unknown error'}`);
       }
     } finally {
@@ -306,16 +234,7 @@ export default function RegistrationScreen() {
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
       
-      {/* ✅ NATIVE ONLY: Expo Recaptcha Modal */}
-      {Platform.OS !== 'web' && (
-        <FirebaseRecaptchaVerifierModal
-          ref={recaptchaVerifier}
-          firebaseConfig={auth.app.options}
-          attemptInvisibleVerification={true}
-        />
-      )}
-
-      {/* ✅ WEB ONLY: Invisible Div for Firebase v9 Recaptcha */}
+      {/* ✅ WEB ONLY: Invisible Div for Firebase v9 Recaptcha. Always render it, never conditionally hide it. */}
       {Platform.OS === 'web' && <View nativeID="recaptcha-container" />}
 
       <KeyboardAvoidingView
@@ -348,7 +267,7 @@ export default function RegistrationScreen() {
 
             <Text style={styles.cardSubtitle}>Join Prochem and grow your business today.</Text>
             
-            {/* 3. Full Name */}
+            {/* Full Name */}
             <TextInput
               label="Full Name *"
               value={fullName}
@@ -367,7 +286,7 @@ export default function RegistrationScreen() {
               {errors.fullName}
             </HelperText>
 
-            {/* 4. Company Name */}
+            {/* Company Name */}
             <TextInput
               label="Company Name *"
               value={companyName}
@@ -386,7 +305,7 @@ export default function RegistrationScreen() {
               {errors.companyName}
             </HelperText>
 
-            {/* 5. Email */}
+            {/* Email */}
             <TextInput
               label="Email Address *"
               value={email}
@@ -407,7 +326,7 @@ export default function RegistrationScreen() {
               {errors.email}
             </HelperText>
 
-            {/* 6. Mobile with Manual Country Code */}
+            {/* Mobile with Manual Country Code */}
             <View style={styles.phoneRowContainer}>
               <View style={styles.countryCodeInputContainer}>
                 <TextInput
@@ -436,7 +355,7 @@ export default function RegistrationScreen() {
                   }}
                   mode="outlined"
                   keyboardType="phone-pad"
-                  maxLength={10} // updated to strict 10 digits
+                  maxLength={10}
                   textColor="#0F172A"
                   error={!!errors.phoneNumber}
                   style={styles.input}
@@ -448,7 +367,7 @@ export default function RegistrationScreen() {
               {errors.phoneNumber}
             </HelperText>
 
-            {/* 7. GST Number */}
+            {/* GST Number */}
             <TextInput
               label="GST Number *"
               value={gstin}
@@ -469,7 +388,7 @@ export default function RegistrationScreen() {
               {errors.gstin || "Admin will manually verify this GSTIN."}
             </HelperText>
 
-            {/* 8. Password */}
+            {/* Password */}
             <TextInput
               label="Password *"
               value={password}
@@ -516,7 +435,7 @@ export default function RegistrationScreen() {
               {errors.password}
             </HelperText>
 
-            {/* 9. Confirm Password */}
+            {/* Confirm Password */}
             <TextInput
               label="Confirm Password *"
               value={confirmPassword}
@@ -544,7 +463,7 @@ export default function RegistrationScreen() {
               {errors.confirmPassword}
             </HelperText>
 
-            {/* 10. Data Safety Banner */}
+            {/* Data Safety Banner */}
             <View style={styles.safetyBanner}>
               <MaterialCommunityIcons name="shield-check" size={20} color="#059669" />
               <Text style={styles.safetyText}>Your data is 100% safe and encrypted with us.</Text>
@@ -562,7 +481,7 @@ export default function RegistrationScreen() {
               </Text>
             </View>
 
-            {/* 11. TERMS AND PRIVACY CHECKBOX */}
+            {/* TERMS AND PRIVACY CHECKBOX */}
             <View style={styles.termsContainer}>
               <Checkbox.Android
                 status={acceptTerms ? 'checked' : 'unchecked'}
@@ -590,7 +509,7 @@ export default function RegistrationScreen() {
               </HelperText>
             ) : null}
 
-            {/* 12. Submit Button */}
+            {/* Submit Button */}
             <Button
               mode="contained"
               onPress={handleRegisterOTP}
@@ -603,7 +522,7 @@ export default function RegistrationScreen() {
               Verify Mobile & Register
             </Button>
 
-            {/* 13. Login Link */}
+            {/* Login Link */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>Already have an account? </Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -611,7 +530,7 @@ export default function RegistrationScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* 14. App Features */}
+            {/* App Features */}
             <View style={styles.featuresContainer}>
               <View style={styles.featureItem}>
                 <View style={styles.featureIconBox}>

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// File: src/screens/MobileLoginScreen.tsx
+import React, { useState, useRef } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
 import { Text, TextInput, Button, HelperText, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,12 +7,25 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 
+// 👇 1. Import Native Firebase conditionally
+let nativeAuth: any;
+if (Platform.OS !== 'web') {
+  nativeAuth = require('@react-native-firebase/auth').default;
+}
+
+// 👇 2. Import Web Firebase
+import { auth as webAuth } from '../config/firebase';
+import { RecaptchaVerifier, signInWithPhoneNumber as webSignInWithPhoneNumber } from 'firebase/auth';
+
 export default function MobileLoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Ref for Web Recaptcha
+  const recaptchaVerifierRef = useRef<any>(null);
 
   const handleSendOTP = async () => {
     setError('');
@@ -20,11 +34,41 @@ export default function MobileLoginScreen() {
       return;
     }
 
-    // Temporary alert to allow the app to build successfully without the deprecated package.
-    Alert.alert(
-      "Update Required",
-      "Phone authentication is currently being updated to the modern native SDK. Please use email login temporarily."
-    );
+    setLoading(true);
+    const fullPhoneNumber = `+91${phone}`;
+
+    try {
+      if (Platform.OS === 'web') {
+        // --- WEB FLOW ---
+        if (!recaptchaVerifierRef.current) {
+          recaptchaVerifierRef.current = new RecaptchaVerifier(webAuth, 'recaptcha-container', {
+            size: 'invisible',
+          });
+        }
+        const confirmationResult = await webSignInWithPhoneNumber(webAuth, fullPhoneNumber, recaptchaVerifierRef.current);
+        
+        navigation.navigate('OTPVerification' as any, { 
+          mobile: phone, 
+          webConfirmation: confirmationResult, 
+          mode: 'login' 
+        });
+
+      } else {
+        // --- NATIVE APP FLOW (Android/iOS) ---
+        const confirmation = await nativeAuth().signInWithPhoneNumber(fullPhoneNumber);
+        
+        navigation.navigate('OTPVerification' as any, { 
+          mobile: phone, 
+          nativeConfirmation: confirmation, 
+          mode: 'login' 
+        });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -69,6 +113,9 @@ export default function MobileLoginScreen() {
               {error}
             </HelperText>
           ) : null}
+
+          {/* Web Recaptcha Container (Invisible but required for DOM on Web) */}
+          {Platform.OS === 'web' && <div id="recaptcha-container"></div>}
 
           <Button
             mode="contained"

@@ -132,7 +132,19 @@ export default ({ config }) => {
       eas: {
         projectId: "7a075ff7-f9b3-47cf-ab49-523d173d19ae"
       }
-    }
+    },
+    // 👇 ADD THIS PLUGINS ARRAY 👇
+    plugins: [
+      "@react-native-firebase/app",
+      [
+        "expo-build-properties",
+        {
+          ios: {
+            useFrameworks: "static" // CRITICAL: Required for Firebase on iOS
+          }
+        }
+      ]
+    ]
   };
 
   // ✅ Apply the custom Android UPI intent plugin to the config before exporting

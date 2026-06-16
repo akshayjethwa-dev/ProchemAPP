@@ -7,9 +7,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 
-// Firebase Auth
-import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
-import { auth } from '../config/firebase';
 import { completeRegistrationAfterOTP } from '../services/authService';
 
 export default function OTPVerificationScreen() {
@@ -18,9 +15,12 @@ export default function OTPVerificationScreen() {
   
   // Extract route params
   const mobile = route.params?.mobile || '';
-  const verificationId = route.params?.verificationId || '';
   const mode = route.params?.mode || 'login'; // 'login' or 'registration'
   const formData = route.params?.formData;
+  
+  // Retrieve the confirmation objects passed from the previous screen
+  const webConfirmation = route.params?.webConfirmation;
+  const nativeConfirmation = route.params?.nativeConfirmation;
   
   const theme = useTheme();
 
@@ -43,44 +43,46 @@ export default function OTPVerificationScreen() {
       return;
     }
 
-    if (!verificationId) {
-      Alert.alert('Error', 'Missing Verification ID. Please request a new OTP.');
+    if (!webConfirmation && !nativeConfirmation) {
+      Alert.alert('Error', 'Missing verification session. Please request a new OTP.');
       return;
     }
 
     setLoading(true);
     
     try {
-      // 1. Create a Firebase credential using the verification ID and the OTP
-      const credential = PhoneAuthProvider.credential(verificationId, otp);
+      let userCredential;
 
-      // 2. Sign in to Firebase with this credential
-      const userCredential = await signInWithCredential(auth, credential);
+      // 1. Confirm OTP based on the platform
+      if (Platform.OS === 'web') {
+        userCredential = await webConfirmation.confirm(otp);
+      } else {
+        userCredential = await nativeConfirmation.confirm(otp);
+      }
 
-      // 3. IF REGISTRATION MODE -> We must now save their profile and email/password
+      // 2. IF REGISTRATION MODE -> Save profile and email/password linking
       if (mode === 'registration' && formData) {
         await completeRegistrationAfterOTP(userCredential.user, formData);
         Alert.alert('Success', 'Account created! Admin will verify your GST details manually.', [
           { 
             text: 'Continue', 
             onPress: () => {
-              // The App.tsx / RootNavigator will likely catch the auth state change automatically,
-              // but if you need to force navigation, you can do it here.
+              // Navigation is generally handled by auth state listeners in App.tsx
             } 
           }
         ]);
       } else {
-        // Success for standard login!
+        // Success for standard login
         console.log('Successfully logged in with UID:', userCredential.user.uid);
       }
 
     } catch (error: any) {
       console.error('OTP Verification Error:', error);
       
-      // ✅ AC4: Inline errors for bad OTPs
-      if (error.code === 'auth/invalid-verification-code' || error.code === 'auth/invalid-credential') {
+      const errorCode = error.code || '';
+      if (errorCode.includes('invalid-verification-code') || errorCode.includes('invalid-credential')) {
         setErrorMsg('Invalid OTP. Please try again.');
-      } else if (error.code === 'auth/code-expired') {
+      } else if (errorCode.includes('code-expired') || errorCode.includes('session-expired')) {
         setErrorMsg('The OTP has expired. Please go back and request a new one.');
       } else {
         Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');

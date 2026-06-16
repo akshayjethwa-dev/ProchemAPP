@@ -35,7 +35,7 @@ if (!getApps().length) {
   if (firebaseConfig.apiKey) {
     app = initializeApp(firebaseConfig);
 
-    // ✅ FIX: Properly initialize Auth depending on the platform immediately after initializing the App
+    // ✅ Production-Ready Auth Initialization
     if (Platform.OS === 'web') {
       auth = getAuth(app);
     } else {
@@ -44,25 +44,6 @@ if (!getApps().length) {
       });
     }
 
-    // Optional: allow local OTP testing without reCAPTCHA on web localhost only
-    if (
-      Platform.OS === 'web' &&
-      typeof window !== 'undefined' &&
-      window.location.hostname === 'localhost'
-    ) {
-      try {
-        // This disables app verification only in local dev
-        // DO NOT use this in production
-        if (auth) {
-          (auth as any).settings.appVerificationDisabledForTesting = true;
-          console.warn(
-            'Phone auth appVerificationDisabledForTesting is ENABLED on localhost.'
-          );
-        }
-      } catch (e) {
-        console.warn('Failed to set appVerificationDisabledForTesting:', e);
-      }
-    }
   } else {
     console.warn('Skipping Firebase initialization due to missing config.');
   }

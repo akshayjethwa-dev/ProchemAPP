@@ -57,12 +57,17 @@ export const completeRegistrationAfterOTP = async (
       await linkWithCredential(firebaseUser, credential);
     } catch (linkError: any) {
       console.error("Linking error:", linkError);
-      if (linkError.code === 'auth/email-already-in-use') {
-        throw new Error('This email is already associated with another account.');
+      
+      // ✅ FIX: Allow test phone numbers to be reused without crashing
+      if (linkError.code === 'auth/provider-already-linked' || linkError.code === 'auth/credential-already-in-use') {
+        console.log("Account is already linked to an email. Bypassing link step for testing/re-registration.");
+      } else if (linkError.code === 'auth/email-already-in-use') {
+        throw new Error('This email is already associated with another account. Please use a different email.');
       } else if (linkError.code === 'auth/operation-not-allowed') {
         throw new Error('Email/Password login is not enabled in Firebase Console.');
+      } else {
+        throw new Error(linkError.message || 'Failed to attach email to account.');
       }
-      throw new Error(linkError.message || 'Failed to attach email to account.');
     }
 
     await updateProfile(firebaseUser, { displayName: formData.companyName });
