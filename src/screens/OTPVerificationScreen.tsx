@@ -8,6 +8,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 
 import { completeRegistrationAfterOTP } from '../services/authService';
+import { useAppStore } from '../store/appStore'; // ✅ Imported appStore
 
 export default function OTPVerificationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -64,6 +65,9 @@ export default function OTPVerificationScreen() {
         await completeRegistrationAfterOTP(userCredential.user, formData);
       }
       
+      // ✅ Reset onboarding state so that RootNavigator handles redirect to OnboardingScreen
+      useAppStore.getState().resetOnboarding();
+
       // ✅ SUCCESS!
       // Do NOT call setLoading(false) here. 
       // Keep the button spinning seamlessly while RootNavigator detects the new

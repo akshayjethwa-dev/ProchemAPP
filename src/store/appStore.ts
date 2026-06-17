@@ -1,4 +1,4 @@
-// src/store/appStore.ts
+// File: src/store/appStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,7 +18,6 @@ interface AppState {
   originalAdminUser: User | null;
 
   setUser: (user: User | null) => void;
-  // 👇 ADD THIS NEW METHOD
   updateUser: (updates: Partial<User>) => void;
   
   setProducts: (products: Product[]) => void;
@@ -33,6 +32,7 @@ interface AppState {
 
   hasSeenOnboarding: boolean;
   completeOnboarding: () => void;
+  resetOnboarding: () => void; // ✅ Added this to route back to onboarding
 
   addToCompare: (product: Product) => void;
   removeFromCompare: (id: string) => void;
@@ -62,7 +62,6 @@ export const useAppStore = create<AppState>()(
 
       setUser: (user) => set({ user }),
       
-      // 👇 IMPLEMENT THE NEW METHOD HERE
       updateUser: (updates) => set((state) => {
         if (!state.user) return state;
         return { user: { ...state.user, ...updates } };
@@ -104,7 +103,9 @@ export const useAppStore = create<AppState>()(
       
       removeFromCompare: (id) => set((state) => ({ compareList: state.compareList.filter((p) => p.id !== id) })),
       clearCompare: () => set({ compareList: [] }),
+      
       completeOnboarding: () => set({ hasSeenOnboarding: true }),
+      resetOnboarding: () => set({ hasSeenOnboarding: false }), // ✅ Implementation
 
       impersonateUser: (targetUser, currentAdmin) => {
         const newViewMode = (targetUser.userType === 'seller' || targetUser.userType === 'dual') ? 'seller' : 'buyer';
