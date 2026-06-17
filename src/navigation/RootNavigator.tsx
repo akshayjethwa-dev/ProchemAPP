@@ -1,3 +1,4 @@
+// File: src/navigation/RootNavigator.tsx
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, SafeAreaView, TouchableOpacity, Text, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -43,6 +44,7 @@ export const RootNavigator = () => {
       if (initializing) setInitializing(false);
       return;
     }
+    
     const unsubscribe = onAuthStateChanged(auth, async (u: FirebaseUser | null) => {
       if (useAppStore.getState().adminImpersonating) {
         if (initializing) setInitializing(false);
@@ -50,21 +52,36 @@ export const RootNavigator = () => {
       }
 
       if (u) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', u.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUser({ uid: u.uid, email: u.email || '', ...userData } as any);
-          } else {
-            console.warn("User authenticated but document not found in Firestore.");
-            setUser(null);
+        // ✅ FIX: Race Condition Polling
+        // Wait for completeRegistrationAfterOTP to finish writing to Firestore
+        let retries = 6;
+        let userFound = false;
+
+        while (retries > 0 && !userFound) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', u.uid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              setUser({ uid: u.uid, email: u.email || '', ...userData } as any);
+              userFound = true;
+            } else {
+              console.log(`Document not found, waiting 1s... (Retries left: ${retries})`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              retries--;
+            }
+          } catch (error: any) {
+            console.warn("Firestore access denied when fetching user:", error.message);
+            break; // Stop retrying on permission/network errors
           }
-        } catch (error: any) {
-          console.warn("Firestore access denied when fetching user:", error.message);
-          setUser(null);
-        } finally {
-          if (initializing) setInitializing(false);
         }
+
+        if (!userFound) {
+          console.warn("User authenticated but document was never created in Firestore.");
+          setUser(null);
+        }
+
+        if (initializing) setInitializing(false);
+
       } else {
         setUser(null);
         if (initializing) setInitializing(false);
@@ -107,15 +124,12 @@ export const RootNavigator = () => {
             headerStyle: { backgroundColor: '#FFFFFF' }, 
             headerTitleStyle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
             headerTitleAlign: 'center',
-            // MOTION POLISH: Apply a smooth, native-feeling slide animation to all transitions
             animation: 'slide_from_right', 
-            // MOTION POLISH: Prevent layout jumps during transitions
             animationDuration: 250,
           }}
         >
           {!user ? (
             <Stack.Group screenOptions={{ animation: 'fade' }}>
-              {/* Fade is better for auth/splash screens to prevent jarring sliding */}
               <Stack.Screen name="Splash" component={SplashScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="MobileLogin" component={MobileLoginScreen} />
@@ -143,7 +157,6 @@ export const RootNavigator = () => {
                 </>
               )}
               
-              {/* ✅ NEW: Global KYC Screen added for Unverified user redirects */}
               <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} options={{ animation: 'slide_from_bottom' }} />
 
               <Stack.Screen name="ProductDetail" component={ProductDetail} />

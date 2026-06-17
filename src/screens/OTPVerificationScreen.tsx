@@ -18,7 +18,6 @@ export default function OTPVerificationScreen() {
   const mode = route.params?.mode || 'login'; // 'login' or 'registration'
   const formData = route.params?.formData;
   
-  // Retrieve the confirmation objects passed from the previous screen
   const webConfirmation = route.params?.webConfirmation;
   const nativeConfirmation = route.params?.nativeConfirmation;
   
@@ -63,21 +62,18 @@ export default function OTPVerificationScreen() {
       // 2. IF REGISTRATION MODE -> Save profile and email/password linking
       if (mode === 'registration' && formData) {
         await completeRegistrationAfterOTP(userCredential.user, formData);
-        Alert.alert('Success', 'Account created! Admin will verify your GST details manually.', [
-          { 
-            text: 'Continue', 
-            onPress: () => {
-              // Navigation is generally handled by auth state listeners in App.tsx
-            } 
-          }
-        ]);
-      } else {
-        // Success for standard login
-        console.log('Successfully logged in with UID:', userCredential.user.uid);
       }
+      
+      // ✅ SUCCESS!
+      // Do NOT call setLoading(false) here. 
+      // Keep the button spinning seamlessly while RootNavigator detects the new
+      // Firestore document, sets the state, and unmounts this Auth screen automatically.
 
     } catch (error: any) {
       console.error('OTP Verification Error:', error);
+      
+      // Only disable loading if there's an error so the user can try again
+      setLoading(false);
       
       const errorCode = error.code || '';
       if (errorCode.includes('invalid-verification-code') || errorCode.includes('invalid-credential')) {
@@ -87,9 +83,7 @@ export default function OTPVerificationScreen() {
       } else {
         Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
       }
-    } finally {
-      setLoading(false);
-    }
+    } 
   };
 
   const handleResend = () => {
