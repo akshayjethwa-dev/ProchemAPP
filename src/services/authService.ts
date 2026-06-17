@@ -1,14 +1,16 @@
 // File: src/services/authService.ts
+import { Platform } from 'react-native';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
-  updateProfile,
   deleteUser,
   fetchSignInMethodsForEmail,
-  EmailAuthProvider,
-  linkWithCredential
+  // Rename web imports to prevent conflicts
+  EmailAuthProvider as WebEmailAuthProvider,
+  linkWithCredential as webLinkWithCredential,
+  updateProfile as webUpdateProfile
 } from 'firebase/auth';
 import { 
   doc, 
@@ -20,6 +22,12 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User, UserRole } from '../types';
+
+// 👇 Import Native Auth conditionally
+let nativeAuthModule: any;
+if (Platform.OS !== 'web') {
+  nativeAuthModule = require('@react-native-firebase/auth').default;
+}
 
 interface RegisterData {
   email: string;
@@ -51,14 +59,22 @@ export const completeRegistrationAfterOTP = async (
 ): Promise<any> => {
   try {
     // 1. Link Email and Password to the phone-authenticated user
-    const credential = EmailAuthProvider.credential(formData.email, formData.password);
-    
     try {
-      await linkWithCredential(firebaseUser, credential);
+      if (Platform.OS === 'web') {
+        // --- WEB SDK LINKING ---
+        const credential = WebEmailAuthProvider.credential(formData.email, formData.password);
+        await webLinkWithCredential(firebaseUser, credential);
+        await webUpdateProfile(firebaseUser, { displayName: formData.companyName });
+      } else {
+        // --- NATIVE SDK LINKING ---
+        const credential = nativeAuthModule.EmailAuthProvider.credential(formData.email, formData.password);
+        // Note: Native SDK calls methods directly on the user object
+        await firebaseUser.linkWithCredential(credential);
+        await firebaseUser.updateProfile({ displayName: formData.companyName });
+      }
     } catch (linkError: any) {
       console.error("Linking error:", linkError);
       
-      // ✅ FIX: Allow test phone numbers to be reused without crashing
       if (linkError.code === 'auth/provider-already-linked' || linkError.code === 'auth/credential-already-in-use') {
         console.log("Account is already linked to an email. Bypassing link step for testing/re-registration.");
       } else if (linkError.code === 'auth/email-already-in-use') {
@@ -69,8 +85,6 @@ export const completeRegistrationAfterOTP = async (
         throw new Error(linkError.message || 'Failed to attach email to account.');
       }
     }
-
-    await updateProfile(firebaseUser, { displayName: formData.companyName });
 
     // 2. Prepare user document
     const userData: User = {
