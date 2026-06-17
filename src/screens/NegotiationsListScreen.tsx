@@ -10,6 +10,9 @@ import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { RFQ } from '../types';
 
+// 🚀 ADDED: Import the GST Modal
+import { GSTRequiredModal } from '../components/GSTRequiredModal';
+
 export default function NegotiationsListScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -22,6 +25,9 @@ export default function NegotiationsListScreen() {
 
   const [rfqsList, setRfqsList] = useState<RFQ[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 🚀 ADDED: State for the GST Modal
+  const [showGSTModal, setShowGSTModal] = useState(false);
 
   useEffect(() => {
     if (!user && !isAdminView) return;
@@ -68,6 +74,15 @@ export default function NegotiationsListScreen() {
     }
   };
 
+  // 🚀 ADDED: Handle Negotiation Tap Action
+  const handleNegotiationTap = (rfqId: string) => {
+    if (user?.registrationType === 'mobile' && !user?.gstNumber) {
+      setShowGSTModal(true);
+      return;
+    }
+    navigation.navigate('NegotiationRoom', { rfqId });
+  };
+
   const renderItem = ({ item }: { item: RFQ }) => {
     const statusTheme = getStatusColor(item.status);
     const dateStr = new Date(item.updatedAt).toLocaleDateString();
@@ -76,7 +91,7 @@ export default function NegotiationsListScreen() {
       <TouchableOpacity 
         style={styles.card} 
         activeOpacity={0.7}
-        onPress={() => navigation.navigate('NegotiationRoom', { rfqId: item.id })}
+        onPress={() => handleNegotiationTap(item.id)} // 🚀 ADDED: Updated the onPress
       >
         <View style={styles.cardHeader}>
            <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
@@ -123,6 +138,16 @@ export default function NegotiationsListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* 🚀 ADDED: The GST Modal Component */}
+      <GSTRequiredModal 
+        visible={showGSTModal} 
+        onDismiss={() => setShowGSTModal(false)}
+        onAction={() => {
+          setShowGSTModal(false);
+          navigation.navigate('EditProfile');
+        }}
+      />
+
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <Text variant="titleLarge" style={{fontWeight: 'bold'}}>

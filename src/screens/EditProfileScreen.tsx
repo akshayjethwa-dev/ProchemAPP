@@ -1,134 +1,270 @@
 // src/screens/EditProfileScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { TextInput, Button, IconButton, Text, ActivityIndicator, Divider } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, TextInput, Button, IconButton, useTheme, ProgressBar, HelperText, Divider } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useAppStore } from '../store/appStore';
 import { doc, updateDoc } from 'firebase/firestore';
+import { getAuth, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { db } from '../config/firebase';
+import { useAppStore } from '../store/appStore';
+import { getProfileCompletion } from '../utils/profileCompletion';
+import { validateGST, validatePassword } from '../utils/validators';
 
 export default function EditProfileScreen() {
-  const navigation = useNavigation();
-  const { user, setUser } = useAppStore();
-  const [loading, setLoading] = useState(false);
+  const theme = useTheme();
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   
-  const [formData, setFormData] = useState({ 
-    companyName: '', 
-    phone: '', 
-    address: '', 
-    pincode: '', 
-    gstNumber: '' 
-  });
+  const { user } = useAppStore();
 
+  // Basic Profile Fields
+  const [name, setName] = useState(user?.name || '');
+  const [companyName, setCompanyName] = useState(user?.companyName || '');
+  const [email, setEmail] = useState(user?.email || '');
+  // Initialize phone but we will NOT allow changing it
+  const [phone, setPhone] = useState(user?.phone || user?.phoneNumber || '');
+  const [gstNumber, setGstNumber] = useState(user?.gstNumber || '');
+
+  // Password Fields
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Validation & UI State
+  const [loading, setLoading] = useState(false);
+  const [gstError, setGstError] = useState(false);
+  const [pwdError, setPwdError] = useState('');
+  
+  // 🚀 FIXED: Profile Completion now includes phone
+  const completionData = getProfileCompletion({
+    ...user, 
+    name, 
+    companyName, 
+    email, 
+    gstNumber,
+    phone
+  } as any);
+
+  // Real-time GST Validation
   useEffect(() => {
-    if (user) {
-      setFormData({
-        companyName: user.companyName || '', 
-        phone: user.phone || '', 
-        address: user.address || '', 
-        pincode: user.pincode ? String(user.pincode) : '', 
-        gstNumber: user.gstNumber || ''
-      });
+    if (gstNumber.length > 0) {
+      setGstError(!validateGST(gstNumber));
+    } else {
+      setGstError(false);
     }
-  }, [user]);
+  }, [gstNumber]);
 
-  const handleUpdate = async () => {
-    if (!user) return;
+  const handleSave = async () => {
+    if (gstError) {
+      return Alert.alert('Error', 'Please fix the GST Number format.');
+    }
+    if (newPassword) {
+      if (!validatePassword(newPassword)) {
+        return setPwdError('Password must be at least 8 chars, contain 1 uppercase, and 1 number.');
+      }
+      if (newPassword !== confirmPassword) {
+        return setPwdError('New passwords do not match.');
+      }
+    }
+
     setLoading(true);
+    setPwdError('');
+
     try {
-      await updateDoc(doc(db, 'users', user.uid), formData);
-      setUser({ ...user, ...formData, pincode: formData.pincode });
-      Alert.alert('Success', 'Profile updated successfully');
-      navigation.goBack();
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+
+      // Handle Password Updates
+      if (newPassword && currentUser) {
+        if (user?.hasPassword) {
+          // Change existing password requires re-authentication
+          if (!currentPassword) {
+            setLoading(false);
+            return setPwdError('Current password is required to change it.');
+          }
+          const credential = EmailAuthProvider.credential(user.email || currentUser.email || '', currentPassword);
+          await reauthenticateWithCredential(currentUser, credential);
+          await updatePassword(currentUser, newPassword);
+        } else {
+          // Set password for the first time (mobile-registered)
+          await updatePassword(currentUser, newPassword);
+        }
+      }
+
+      // Update Firestore Profile
+      const userRef = doc(db, 'users', user!.uid);
+      const updates: any = {
+        name,
+        companyName,
+        email,
+        gstNumber: gstNumber.toUpperCase(),
+        // Note: We deliberately exclude phone from updates because it shouldn't be changeable
+      };
+
+      if (newPassword) {
+        updates.hasPassword = true;
+      }
+
+      await updateDoc(userRef, updates);
+
+      // Optimistically update the local Zustand store
+      useAppStore.setState((state: any) => ({
+        user: { ...state.user, ...updates }
+      }));
+
+      Alert.alert('Success', 'Profile updated successfully!', [
+        { text: 'OK', onPress: () => navigation.goBack() }
+      ]);
+
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      console.error('Profile Update Error:', error);
+      Alert.alert('Update Failed', error.message || 'An error occurred while saving.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) return <View style={styles.center}><ActivityIndicator size="large" /></View>;
+  const isMobileRegistrationWithoutPassword = user?.registrationType === 'mobile' && !user?.hasPassword;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 10) }]}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="titleLarge" style={{fontWeight:'bold'}}>Company Profile</Text>
+        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <View style={{width: 48}} /> 
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        <Text style={styles.sectionTitle}>BUSINESS DETAILS</Text>
-        <View style={styles.inputGroup}>
-          <TextInput 
-            label="Company Name" 
-            value={formData.companyName} 
-            onChangeText={(t) => setFormData({...formData, companyName: t})} 
-            style={styles.input} 
-            underlineColor="transparent" 
-            theme={{colors: {background: 'transparent'}}}
-          />
-          <Divider />
-          <TextInput 
-            label="GST Number (Read Only)" 
-            value={formData.gstNumber} 
-            disabled 
-            style={[styles.input, {backgroundColor: '#F8FAFC'}]} 
-            underlineColor="transparent" 
-            theme={{colors: {background: 'transparent'}}}
-          />
+        {/* Progress Bar Section */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressTitle}>Profile Completeness</Text>
+            <Text style={styles.progressPercent}>{completionData.percentage}%</Text>
+          </View>
+          <ProgressBar progress={completionData.percentage / 100} color="#004AAD" style={styles.progressBar} />
         </View>
 
-        <Text style={styles.sectionTitle}>CONTACT & LOCATION</Text>
-        <View style={styles.inputGroup}>
-          <TextInput 
-            label="Phone Number" 
-            value={formData.phone} 
-            onChangeText={(t) => setFormData({...formData, phone: t})} 
-            keyboardType="phone-pad" 
-            style={styles.input} 
-            underlineColor="transparent" 
-            theme={{colors: {background: 'transparent'}}}
-          />
-          <Divider />
-          <TextInput 
-            label="Registered Address" 
-            value={formData.address} 
-            onChangeText={(t) => setFormData({...formData, address: t})} 
-            multiline 
-            style={styles.input} 
-            underlineColor="transparent" 
-            theme={{colors: {background: 'transparent'}}}
-          />
-          <Divider />
-          <TextInput 
-            label="Pincode" 
-            value={formData.pincode} 
-            onChangeText={(t) => setFormData({...formData, pincode: t})} 
-            keyboardType="numeric" 
-            maxLength={6} 
-            style={styles.input} 
-            underlineColor="transparent" 
-            theme={{colors: {background: 'transparent'}}}
-          />
-        </View>
+        {/* Basic Details */}
+        <Text style={styles.sectionTitle}>Basic Information</Text>
+        
+        <TextInput label="Full Name" value={name} onChangeText={setName} mode="outlined" style={styles.input} />
+        <TextInput label="Company / Business Name" value={companyName} onChangeText={setCompanyName} mode="outlined" style={styles.input} />
+        
+        {/* GST Field */}
+        <TextInput 
+          label="GST Number" 
+          value={gstNumber} 
+          onChangeText={t => setGstNumber(t.toUpperCase())} 
+          mode="outlined" 
+          style={styles.input}
+          autoCapitalize="characters"
+          error={gstError}
+          maxLength={15}
+        />
+        <HelperText type="error" visible={gstError}>
+          Invalid GST format (e.g., 22AAAAA0000A1Z5)
+        </HelperText>
 
-        <Button mode="contained" onPress={handleUpdate} loading={loading} style={styles.btn}>
-          Save Changes
+        <TextInput label="Email Address" value={email} onChangeText={setEmail} mode="outlined" style={styles.input} keyboardType="email-address" autoCapitalize="none" />
+        
+        {/* 🚀 FIXED: Mobile Number Field - Hard-locked for all users */}
+        <TextInput 
+          label="Mobile Number" 
+          value={phone} 
+          mode="outlined" 
+          style={styles.input} 
+          disabled={true} 
+          editable={false}
+          right={<TextInput.Icon icon="lock" />}
+        />
+        <HelperText type="info" visible>Mobile number cannot be changed.</HelperText>
+
+        <Divider style={styles.divider} />
+
+        {/* Dynamic Password Section */}
+        <Text style={styles.sectionTitle}>
+          {isMobileRegistrationWithoutPassword 
+            ? 'Set Password (Required for full access)' 
+            : 'Change Password'}
+        </Text>
+        
+        {/* ONLY show Current Password if they already have a password set */}
+        {user?.hasPassword && (
+          <TextInput 
+            label="Current Password" 
+            value={currentPassword} 
+            onChangeText={setCurrentPassword} 
+            mode="outlined" 
+            style={styles.input}
+            secureTextEntry={!showPassword} 
+          />
+        )}
+
+        <TextInput 
+          label="New Password" 
+          value={newPassword} 
+          onChangeText={setNewPassword} 
+          mode="outlined" 
+          style={styles.input}
+          secureTextEntry={!showPassword} 
+          right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
+        />
+        
+        <TextInput 
+          label="Confirm New Password" 
+          value={confirmPassword} 
+          onChangeText={setConfirmPassword} 
+          mode="outlined" 
+          style={styles.input}
+          secureTextEntry={!showPassword} 
+        />
+        
+        {!!pwdError && <HelperText type="error" visible>{pwdError}</HelperText>}
+        {!pwdError && <HelperText type="info" visible>Min 8 characters, 1 uppercase, 1 number.</HelperText>}
+
+        <Button 
+          mode="contained" 
+          onPress={handleSave} 
+          loading={loading} 
+          style={styles.saveBtn}
+          contentStyle={{height: 52}}
+        >
+          Save Profile
         </Button>
+
       </ScrollView>
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F5F9' }, // Gray Background to make white cards pop
-  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', paddingBottom: 8 },
-  content: { padding: 16 },
-  sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#64748B', marginLeft: 16, marginBottom: 8, marginTop: 16, letterSpacing: 1 },
-  inputGroup: { backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }, // The grouped block
-  input: { height: 56, paddingHorizontal: 4 }, // Flat inputs inside the group
-  btn: { marginTop: 30, borderRadius: 8, paddingVertical: 4 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'white',
+    paddingBottom: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B' },
+  scrollContent: { padding: 20, paddingBottom: 60, backgroundColor: '#F8FAFC' },
+  
+  progressContainer: { backgroundColor: '#E0F2FE', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#BAE6FD' },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressTitle: { fontSize: 14, fontWeight: 'bold', color: '#0369A1' },
+  progressPercent: { fontSize: 14, fontWeight: 'bold', color: '#004AAD' },
+  progressBar: { height: 8, borderRadius: 4, backgroundColor: '#BAE6FD' },
+  
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', marginBottom: 12 },
+  input: { marginBottom: 4, backgroundColor: 'white' },
+  divider: { marginVertical: 24 },
+  
+  saveBtn: { marginTop: 24, borderRadius: 12, backgroundColor: '#004AAD' }
 });

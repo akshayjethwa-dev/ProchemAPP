@@ -20,18 +20,26 @@ export interface TieredPrice {
 
 export type SubscriptionTier = 'FREE' | 'GROWTH_PACKAGE';
 
+// Add these new fields into your existing User interface
 export interface User {
   uid: string;
   email: string;
+  name?: string; // Added for profile completion tracking
   phone?: string;
   userType: UserRole;
+  
+  // ✅ NEW FIELDS FOR TASK 1
+  registrationType?: 'mobile' | 'full';
+  isGSTVerified?: boolean;
+  hasPassword?: boolean;
+
   companyName?: string;
   businessName?: string;
   gstNumber?: string;
   address?: string;
   addresses?: Address[];
   phoneNumber?: string;
-  phoneVerified?: boolean; // ✅ ADDED THIS LINE TO FIX THE ERROR
+  phoneVerified?: boolean; 
   pincode?: string;
   documents?: {
     gstin?: boolean;
@@ -50,7 +58,6 @@ export interface User {
   premiumNegotiationCredits?: number; 
   liveQuoteCredits?: number;
 
-  // 🚀 NEW: WhatsApp Integration
   whatsappOptIn?: boolean;
   whatsappPreferences?: {
     general?: boolean;

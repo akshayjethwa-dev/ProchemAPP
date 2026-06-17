@@ -9,6 +9,7 @@ import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { logoutUser } from '../services/authService';
 import { BroadcastLead } from '../types';
+import { ProfileCompletionBanner } from '../components/ProfileCompletionBanner';
 
 export default function SellerDashboard() {
   const theme = useTheme();
@@ -91,6 +92,13 @@ export default function SellerDashboard() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* 🚀 NEW: Profile Completion Banner */}
+        {user && (
+          <ProfileCompletionBanner 
+            user={user} 
+            onComplete={() => navigation.navigate('EditProfile')} 
+          />
+        )}
         
         {/* COMPACT KPI PILLS */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kpiScroll}>

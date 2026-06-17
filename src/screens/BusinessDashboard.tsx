@@ -6,6 +6,7 @@ import CategoriesTab from '../components/CategoriesTab';
 import CartTab from '../components/CartTab';
 import OrdersTab from '../components/OrdersTab';
 import AccountTab from '../components/AccountTab';
+import { ProfileCompletionBanner } from '../components/ProfileCompletionBanner';
 
 interface Props {
   profile: UserProfile;

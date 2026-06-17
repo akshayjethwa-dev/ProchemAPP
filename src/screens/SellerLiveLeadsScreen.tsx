@@ -9,6 +9,9 @@ import { useAppStore } from '../store/appStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BroadcastLead, RFQ } from '../types';
 
+// 🚀 ADDED: Import the reusable GST Modal
+import { GSTRequiredModal } from '../components/GSTRequiredModal';
+
 export default function SellerLiveLeadsScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
@@ -27,6 +30,9 @@ export default function SellerLiveLeadsScreen() {
   const [quantity, setQuantity] = useState('');
   const [dispatchDays, setDispatchDays] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 🚀 ADDED: State for GST restriction modal
+  const [showGSTModal, setShowGSTModal] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -68,6 +74,15 @@ export default function SellerLiveLeadsScreen() {
     setLeads(filtered);
   }, [rawLeads, activeRfqs, user?.uid]);
 
+  // 🚀 ADDED: Intercept the Quote Action
+  const handleQuotePress = (lead: BroadcastLead) => {
+    if (user?.registrationType === 'mobile' && !user?.gstNumber) {
+      setShowGSTModal(true);
+      return;
+    }
+    setSelectedLead(lead);
+  };
+
   const submitQuote = async () => {
     if (!user?.uid || !selectedLead?.id) return Alert.alert('Error', 'Missing information.');
     if (!price || !quantity || !dispatchDays) return Alert.alert('Error', 'Fill all fields.');
@@ -92,15 +107,14 @@ export default function SellerLiveLeadsScreen() {
            <Text style={styles.productName}>{item.productName}</Text>
            <View style={styles.liveBadge}><Text style={styles.liveText}>LIVE</Text></View>
         </View>
-        {/* 🚀 FIX: explicitly casted targetPrice and timeline to any to clear TS error */}
         <Text style={styles.detailsText}>Target: <Text style={{fontWeight: 'bold', color: theme.colors.primary}}>₹{(item as any).targetPrice || 'N/A'}</Text> • Req: {item.quantityRequired} {item.unit}</Text>
         <Text style={styles.metaText}>📍 {item.deliveryRegion} • ⏳ {(item as any).timeline || 'Flexible'}</Text>
       </View>
       <View style={styles.actionCol}>
         {isPremium ? (
-          <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => setSelectedLead(item)}>Quote</Button>
+          <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => handleQuotePress(item)}>Quote</Button>
         ) : quotesUsedThisMonth < 3 ? (
-          <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => setSelectedLead(item)}>
+          <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => handleQuotePress(item)}>
             Quote <Text style={{fontSize: 9, color: 'white'}}>({3 - quotesUsedThisMonth} left)</Text>
           </Button>
         ) : (
@@ -114,6 +128,18 @@ export default function SellerLiveLeadsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* 🚀 ADDED: GST Required Modal Render */}
+      <GSTRequiredModal 
+        visible={showGSTModal} 
+        title="GST Details Required"
+        message="To submit live market quotations, you need to complete your business profile with GST details."
+        onDismiss={() => setShowGSTModal(false)}
+        onAction={() => {
+          setShowGSTModal(false);
+          navigation.navigate('EditProfile');
+        }}
+      />
+
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <View>

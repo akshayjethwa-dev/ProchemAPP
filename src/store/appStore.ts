@@ -18,6 +18,7 @@ interface AppState {
   originalAdminUser: User | null;
 
   setUser: (user: User | null) => void;
+  // 🚀 FIXED: Ensure updateUser handles partial updates cleanly
   updateUser: (updates: Partial<User>) => void;
   
   setProducts: (products: Product[]) => void;
@@ -32,7 +33,7 @@ interface AppState {
 
   hasSeenOnboarding: boolean;
   completeOnboarding: () => void;
-  resetOnboarding: () => void; // ✅ Added this to route back to onboarding
+  resetOnboarding: () => void;
 
   addToCompare: (product: Product) => void;
   removeFromCompare: (id: string) => void;
@@ -62,9 +63,10 @@ export const useAppStore = create<AppState>()(
 
       setUser: (user) => set({ user }),
       
+      // 🚀 UPDATED: Spread the existing user state with the incoming updates
       updateUser: (updates) => set((state) => {
         if (!state.user) return state;
-        return { user: { ...state.user, ...updates } };
+        return { user: { ...state.user, ...updates } as User };
       }),
 
       setProducts: (products) => set({ products }),
@@ -105,7 +107,7 @@ export const useAppStore = create<AppState>()(
       clearCompare: () => set({ compareList: [] }),
       
       completeOnboarding: () => set({ hasSeenOnboarding: true }),
-      resetOnboarding: () => set({ hasSeenOnboarding: false }), // ✅ Implementation
+      resetOnboarding: () => set({ hasSeenOnboarding: false }),
 
       impersonateUser: (targetUser, currentAdmin) => {
         const newViewMode = (targetUser.userType === 'seller' || targetUser.userType === 'dual') ? 'seller' : 'buyer';
@@ -138,7 +140,7 @@ export const useAppStore = create<AppState>()(
 
       updateUserCredits: (updates) => set((state) => {
         if (!state.user) return state;
-        return { user: { ...state.user, ...updates } };
+        return { user: { ...state.user, ...updates } as User };
       }),
     }),
     {

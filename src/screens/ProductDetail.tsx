@@ -8,6 +8,9 @@ import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product, TieredPrice } from '../types'; 
 
+// Import the GST Modal
+import { GSTRequiredModal } from '../components/GSTRequiredModal';
+
 export default function ProductDetail() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -39,6 +42,9 @@ export default function ProductDetail() {
   // Accordion state
   const [expandedSection, setExpandedSection] = useState<string | null>('specs'); // Keep specs open by default
 
+  // State for the GST Modal
+  const [showGSTModal, setShowGSTModal] = useState(false);
+
   useEffect(() => {
     setQty(String(minQty));
   }, [product]);
@@ -64,6 +70,18 @@ export default function ProductDetail() {
       setFavoriteMessage('Added to Favorites ❤️');
       setFavoriteVisible(true);
     }
+  };
+
+  // Handle Negotiation Press
+  const handleNegotiatePress = () => {
+    if (!user) {
+      return Alert.alert('Error', 'Please log in to request a quote.');
+    }
+    if (user.registrationType === 'mobile' && !user.gstNumber) {
+      setShowGSTModal(true);
+      return;
+    }
+    setShowRfqModal(true);
   };
 
   const submitRFQ = async () => {
@@ -183,6 +201,16 @@ export default function ProductDetail() {
   return (
     <View style={styles.container}>
       
+      {/* The GST Modal Component */}
+      <GSTRequiredModal 
+        visible={showGSTModal} 
+        onDismiss={() => setShowGSTModal(false)}
+        onAction={() => {
+          setShowGSTModal(false);
+          navigation.navigate('EditProfile');
+        }}
+      />
+
       {/* RFQ MODAL */}
       <Modal transparent visible={showRfqModal} animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
@@ -372,7 +400,7 @@ export default function ProductDetail() {
             👑 Upgrade to Negotiate (Ready Stock)
           </Button>
         ) : (
-          <Button mode="contained" onPress={() => setShowRfqModal(true)} style={[styles.actionBtn, {backgroundColor: theme.colors.primary}]} contentStyle={{height: 52}}>
+          <Button mode="contained" onPress={handleNegotiatePress} style={[styles.actionBtn, {backgroundColor: theme.colors.primary}]} contentStyle={{height: 52}}>
             Negotiate Custom Price
           </Button>
         )}

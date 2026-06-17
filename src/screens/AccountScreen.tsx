@@ -1,13 +1,16 @@
 // src/screens/AccountScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Modal, ActivityIndicator, Alert } from 'react-native';
-import { Text, Avatar, List, Divider, Button, useTheme, Switch, Badge } from 'react-native-paper'; 
+import { Text, Avatar, List, Divider, Button, useTheme, Switch, Badge, ProgressBar } from 'react-native-paper'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { logoutUser, deleteUserAccount } from '../services/authService';
+
+// 🚀 ADDED: Import profile completion utility
+import { getProfileCompletion } from '../utils/profileCompletion';
 
 export default function AccountScreen() {
   const navigation = useNavigation<any>();
@@ -25,6 +28,10 @@ export default function AccountScreen() {
   const [waPrefs, setWaPrefs] = useState({
     general: true, marketAlerts: true, negotiations: true, digest: true
   });
+
+  // 🚀 ADDED: Calculate completion data
+  const isMobileReg = user?.registrationType === 'mobile';
+  const completionData = user ? getProfileCompletion(user) : { percentage: 0, isComplete: false };
 
   useEffect(() => {
     if (!user?.uid || viewMode !== 'buyer') return;
@@ -89,7 +96,7 @@ export default function AccountScreen() {
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* 🚀 WHATSAPP PREFS MODAL */}
+      {/* WHATSAPP PREFS MODAL */}
       <Modal transparent visible={showWaPrefsModal} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { padding: 0, overflow: 'hidden' }]}>
@@ -191,13 +198,44 @@ export default function AccountScreen() {
           <Avatar.Text size={60} label={user?.companyName?.[0]?.toUpperCase() || "U"} style={{backgroundColor: theme.colors.primary}} color='white'/>
           <View style={{flex: 1, marginLeft: 16}}>
             <Text variant="titleMedium" style={{fontWeight:'bold'}} numberOfLines={1}>{user?.companyName || "Business User"}</Text>
-            <Text style={{color:'#64748B', fontSize: 13}}>{user?.email}</Text>
+            <Text style={{color:'#64748B', fontSize: 13}}>{user?.email || 'No email provided'}</Text>
             <Text style={{color: user?.verified ? '#059669' : '#D97706', fontSize: 12, fontWeight: 'bold', marginTop: 4}}>
               {user?.verified ? '✓ Verified Business' : 'Pending Verification'}
             </Text>
+
+            {/* 🚀 ADDED: Profile Completion Indicator below name */}
+            {isMobileReg && (
+              <View style={{marginTop: 8}}>
+                <Text style={{
+                  color: completionData.isComplete ? '#059669' : '#D97706', 
+                  fontSize: 11, 
+                  fontWeight: 'bold',
+                  marginBottom: 4
+                }}>
+                  {completionData.isComplete ? 'Profile Complete ✓' : `Incomplete Profile (${completionData.percentage}%)`}
+                </Text>
+                {!completionData.isComplete && (
+                  <ProgressBar progress={completionData.percentage / 100} color="#D97706" style={{height: 4, borderRadius: 2, backgroundColor: '#FEF3C7', width: '80%'}} />
+                )}
+              </View>
+            )}
           </View>
           <List.Icon icon="chevron-right" color="#CBD5E1" />
         </TouchableOpacity>
+
+        {/* 🚀 ADDED: Dedicated Action Required Row for Incomplete Profiles */}
+        {isMobileReg && !completionData.isComplete && (
+          <SettingsGroup title="ACTION REQUIRED">
+            <List.Item 
+              title="Complete Your Profile" 
+              description="Add missing details to unlock full access"
+              titleStyle={{color: '#D97706', fontWeight: 'bold'}}
+              left={props => <List.Icon {...props} icon="account-alert" color="#D97706" />} 
+              right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
+              onPress={() => navigation.navigate('EditProfile')} 
+            />
+          </SettingsGroup>
+        )}
 
         {/* WORKSPACE SWITCHER */}
         <SettingsGroup>

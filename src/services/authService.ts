@@ -7,7 +7,6 @@ import {
   sendPasswordResetEmail,
   deleteUser,
   fetchSignInMethodsForEmail,
-  // Rename web imports to prevent conflicts
   EmailAuthProvider as WebEmailAuthProvider,
   linkWithCredential as webLinkWithCredential,
   updateProfile as webUpdateProfile
@@ -16,6 +15,7 @@ import {
   doc, 
   getDoc, 
   setDoc, 
+  updateDoc, // 🚀 NEW: Added for the new function
   deleteDoc,
   collection,   
   addDoc
@@ -23,7 +23,6 @@ import {
 import { auth, db } from '../config/firebase';
 import { User, UserRole } from '../types';
 
-// 👇 Import Native Auth conditionally
 let nativeAuthModule: any;
 if (Platform.OS !== 'web') {
   nativeAuthModule = require('@react-native-firebase/auth').default;
@@ -41,7 +40,6 @@ interface RegisterData {
   whatsappOptIn?: boolean;
 }
 
-// Check if email exists before sending OTP
 export const checkEmailExists = async (email: string): Promise<boolean> => {
   try {
     const methods = await fetchSignInMethodsForEmail(auth, email);
@@ -52,33 +50,81 @@ export const checkEmailExists = async (email: string): Promise<boolean> => {
   }
 };
 
-// Complete registration after phone is verified
+// 🚀 NEW: Helper to patch user profiles explicitly
+export const updateUserProfile = async (uid: string, data: Partial<User>): Promise<void> => {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      ...data,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to update user profile.');
+  }
+};
+
+// 🚀 NEW: Helper for processing pure mobile logins/registrations
+export const processMobileLogin = async (firebaseUser: any, phoneNumber: string): Promise<any> => {
+  try {
+    const userDocRef = doc(db, 'users', firebaseUser.uid);
+    const userDocSnap = await getDoc(userDocRef);
+
+    if (userDocSnap.exists()) {
+      // User exists, just return the data
+      return { ...firebaseUser, ...userDocSnap.data() };
+    } else {
+      // NEW USER via Mobile-only flow
+      const newUserData: Partial<User> = {
+        uid: firebaseUser.uid,
+        email: '', 
+        userType: 'buyer', // Default fallback
+        phoneNumber: phoneNumber,
+        phone: phoneNumber,
+        verified: false,
+        kycStatus: 'pending',
+        createdAt: new Date().toISOString(),
+        
+        // 🚀 CRITICAL NEW FIELDS FOR TASK 8
+        registrationType: 'mobile',
+        hasPassword: false,
+        isGSTVerified: false,
+        
+        subscriptionTier: 'FREE',
+        whatsappOptIn: true, 
+        phoneVerified: true, 
+      };
+
+      await setDoc(userDocRef, newUserData);
+      return { ...firebaseUser, ...newUserData };
+    }
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to process mobile login.');
+  }
+}
+
+
+// Complete full registration after phone is verified
 export const completeRegistrationAfterOTP = async (
   firebaseUser: any, 
   formData: RegisterData
 ): Promise<any> => {
   try {
-    // 1. Link Email and Password to the phone-authenticated user
     try {
       if (Platform.OS === 'web') {
-        // --- WEB SDK LINKING ---
         const credential = WebEmailAuthProvider.credential(formData.email, formData.password);
         await webLinkWithCredential(firebaseUser, credential);
         await webUpdateProfile(firebaseUser, { displayName: formData.companyName });
       } else {
-        // --- NATIVE SDK LINKING ---
         const credential = nativeAuthModule.EmailAuthProvider.credential(formData.email, formData.password);
-        // Note: Native SDK calls methods directly on the user object
         await firebaseUser.linkWithCredential(credential);
         await firebaseUser.updateProfile({ displayName: formData.companyName });
       }
     } catch (linkError: any) {
       console.error("Linking error:", linkError);
-      
       if (linkError.code === 'auth/provider-already-linked' || linkError.code === 'auth/credential-already-in-use') {
-        console.log("Account is already linked to an email. Bypassing link step for testing/re-registration.");
+        console.log("Account is already linked to an email.");
       } else if (linkError.code === 'auth/email-already-in-use') {
-        throw new Error('This email is already associated with another account. Please use a different email.');
+        throw new Error('This email is already associated with another account.');
       } else if (linkError.code === 'auth/operation-not-allowed') {
         throw new Error('Email/Password login is not enabled in Firebase Console.');
       } else {
@@ -86,7 +132,6 @@ export const completeRegistrationAfterOTP = async (
       }
     }
 
-    // 2. Prepare user document
     const userData: User = {
       uid: firebaseUser.uid,
       email: formData.email,
@@ -100,6 +145,11 @@ export const completeRegistrationAfterOTP = async (
       documents: { gstin: false, shopLicense: false, udyogAadhar: false },
       createdAt: new Date().toISOString(),
       
+      // 🚀 CRITICAL NEW FIELDS FOR TASK 8
+      registrationType: 'full',
+      hasPassword: true,
+      isGSTVerified: formData.gstVerified || false,
+      
       subscriptionTier: 'FREE',
       subscriptionExpiry: null,
       paymentHistory: [],
@@ -108,25 +158,14 @@ export const completeRegistrationAfterOTP = async (
       phoneVerified: true, 
     };
 
-    // 3. Save User to Firestore
     await setDoc(doc(db, 'users', firebaseUser.uid), userData);
 
-    // 4. Send Welcome Notification
     try {
       await addDoc(collection(db, 'notifications'), {
         userId: firebaseUser.uid,
         title: 'Welcome to Prochem! 🎉',
-        message: 'Your account has been created successfully. Our team will review your GST details shortly.',
+        message: 'Your account has been created successfully.',
         type: 'system',
-        read: false,
-        createdAt: new Date().toISOString()
-      });
-      
-      await addDoc(collection(db, 'notifications'), {
-        userId: 'ALL_ADMINS',
-        title: 'New User Registration',
-        message: `${formData.companyName} just registered as a new ${formData.userType.toUpperCase()}.`,
-        type: 'admin_broadcast',
         read: false,
         createdAt: new Date().toISOString()
       });
@@ -194,4 +233,6 @@ export default {
   deleteUserAccount,
   completeRegistrationAfterOTP,
   checkEmailExists,
+  updateUserProfile,
+  processMobileLogin
 };

@@ -9,6 +9,7 @@ import { collection, query, where, onSnapshot, doc, updateDoc, increment } from 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { getProducts } from '../services/productService';
+import { ProfileCompletionBanner } from '../components/ProfileCompletionBanner';
 
 const { width } = Dimensions.get('window');
 
@@ -149,6 +150,13 @@ export default function BuyerHome() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
       >
+        {/* 🚀 NEW: Profile Completion Banner */}
+        {user && (
+          <ProfileCompletionBanner 
+            user={user} 
+            onComplete={() => navigation.navigate('EditProfile')} 
+          />
+        )}
         {/* 3. Quick Actions Grid */}
         <View style={styles.quickActionsContainer}>
           <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD' }]} onPress={() => navigation.navigate('Categories')}>

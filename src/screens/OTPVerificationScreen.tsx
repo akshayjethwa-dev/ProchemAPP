@@ -7,8 +7,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 
-import { completeRegistrationAfterOTP } from '../services/authService';
-import { useAppStore } from '../store/appStore'; // ✅ Imported appStore
+// 🚀 UPDATED: Imported processMobileLogin
+import { completeRegistrationAfterOTP, processMobileLogin } from '../services/authService';
+import { useAppStore } from '../store/appStore'; 
 
 export default function OTPVerificationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -60,23 +61,22 @@ export default function OTPVerificationScreen() {
         userCredential = await nativeConfirmation.confirm(otp);
       }
 
-      // 2. IF REGISTRATION MODE -> Save profile and email/password linking
+      // 2. Process based on Mode
       if (mode === 'registration' && formData) {
+        // FULL REGISTRATION FLOW (Web/Email/Form attached)
         await completeRegistrationAfterOTP(userCredential.user, formData);
+      } else {
+        // 🚀 NEW: MOBILE LOGIN/REGISTRATION FLOW
+        await processMobileLogin(userCredential.user, mobile);
       }
       
-      // ✅ Reset onboarding state so that RootNavigator handles redirect to OnboardingScreen
+      // Reset onboarding state so that RootNavigator handles redirect to OnboardingScreen
       useAppStore.getState().resetOnboarding();
 
-      // ✅ SUCCESS!
-      // Do NOT call setLoading(false) here. 
-      // Keep the button spinning seamlessly while RootNavigator detects the new
-      // Firestore document, sets the state, and unmounts this Auth screen automatically.
-
+      // SUCCESS! Keep the button spinning while RootNavigator handles the redirect
     } catch (error: any) {
       console.error('OTP Verification Error:', error);
       
-      // Only disable loading if there's an error so the user can try again
       setLoading(false);
       
       const errorCode = error.code || '';
