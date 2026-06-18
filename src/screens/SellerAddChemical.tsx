@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
-import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu, Card, Divider, Checkbox, Switch } from 'react-native-paper'; 
+import { 
+  View, 
+  ScrollView, 
+  StyleSheet, 
+  Alert, 
+  KeyboardAvoidingView, 
+  Platform, 
+  TouchableOpacity, 
+  Image,
+  useWindowDimensions 
+} from 'react-native';
+import { Text, TextInput, Button, Avatar, useTheme, Menu, Card, Divider, Checkbox, Switch } from 'react-native-paper'; 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker'; 
 import { useAppStore } from '../store/appStore';
@@ -27,10 +37,14 @@ export default function SellerAddChemical() {
   const navigation = useNavigation();
   const theme = useTheme();
   const route = useRoute<any>();
+  const { width } = useWindowDimensions();
   const { user } = useAppStore();
   
   const editingProduct = route.params?.product;
   const isEditMode = !!editingProduct;
+
+  // Responsive Breakpoint: Devices under 600px wide will stack forms vertically
+  const isSmallDevice = width < 600; 
 
   // ✅ Identify if seller is premium
   const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
@@ -225,19 +239,33 @@ export default function SellerAddChemical() {
   };
 
   const renderDropdown = (label: string, value: string, options: string[], menuKey: keyof typeof menus) => (
-    <View style={{flex: 1, marginHorizontal: 4, marginBottom: 15}}>
+    <View style={styles.field}>
       <Menu
         visible={menus[menuKey]}
         onDismiss={() => toggleMenu(menuKey, false)}
         anchor={
           <TouchableOpacity onPress={() => toggleMenu(menuKey, true)}>
-            <TextInput label={label} value={value} mode="outlined" editable={false} style={{backgroundColor:'white'}} right={<TextInput.Icon icon="chevron-down" onPress={() => toggleMenu(menuKey, true)} />} />
+            <TextInput 
+              label={label} 
+              value={value} 
+              mode="outlined" 
+              editable={false} 
+              style={{backgroundColor:'white'}} 
+              right={<TextInput.Icon icon="chevron-down" onPress={() => toggleMenu(menuKey, true)} />} 
+            />
           </TouchableOpacity>
         }
       >
         <ScrollView style={{maxHeight: 250}}>
           {options.map(opt => (
-            <Menu.Item key={opt} onPress={() => { handleChange(menuKey === 'gst' ? 'gstPercent' : menuKey === 'packaging' ? 'packagingType' : menuKey === 'hazard' ? 'hazardClass' : menuKey, opt); toggleMenu(menuKey, false); }} title={opt + (menuKey === 'gst' ? '%' : '')} />
+            <Menu.Item 
+              key={opt} 
+              onPress={() => { 
+                handleChange(menuKey === 'gst' ? 'gstPercent' : menuKey === 'packaging' ? 'packagingType' : menuKey === 'hazard' ? 'hazardClass' : menuKey, opt); 
+                toggleMenu(menuKey, false); 
+              }} 
+              title={opt + (menuKey === 'gst' ? '%' : '')} 
+            />
           ))}
         </ScrollView>
       </Menu>
@@ -251,117 +279,161 @@ export default function SellerAddChemical() {
         {/* IMAGE UPLOAD */}
         <View style={styles.imageSection}>
           <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
-            {form.imageUrl ? <Image source={{ uri: form.imageUrl }} style={styles.imagePreview} /> : <View style={{alignItems:'center'}}><Avatar.Icon size={50} icon="camera-plus" style={{backgroundColor:'#E3F2FD'}} color="#004AAD" /><Text style={{color:'#004AAD', fontWeight:'bold'}}>Upload Image</Text></View>}
+            {form.imageUrl ? 
+              <Image source={{ uri: form.imageUrl }} style={styles.imagePreview} /> 
+              : 
+              <View style={{alignItems:'center'}}>
+                <Avatar.Icon size={50} icon="camera-plus" style={{backgroundColor:'#E3F2FD'}} color="#004AAD" />
+                <Text style={{color:'#004AAD', fontWeight:'bold', marginTop: 8}}>Upload Image</Text>
+              </View>
+            }
           </TouchableOpacity>
         </View>
 
         <View style={styles.form}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>1. Basic Information</Text>
-          <TextInput label="Chemical Name *" value={form.name} onChangeText={t => handleChange('name', t)} mode="outlined" style={styles.input} />
           
-          <View style={styles.row}>
-            {renderDropdown('Category *', form.category, CATEGORY_OPTIONS, 'category')}
-            <TextInput label="CAS Number" value={form.casNumber} onChangeText={t => handleChange('casNumber', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-          </View>
+          {/* Section 1: Basic Information */}
+          <Card style={styles.sectionCard} mode="elevated">
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.sectionTitle}>1. Basic Information</Text>
+              
+              <TextInput label="Chemical Name *" value={form.name} onChangeText={t => handleChange('name', t)} mode="outlined" style={styles.fullWidthInput} />
+              
+              <View style={[styles.responsiveRow, isSmallDevice && styles.responsiveStack]}>
+                {renderDropdown('Category *', form.category, CATEGORY_OPTIONS, 'category')}
+                <TextInput label="CAS Number" value={form.casNumber} onChangeText={t => handleChange('casNumber', t)} mode="outlined" style={styles.field} />
+              </View>
 
-          <View style={styles.row}>
-             <TextInput label="Purity (%)" keyboardType="numeric" value={form.purity} onChangeText={t => handleChange('purity', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-             <TextInput label="Origin (Country)" value={form.origin} onChangeText={t => handleChange('origin', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-          </View>
+              <View style={[styles.responsiveRow, isSmallDevice && styles.responsiveStack]}>
+                 <TextInput label="Purity (%)" keyboardType="numeric" value={form.purity} onChangeText={t => handleChange('purity', t)} mode="outlined" style={styles.field} />
+                 <TextInput label="Origin (Country)" value={form.origin} onChangeText={t => handleChange('origin', t)} mode="outlined" style={styles.field} />
+              </View>
+            </Card.Content>
+          </Card>
 
-          <Text variant="titleMedium" style={styles.sectionTitle}>2. Pricing & Commercials</Text>
-          <View style={styles.row}>
-            <TextInput label="Base Price (₹) *" keyboardType="numeric" value={form.pricePerUnit} onChangeText={t => handleChange('pricePerUnit', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-            {renderDropdown('Unit *', form.unit, UNIT_OPTIONS, 'unit')}
-          </View>
+          {/* Section 2: Pricing & Commercials */}
+          <Card style={styles.sectionCard} mode="elevated">
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.sectionTitle}>2. Pricing & Commercials</Text>
+              
+              <View style={[styles.responsiveRow, isSmallDevice && styles.responsiveStack]}>
+                <TextInput label="Base Price (₹) *" keyboardType="numeric" value={form.pricePerUnit} onChangeText={t => handleChange('pricePerUnit', t)} mode="outlined" style={styles.field} />
+                {renderDropdown('Unit *', form.unit, UNIT_OPTIONS, 'unit')}
+              </View>
 
-          <View style={styles.row}>
-             <TextInput label="Min Order (MOQ)" keyboardType="numeric" value={form.moq} onChangeText={t => handleChange('moq', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-             {renderDropdown('GST Slab *', form.gstPercent, GST_SLABS, 'gst')}
-          </View>
+              <View style={[styles.responsiveRow, isSmallDevice && styles.responsiveStack]}>
+                 <TextInput label="Min Order (MOQ)" keyboardType="numeric" value={form.moq} onChangeText={t => handleChange('moq', t)} mode="outlined" style={styles.field} />
+                 {renderDropdown('GST Slab *', form.gstPercent, GST_SLABS, 'gst')}
+              </View>
 
-          {/* PAYOUT CARD */}
-          {payoutStats.basePrice > 0 && (
-            <Card style={styles.payoutCard}>
-              <Card.Content>
-                <Text variant="labelLarge" style={{color:'#666', fontWeight:'bold', marginBottom: 5}}>💰 Estimated Payout (on Base Price)</Text>
-                <Divider style={{marginBottom: 8}} />
-                <View style={styles.payoutRow}><Text style={styles.payoutLabel}>Base Price:</Text><Text style={styles.payoutValue}>₹{payoutStats.basePrice.toFixed(2)}</Text></View>
-                <View style={styles.payoutRow}><Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Platform + Safety + Freight Fees:</Text><Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{(payoutStats.platformFee + payoutStats.safetyFee + payoutStats.freightFee).toFixed(2)}</Text></View>
-                <Divider style={{marginVertical: 8}} />
-                <View style={styles.payoutRow}><Text style={{fontWeight:'bold', color: theme.colors.primary}}>Est. Net Payout:</Text><Text style={{fontWeight:'bold', fontSize: 16, color: theme.colors.primary}}>₹{payoutStats.netPayout.toFixed(2)}</Text></View>
-              </Card.Content>
-            </Card>
-          )}
+              {/* PAYOUT CARD */}
+              {payoutStats.basePrice > 0 && (
+                <View style={styles.payoutCard}>
+                  <Text variant="labelLarge" style={{color:'#666', fontWeight:'bold', marginBottom: 5}}>💰 Estimated Payout (on Base Price)</Text>
+                  <Divider style={{marginBottom: 8}} />
+                  <View style={styles.payoutRow}><Text style={styles.payoutLabel}>Base Price:</Text><Text style={styles.payoutValue}>₹{payoutStats.basePrice.toFixed(2)}</Text></View>
+                  <View style={styles.payoutRow}><Text style={[styles.payoutLabel, {color:'#D32F2F'}]}>Platform + Safety + Freight Fees:</Text><Text style={[styles.payoutValue, {color:'#D32F2F'}]}>- ₹{(payoutStats.platformFee + payoutStats.safetyFee + payoutStats.freightFee).toFixed(2)}</Text></View>
+                  <Divider style={{marginVertical: 8}} />
+                  <View style={styles.payoutRow}><Text style={{fontWeight:'bold', color: theme.colors.primary}}>Est. Net Payout:</Text><Text style={{fontWeight:'bold', fontSize: 16, color: theme.colors.primary}}>₹{payoutStats.netPayout.toFixed(2)}</Text></View>
+                </View>
+              )}
+            </Card.Content>
+          </Card>
 
-          <Text variant="titleMedium" style={styles.sectionTitle}>3. Logistics & Packaging</Text>
-          <View style={styles.row}>
-             {renderDropdown('Packaging Type', form.packagingType, PACKAGING_OPTIONS, 'packaging')}
-             <TextInput label="Storage Conditions" placeholder="e.g. Store below 25°C" value={form.storageConditions} onChangeText={t => handleChange('storageConditions', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-          </View>
-          
-          {form.packagingType === 'Other' && (
-            <TextInput 
-              label="Specify Packaging Type *" 
-              placeholder="e.g. 100 ml Bottle, 5kg Tin" 
-              value={form.customPackagingType} 
-              onChangeText={t => handleChange('customPackagingType', t)} 
-              mode="outlined" 
-              style={styles.input} 
-            />
-          )}
+          {/* Section 3: Logistics & Packaging */}
+          <Card style={styles.sectionCard} mode="elevated">
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.sectionTitle}>3. Logistics & Packaging</Text>
+              
+              <View style={[styles.responsiveRow, isSmallDevice && styles.responsiveStack]}>
+                 {renderDropdown('Packaging Type', form.packagingType, PACKAGING_OPTIONS, 'packaging')}
+                 <TextInput label="Storage Conditions" placeholder="e.g. Store below 25°C" value={form.storageConditions} onChangeText={t => handleChange('storageConditions', t)} mode="outlined" style={styles.field} />
+              </View>
+              
+              {form.packagingType === 'Other' && (
+                <TextInput 
+                  label="Specify Packaging Type *" 
+                  placeholder="e.g. 100 ml Bottle, 5kg Tin" 
+                  value={form.customPackagingType} 
+                  onChangeText={t => handleChange('customPackagingType', t)} 
+                  mode="outlined" 
+                  style={styles.fullWidthInput} 
+                />
+              )}
 
-          {/* FEATURE GATE: READY TO DISPATCH TOGGLE */}
-          <View style={styles.dispatchContainer}>
-            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-              <Text style={{fontWeight: 'bold', fontSize: 15, color: '#1E293B'}}>⚡ Ready to Dispatch</Text>
-              <Switch 
-                value={isReadyToDispatch} 
-                onValueChange={setIsReadyToDispatch} 
-                color={theme.colors.primary}
-                disabled={!isPremium} 
+              {/* FEATURE GATE: READY TO DISPATCH TOGGLE */}
+              <View style={styles.dispatchContainer}>
+                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <Text style={{fontWeight: 'bold', fontSize: 15, color: '#1E293B'}}>⚡ Ready to Dispatch</Text>
+                  <Switch 
+                    value={isReadyToDispatch} 
+                    onValueChange={setIsReadyToDispatch} 
+                    color={theme.colors.primary}
+                    disabled={!isPremium} 
+                  />
+                </View>
+                
+                {!isPremium ? (
+                  <Text style={{fontSize: 12, color: '#D97706', marginTop: 8, fontWeight: '600'}}>
+                    👑 Premium Feature: Boost visibility for your ready stock to buyers needing urgent delivery.
+                  </Text>
+                ) : (
+                  <Text style={{fontSize: 12, color: '#64748B', marginTop: 6}}>
+                    Highlight this product to buyers who need urgent delivery.
+                  </Text>
+                )}
+              </View>
+            </Card.Content>
+          </Card>
+
+          {/* Section 4: Safety & Compliance */}
+          <Card style={styles.sectionCard} mode="elevated">
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.sectionTitle}>4. Safety & Compliance</Text>
+              
+              <View style={[styles.responsiveRow, isSmallDevice && styles.responsiveStack]}>
+                 {renderDropdown('Hazard Class', form.hazardClass, HAZARD_CLASSES, 'hazard')}
+                 <TextInput label="UN Number (if Hazmat)" value={form.unNumber} onChangeText={t => handleChange('unNumber', t)} mode="outlined" style={styles.field} />
+              </View>
+              
+              <Text variant="titleMedium" style={[styles.sectionTitle, { marginTop: 16 }]}>Technical Documents (PDFs)</Text>
+              <View style={styles.docUploadContainer}>
+                 <Button icon="file-pdf-box" mode={msdsFile ? "contained" : "outlined"} onPress={() => pickDocument('msds')} style={styles.docBtn} buttonColor={msdsFile ? '#4CAF50' : undefined}>
+                    {msdsFile ? 'MSDS Uploaded' : 'Upload MSDS'}
+                 </Button>
+                 <Button icon="file-document-outline" mode={tdsFile ? "contained" : "outlined"} onPress={() => pickDocument('tds')} style={styles.docBtn} buttonColor={tdsFile ? '#4CAF50' : undefined}>
+                    {tdsFile ? 'TDS Uploaded' : 'Upload TDS'}
+                 </Button>
+                 <Button icon="certificate-outline" mode={coaFile ? "contained" : "outlined"} onPress={() => pickDocument('coa')} style={styles.docBtn} buttonColor={coaFile ? '#4CAF50' : undefined}>
+                    {coaFile ? 'CoA Uploaded' : 'Sample CoA'}
+                 </Button>
+              </View>
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.sectionCard} mode="elevated">
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.sectionTitle}>5. Description & Verification</Text>
+              
+              <TextInput 
+                label="Description and usage of the product *" 
+                multiline 
+                numberOfLines={4} 
+                value={form.description} 
+                onChangeText={t => handleChange('description', t)} 
+                mode="outlined" 
+                style={styles.fullWidthInput} 
               />
-            </View>
-            
-            {!isPremium ? (
-              <Text style={{fontSize: 12, color: '#D97706', marginTop: 8, fontWeight: '600'}}>
-                👑 Premium Feature: Boost visibility for your ready stock to buyers needing urgent delivery.
-              </Text>
-            ) : (
-              <Text style={{fontSize: 12, color: '#64748B', marginTop: 6}}>
-                Highlight this product to buyers who need urgent delivery.
-              </Text>
-            )}
-          </View>
 
-          <Text variant="titleMedium" style={styles.sectionTitle}>4. Safety & Compliance</Text>
-          <View style={styles.row}>
-             {renderDropdown('Hazard Class', form.hazardClass, HAZARD_CLASSES, 'hazard')}
-             <TextInput label="UN Number (if Hazmat)" value={form.unNumber} onChangeText={t => handleChange('unNumber', t)} mode="outlined" style={[styles.input, {flex:1, marginHorizontal:4}]} />
-          </View>
+              {/* COMPLIANCE CHECKBOX */}
+              <View style={styles.complianceContainer}>
+                 <Checkbox status={isCompliant ? 'checked' : 'unchecked'} onPress={() => setIsCompliant(!isCompliant)} color={theme.colors.primary} />
+                 <Text style={styles.complianceText}>I declare that this product is not a banned substance and complies with all safety and transport regulations.</Text>
+              </View>
+            </Card.Content>
+          </Card>
 
-          <Text variant="titleMedium" style={styles.sectionTitle}>5. Technical Documents (PDFs)</Text>
-          <View style={styles.docUploadContainer}>
-             <Button icon="file-pdf-box" mode={msdsFile ? "contained" : "outlined"} onPress={() => pickDocument('msds')} style={styles.docBtn} buttonColor={msdsFile ? '#4CAF50' : undefined}>
-                {msdsFile ? 'MSDS Uploaded' : 'Upload MSDS'}
-             </Button>
-             <Button icon="file-document-outline" mode={tdsFile ? "contained" : "outlined"} onPress={() => pickDocument('tds')} style={styles.docBtn} buttonColor={tdsFile ? '#4CAF50' : undefined}>
-                {tdsFile ? 'TDS Uploaded' : 'Upload TDS'}
-             </Button>
-             <Button icon="certificate-outline" mode={coaFile ? "contained" : "outlined"} onPress={() => pickDocument('coa')} style={styles.docBtn} buttonColor={coaFile ? '#4CAF50' : undefined}>
-                {coaFile ? 'CoA Uploaded' : 'Upload Sample CoA'}
-             </Button>
-          </View>
-
-          <TextInput label="Description and usage of the product *" multiline numberOfLines={4} value={form.description} onChangeText={t => handleChange('description', t)} mode="outlined" style={styles.input} />
-
-          {/* COMPLIANCE CHECKBOX */}
-          <View style={styles.complianceContainer}>
-             <Checkbox status={isCompliant ? 'checked' : 'unchecked'} onPress={() => setIsCompliant(!isCompliant)} color={theme.colors.primary} />
-             <Text style={styles.complianceText}>I declare that this product is not a banned substance and complies with all safety and transport regulations.</Text>
-          </View>
-
-          <Button mode="contained" onPress={handleSubmit} loading={loading} style={styles.btn} contentStyle={{height: 50}}>
+          <Button mode="contained" onPress={handleSubmit} loading={loading} style={styles.btn} contentStyle={{height: 52}} labelStyle={{fontSize: 16, fontWeight: 'bold'}}>
             {isEditMode ? 'Save Changes' : 'List Product'}
           </Button>
           
@@ -374,29 +446,51 @@ export default function SellerAddChemical() {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingBottom: 40 },
-  sectionTitle: { fontWeight: 'bold', marginTop: 20, marginBottom: 10, color: '#334155' },
-  imageSection: { alignItems: 'center', marginTop: 20 },
+  sectionCard: { marginBottom: 16, backgroundColor: '#FFFFFF' },
+  sectionTitle: { fontWeight: 'bold', marginBottom: 16, color: '#334155' },
+  imageSection: { alignItems: 'center', marginVertical: 20 },
   imagePicker: { width: 120, height: 120, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   imagePreview: { width: '100%', height: '100%' },
-  form: { padding: 16 },
-  input: { marginBottom: 15, backgroundColor: 'white' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: -4 },
-  btn: { marginTop: 20, borderRadius: 8, backgroundColor: '#004AAD' },
-  payoutCard: { marginBottom: 15, backgroundColor: '#F1F8E9', borderColor: '#C8E6C9', borderWidth: 1 },
+  form: { paddingHorizontal: 16 },
+  
+  // Responsive layout classes
+  responsiveRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+  },
+  responsiveStack: {
+    flexDirection: 'column',
+  },
+  field: { 
+    flex: 1,
+    backgroundColor: 'white'
+  },
+  fullWidthInput: { 
+    marginBottom: 16, 
+    backgroundColor: 'white',
+    width: '100%' 
+  },
+  
+  btn: { marginTop: 10, borderRadius: 8, backgroundColor: '#004AAD' },
+  
+  payoutCard: { marginTop: 12, padding: 12, backgroundColor: '#F1F8E9', borderColor: '#C8E6C9', borderWidth: 1, borderRadius: 8 },
   payoutRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  payoutLabel: { fontSize: 12, color: '#555' },
-  payoutValue: { fontSize: 12, fontWeight: 'bold', color: '#333' },
+  payoutLabel: { fontSize: 13, color: '#555' },
+  payoutValue: { fontSize: 13, fontWeight: 'bold', color: '#333' },
+  
   dispatchContainer: { 
     backgroundColor: '#F8FAFC', 
     padding: 16, 
-    borderRadius: 12, 
+    borderRadius: 8, 
     borderWidth: 1, 
     borderColor: '#E2E8F0', 
-    marginBottom: 10,
-    marginTop: 5
+    marginTop: 8
   },
-  docUploadContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15 },
-  docBtn: { flexGrow: 1, borderColor: '#CBD5E1' },
-  complianceContainer: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0B2' },
-  complianceText: { flex: 1, fontSize: 12, color: '#E65100', marginTop: 8 }
+  
+  docUploadContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  docBtn: { flexGrow: 1, minWidth: 140, borderColor: '#CBD5E1' },
+  
+  complianceContainer: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 12, backgroundColor: '#FFF3E0', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0B2' },
+  complianceText: { flex: 1, fontSize: 13, color: '#E65100', marginTop: 6, lineHeight: 18 }
 });
