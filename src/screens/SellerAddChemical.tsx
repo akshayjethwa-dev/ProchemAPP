@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
 import { Text, TextInput, Button, IconButton, Avatar, useTheme, Menu, Card, Divider, Checkbox, Switch } from 'react-native-paper'; 
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -15,7 +15,6 @@ const CATEGORY_OPTIONS = [
   'Industrial Chemicals', 'Pharma Chemicals', 'Agriculture', 'Food & Beverage', 'Lab Research', 'Other'
 ];
 
-// 🚀 NEW CONSTANTS FOR CHEMICAL DATA
 const GST_SLABS = ['5', '12', '18', '28'];
 const HAZARD_CLASSES = ['Non-Hazardous', 'Flammable', 'Corrosive', 'Toxic', 'Oxidizer', 'Explosive'];
 const PACKAGING_OPTIONS = ['200L Drum', '25kg Bag', '50kg Bag', 'IBC Tote', '1L Bottle', 'Tanker', 'Other'];
@@ -39,20 +38,20 @@ export default function SellerAddChemical() {
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState<any>(null);
   
-  // 🚀 Document States
+  // Document States
   const [msdsFile, setMsdsFile] = useState<any>(null);
   const [tdsFile, setTdsFile] = useState<any>(null);
   const [coaFile, setCoaFile] = useState<any>(null);
 
   const [isCompliant, setIsCompliant] = useState(false);
   
-  // ✅ NEW: Ready to Dispatch State
+  // Ready to Dispatch State
   const [isReadyToDispatch, setIsReadyToDispatch] = useState(false);
 
   // --- DROPDOWN STATES ---
   const [menus, setMenus] = useState({ unit: false, category: false, gst: false, hazard: false, packaging: false });
   
-  // 🚀 NEW STATES: Tiered Pricing & Samples
+  // STATES: Tiered Pricing & Samples
   const [tiers, setTiers] = useState([{ minQty: '', pricePerUnit: '' }]);
   const [sample, setSample] = useState({ available: false, price: '', size: '100g' });
 
@@ -83,6 +82,13 @@ export default function SellerAddChemical() {
     if (Platform.OS === 'web') window.alert(`${title}: ${message}`);
     else Alert.alert(title, message);
   };
+
+  // ✅ Set native stack header title dynamically
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: isEditMode ? 'Edit Product' : 'Add New Chemical'
+    });
+  }, [isEditMode, navigation]);
 
   useEffect(() => {
     if (isEditMode) {
@@ -116,10 +122,8 @@ export default function SellerAddChemical() {
         setSample({ available: true, price: String(editingProduct.samplePrice || ''), size: editingProduct.sampleSize || '100g' });
       }
 
-      // Load Ready to Dispatch status
       setIsReadyToDispatch(editingProduct.readyToDispatch || false);
       setIsCompliant(true);
-      navigation.setOptions({ title: 'Edit Product' });
     }
   }, [editingProduct]);
 
@@ -183,27 +187,20 @@ export default function SellerAddChemical() {
         moq: parseInt(form.moq) || 0,
         purity: parseFloat(form.purity) || 0,
         gstPercent: parseInt(form.gstPercent) || 18,
-        
         packagingType: form.packagingType === 'Other' ? form.customPackagingType.trim() : form.packagingType,
-        
         quantity: 1000, 
         sellerId: user?.uid,
         sellerName: user?.companyName || 'Unknown',
-        sellerTier: user?.subscriptionTier || 'FREE', // Stamping Seller Tier
-        
-        // ✅ NEW: Saving Ready to Dispatch Status (force false if they somehow bypassed the UI gate)
+        sellerTier: user?.subscriptionTier || 'FREE',
         readyToDispatch: isPremium ? isReadyToDispatch : false,
-        
         active: isEditMode ? editingProduct.active : true,
         msdsUrl: msdsFile?.uri || editingProduct?.msdsUrl || '', 
         tdsUrl: tdsFile?.uri || editingProduct?.tdsUrl || '',
         coaUrl: coaFile?.uri || editingProduct?.coaUrl || '',
-        
         tieredPricing: validTiers,
         sampleAvailable: sample.available,
         samplePrice: parseFloat(sample.price) || 0,
         sampleSize: sample.size,
-        
         updatedAt: new Date().toISOString()
       };
 
@@ -249,13 +246,6 @@ export default function SellerAddChemical() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1, backgroundColor: '#F8FAFC'}}>
-      <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="titleMedium" style={{fontWeight:'bold'}}>
-          {isEditMode ? 'Edit Product' : 'Add New Chemical'}
-        </Text>
-      </View>
-
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
         {/* IMAGE UPLOAD */}
@@ -290,7 +280,7 @@ export default function SellerAddChemical() {
              {renderDropdown('GST Slab *', form.gstPercent, GST_SLABS, 'gst')}
           </View>
 
-          {/* 🚀 PAYOUT CARD */}
+          {/* PAYOUT CARD */}
           {payoutStats.basePrice > 0 && (
             <Card style={styles.payoutCard}>
               <Card.Content>
@@ -321,7 +311,7 @@ export default function SellerAddChemical() {
             />
           )}
 
-          {/* ✅ FEATURE GATE: READY TO DISPATCH TOGGLE */}
+          {/* FEATURE GATE: READY TO DISPATCH TOGGLE */}
           <View style={styles.dispatchContainer}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
               <Text style={{fontWeight: 'bold', fontSize: 15, color: '#1E293B'}}>⚡ Ready to Dispatch</Text>
@@ -329,11 +319,10 @@ export default function SellerAddChemical() {
                 value={isReadyToDispatch} 
                 onValueChange={setIsReadyToDispatch} 
                 color={theme.colors.primary}
-                disabled={!isPremium} // Disabled if FREE
+                disabled={!isPremium} 
               />
             </View>
             
-            {/* Contextual Messaging based on Tier */}
             {!isPremium ? (
               <Text style={{fontSize: 12, color: '#D97706', marginTop: 8, fontWeight: '600'}}>
                 👑 Premium Feature: Boost visibility for your ready stock to buyers needing urgent delivery.
@@ -385,7 +374,6 @@ export default function SellerAddChemical() {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingBottom: 40 },
-  header: { flexDirection:'row', alignItems:'center', padding: 10, backgroundColor:'white', elevation: 2 },
   sectionTitle: { fontWeight: 'bold', marginTop: 20, marginBottom: 10, color: '#334155' },
   imageSection: { alignItems: 'center', marginTop: 20 },
   imagePicker: { width: 120, height: 120, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
@@ -398,8 +386,6 @@ const styles = StyleSheet.create({
   payoutRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   payoutLabel: { fontSize: 12, color: '#555' },
   payoutValue: { fontSize: 12, fontWeight: 'bold', color: '#333' },
-  
-  // ✅ NEW STYLE: Dispatch Box
   dispatchContainer: { 
     backgroundColor: '#F8FAFC', 
     padding: 16, 
@@ -409,7 +395,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: 5
   },
-
   docUploadContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15 },
   docBtn: { flexGrow: 1, borderColor: '#CBD5E1' },
   complianceContainer: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0B2' },

@@ -148,7 +148,8 @@ export const RootNavigator = () => {
               ) : viewMode === 'seller' ? (
                 <>
                   <Stack.Screen name="SellerApp" component={SellerNavigator} />
-                  <Stack.Screen name="AddChemical" component={SellerAddChemical} options={{ animation: 'slide_from_bottom' }} />
+                  {/* ✅ ENABLE HEADER POLICY FOR ADD CHEMICAL HERE */}
+                  <Stack.Screen name="AddChemical" component={SellerAddChemical} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Add New Chemical' }} />
                 </>
               ) : (
                 <>
@@ -156,13 +157,15 @@ export const RootNavigator = () => {
                 </>
               )}
               
-              <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} options={{ animation: 'slide_from_bottom' }} />
+              {/* ✅ ENABLE HEADER POLICY FOR FORMS/PROFILE/KYC HERE */}
+              <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Identity Verification' }} />
+              <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Edit Profile' }} />
+              
+              <Stack.Screen name="OrderTracking" component={OrderTracking} options={{ headerShown: true, title: 'Order Details' }} />
               <Stack.Screen name="ProductDetail" component={ProductDetail} />
               <Stack.Screen name="Negotiation" component={NegotiationScreen} />
-              <Stack.Screen name="OrderTracking" component={OrderTracking} />
-              <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="Notifications" component={NotificationScreen} />
-              <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
+              <Stack.Screen name="Notifications" component={NotificationScreen} options={{ headerShown: true, title: 'Notifications' }} />
+              <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} options={{ headerShown: true, title: 'Notification' }} />
               <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
               <Stack.Screen name="AboutProchem" component={AboutProchemScreen} />
             </Stack.Group>

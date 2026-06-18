@@ -1,17 +1,21 @@
 // File: src/theme.ts
+import { MD3LightTheme as DefaultTheme } from 'react-native-paper';
 
 export const theme = {
+  ...DefaultTheme,
   colors: {
-    primary: '#0EA5E9',
-    secondary: '#64748B',
+    ...DefaultTheme.colors,
+    primary: '#004AAD',
+    secondary: '#FF6B00',
     background: '#F8FAFC',
     surface: '#FFFFFF',
-    textPrimary: '#0F172A',
+    surfaceMuted: '#F1F5F9',
+    textPrimary: '#1E293B',
     textSecondary: '#64748B',
+    warning: '#F59E0B',
+    success: '#10B981',
     border: '#E2E8F0',
-    error: '#EF4444',
-    success: '#22C55E',
-    warning: '#EAB308',
+    error: '#D32F2F',
   },
   spacing: {
     xs: 4,
@@ -19,23 +23,35 @@ export const theme = {
     md: 16,
     lg: 24,
     xl: 32,
-    xxl: 48,
   },
-  // New Unified Typography Scale
+  radius: {
+    sm: 4,
+    md: 8,
+    lg: 12,
+    xl: 16,
+  },
+  elevation: {
+    level1: 2,
+    level2: 4,
+  },
   typography: {
     sizes: {
-      pageTitle: 24,
+      caption: 12,
+      body: 14,
+      label: 14,
+      bodyLarge: 16,
+      title: 18,
       sectionTitle: 18,
-      bodyLarge: 16, // For primary readable text
-      body: 14,      // Standard text
-      label: 13,     // Field labels, tags
-      caption: 12,   // Helper text, small prints
+      header: 24,
+      pageTitle: 24,
     },
     weights: {
-      bold: '700' as const,
-      semiBold: '600' as const,
-      medium: '500' as const,
       regular: '400' as const,
-    },
+      medium: '500' as const,
+      semiBold: '600' as const,
+      bold: '700' as const,
+    }
   },
 };
+
+export type AppTheme = typeof theme;

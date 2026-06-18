@@ -1,19 +1,21 @@
+// File: App.tsx
 import React, { useEffect, useState } from 'react';
 import { Platform, View, StyleSheet, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Provider as PaperProvider, MD3LightTheme, Text, Button, configureFonts } from 'react-native-paper';
+import { Provider as PaperProvider, Text, Button, configureFonts } from 'react-native-paper';
 
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 
-// 🚀 Firebase Auth & Firestore imports for saving the token
+// 🚀 Firebase Auth & Firestore
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
 import { db } from './src/config/firebase'; 
 
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { useAppStore } from './src/store/appStore';
 
 // 🎨 Import unified internal theme
 import { theme as internalTheme } from './src/theme';
@@ -30,7 +32,7 @@ Notifications.setNotificationHandler({
 
 // 🛠 Map internal semantic typography to React Native Paper's variants
 const fontConfig = {
-  headlineMedium: { // Mapped for the Update title
+  headlineMedium: { 
     fontSize: internalTheme.typography.sizes.pageTitle, 
     fontWeight: internalTheme.typography.weights.bold 
   },
@@ -60,17 +62,9 @@ const fontConfig = {
   },
 };
 
-// 🎨 Merge Paper's default theme, brand colors, and the new font configuration
+// 🎨 Merge our custom global theme with the paper font configuration
 const paperTheme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: '#004AAD',
-    secondary: '#FF6B00',
-    background: internalTheme.colors.background,
-    surface: internalTheme.colors.surface,
-    error: internalTheme.colors.error,
-  },
+  ...internalTheme,
   fonts: configureFonts({ config: fontConfig }),
 };
 
@@ -87,9 +81,20 @@ const isVersionOlder = (current: string, required: string) => {
 };
 
 export default function App() {
+  const [isHydrated, setIsHydrated] = useState(false);
   const [isUpdateRequired, setIsUpdateRequired] = useState(false);
   const [storeUrl, setStoreUrl] = useState('');
   const [checkingVersion, setCheckingVersion] = useState(true);
+
+  // Zustand state hydration check
+  useEffect(() => {
+    if (useAppStore.persist.hasHydrated()) {
+      setIsHydrated(true);
+    } else {
+      const unsubFinishHydration = useAppStore.persist.onFinishHydration(() => setIsHydrated(true));
+      return () => unsubFinishHydration();
+    }
+  }, []);
 
   useEffect(() => {
     checkForForceUpdate();
@@ -103,7 +108,6 @@ export default function App() {
       
       if (token) {
         const auth = getAuth();
-        // Listen for when the user logs in, so we can save their specific token
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
             try {
@@ -150,11 +154,10 @@ export default function App() {
         return null;
       }
 
-      // 🚀 Get the unique token for this device
       try {
         const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
         token = (await Notifications.getExpoPushTokenAsync({
-          projectId: projectId, // Required for modern Expo apps
+          projectId: projectId, 
         })).data;
         return token;
       } catch (e) {
@@ -183,13 +186,14 @@ export default function App() {
         }
       }
     } catch (error: any) {
-      // ⚠️ Caught the permission error so it won't crash the app
       console.warn("Skipping version check (Firestore Permission Denied or Not Found):", error.message);
     } finally {
-      // Always stop the loading state so the app actually opens
       setCheckingVersion(false);
     }
   };
+
+  // Wait for both version check and state hydration to finish
+  if (checkingVersion || !isHydrated) return null; 
 
   if (isUpdateRequired) {
     return (
@@ -202,7 +206,7 @@ export default function App() {
             </Text>
             <Button 
               mode="contained" 
-              style={{ width: '80%', paddingVertical: internalTheme.spacing.sm }}
+              style={{ width: '80%', paddingVertical: internalTheme.spacing.sm, borderRadius: internalTheme.radius.md }}
               onPress={() => {
                 if (storeUrl) {
                   Linking.openURL(storeUrl).catch(err => console.error("Couldn't open store url", err));
@@ -216,8 +220,6 @@ export default function App() {
       </SafeAreaProvider>
     );
   }
-
-  if (checkingVersion) return null; 
 
   return (
     <SafeAreaProvider>
@@ -234,17 +236,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: internalTheme.spacing.lg, // Replaced magic number 20
+    padding: internalTheme.spacing.lg,
     backgroundColor: internalTheme.colors.background,
   },
   title: {
-    // Removed fontWeight: 'bold' because configureFonts handles it now via 'headlineMedium' variant
-    color: '#004AAD',
-    marginBottom: internalTheme.spacing.md, // Replaced magic number 16
+    color: internalTheme.colors.primary,
+    marginBottom: internalTheme.spacing.md, 
   },
   subtitle: {
     textAlign: 'center',
     color: internalTheme.colors.textSecondary,
-    marginBottom: internalTheme.spacing.xl, // Replaced magic number 32
+    marginBottom: internalTheme.spacing.xl,
   },
 });
