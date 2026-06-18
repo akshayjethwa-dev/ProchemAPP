@@ -1,13 +1,15 @@
 // File: src/navigation/RootNavigator.tsx
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, SafeAreaView, TouchableOpacity, Text, Platform } from 'react-native';
+import { View, ActivityIndicator, TouchableOpacity, Text, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { RootStackParamList } from './types';
+import { theme } from '../theme';
 
 import BuyerNavigator from './BuyerNavigator';
 import SellerNavigator from './SellerNavigator';
@@ -28,8 +30,6 @@ import SellerAddChemical from '../screens/SellerAddChemical';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import NotificationDetailScreen from '../screens/NotificationDetailScreen';
-
-// ✅ NEW: Import KYC Verification Screen
 import KYCVerificationScreen from '../screens/KYCVerificationScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -37,6 +37,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export const RootNavigator = () => {
   const { user, setUser, viewMode, hasSeenOnboarding, adminImpersonating, stopImpersonating } = useAppStore();
   const [initializing, setInitializing] = useState(true);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!auth) {
@@ -52,8 +53,6 @@ export const RootNavigator = () => {
       }
 
       if (u) {
-        // ✅ FIX: Race Condition Polling
-        // Wait for completeRegistrationAfterOTP to finish writing to Firestore
         let retries = 6;
         let userFound = false;
 
@@ -71,7 +70,7 @@ export const RootNavigator = () => {
             }
           } catch (error: any) {
             console.warn("Firestore access denied when fetching user:", error.message);
-            break; // Stop retrying on permission/network errors
+            break; 
           }
         }
 
@@ -93,8 +92,8 @@ export const RootNavigator = () => {
 
   if (initializing) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#004AAD" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.surface }}>
+        <ActivityIndicator size="large" color={theme.colors.textPrimary} />
       </View>
     );
   }
@@ -102,16 +101,16 @@ export const RootNavigator = () => {
   return (
     <View style={{ flex: 1 }}>
       {adminImpersonating && (
-        <SafeAreaView style={{ backgroundColor: '#D32F2F' }}>
-          <View style={{ padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Platform.OS === 'android' ? 25 : 0 }}>
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13, flex: 1 }}>
+        <View style={{ backgroundColor: '#D32F2F', paddingTop: Math.max(insets.top, theme.spacing.xs) }}>
+          <View style={{ padding: theme.spacing.sm, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: theme.typography.sizes.caption, flex: 1 }}>
               👀 Viewing as: {user?.companyName || user?.email}
             </Text>
-            <TouchableOpacity onPress={stopImpersonating} style={{ backgroundColor: 'white', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}>
-              <Text style={{ color: '#D32F2F', fontWeight: 'bold', fontSize: 12 }}>Exit</Text>
+            <TouchableOpacity onPress={stopImpersonating} style={{ backgroundColor: 'white', paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.xs, borderRadius: 6 }}>
+              <Text style={{ color: '#D32F2F', fontWeight: 'bold', fontSize: theme.typography.sizes.caption }}>Exit</Text>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </View>
       )}
 
       <NavigationContainer key={adminImpersonating ? 'impersonating-mode' : 'admin-mode'}>
@@ -119,10 +118,10 @@ export const RootNavigator = () => {
           screenOptions={{ 
             headerShown: false,
             headerBackTitle: '', 
-            headerTintColor: '#1F2937', 
+            headerTintColor: theme.colors.textPrimary, 
             headerShadowVisible: false, 
-            headerStyle: { backgroundColor: '#FFFFFF' }, 
-            headerTitleStyle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
+            headerStyle: { backgroundColor: theme.colors.surface }, 
+            headerTitleStyle: { fontSize: theme.typography.sizes.bodyLarge, fontWeight: '600', color: theme.colors.textPrimary },
             headerTitleAlign: 'center',
             animation: 'slide_from_right', 
             animationDuration: 250,
@@ -158,7 +157,6 @@ export const RootNavigator = () => {
               )}
               
               <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} options={{ animation: 'slide_from_bottom' }} />
-
               <Stack.Screen name="ProductDetail" component={ProductDetail} />
               <Stack.Screen name="Negotiation" component={NegotiationScreen} />
               <Stack.Screen name="OrderTracking" component={OrderTracking} />

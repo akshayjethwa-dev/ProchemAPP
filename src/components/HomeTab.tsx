@@ -1,13 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Product } from '../types';
 import { theme } from '../theme';
 
-// Import our new Design System Components
+// Import our Design System Components
 import { AppScreen } from './ui/AppScreen';
 import { SectionCard } from './ui/SectionCard';
 import { PrimaryButton } from './ui/PrimaryButton';
 import { StatusChip } from './ui/StatusChip';
+import { AppText } from './ui/AppText'; // Import the new AppText
 
 interface Props {
   profile: any;
@@ -21,13 +22,17 @@ const HomeTab: React.FC<Props> = ({ profile, allProducts, onProductSelect, onCat
   return (
     <AppScreen>
       <View style={styles.header}>
-        <Text style={styles.title}>Home</Text>
+        <AppText variant="pageTitle">Home</AppText>
         <StatusChip label="Active" />
       </View>
 
       <SectionCard>
-        <Text style={styles.cardText}>Total Products Available</Text>
-        <Text style={styles.dataText}>{allProducts.length}</Text>
+        <AppText variant="body" color={theme.colors.textSecondary} style={{ marginBottom: theme.spacing.xs }}>
+          Total Products Available
+        </AppText>
+        <AppText variant="pageTitle" color={theme.colors.primary}>
+          {allProducts.length}
+        </AppText>
       </SectionCard>
 
       <PrimaryButton 
@@ -44,22 +49,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: theme.spacing.lg,
-  },
-  title: {
-    fontSize: theme.typography.sizes.title,
-    fontWeight: theme.typography.weights.bold,
-    color: theme.colors.textPrimary,
-  },
-  cardText: {
-    fontSize: theme.typography.sizes.base,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.xs,
-  },
-  dataText: {
-    fontSize: theme.typography.sizes.heading,
-    fontWeight: theme.typography.weights.bold,
-    color: theme.colors.textPrimary,
-  },
+  }
 });
 
 export default HomeTab;

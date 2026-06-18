@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Platform, View, StyleSheet, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Provider as PaperProvider, MD3LightTheme, Text, Button } from 'react-native-paper';
+import { Provider as PaperProvider, MD3LightTheme, Text, Button, configureFonts } from 'react-native-paper';
 
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -15,6 +15,9 @@ import { db } from './src/config/firebase';
 
 import { RootNavigator } from './src/navigation/RootNavigator';
 
+// 🎨 Import unified internal theme
+import { theme as internalTheme } from './src/theme';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true, 
@@ -25,13 +28,50 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const theme = {
+// 🛠 Map internal semantic typography to React Native Paper's variants
+const fontConfig = {
+  headlineMedium: { // Mapped for the Update title
+    fontSize: internalTheme.typography.sizes.pageTitle, 
+    fontWeight: internalTheme.typography.weights.bold 
+  },
+  displayLarge: { 
+    fontSize: internalTheme.typography.sizes.pageTitle, 
+    fontWeight: internalTheme.typography.weights.bold 
+  },
+  titleLarge: { 
+    fontSize: internalTheme.typography.sizes.sectionTitle, 
+    fontWeight: internalTheme.typography.weights.semiBold 
+  },
+  bodyLarge: { 
+    fontSize: internalTheme.typography.sizes.bodyLarge, 
+    fontWeight: internalTheme.typography.weights.regular 
+  },
+  bodyMedium: { 
+    fontSize: internalTheme.typography.sizes.body, 
+    fontWeight: internalTheme.typography.weights.regular 
+  },
+  labelLarge: { 
+    fontSize: internalTheme.typography.sizes.label, 
+    fontWeight: internalTheme.typography.weights.medium 
+  },
+  bodySmall: { 
+    fontSize: internalTheme.typography.sizes.caption, 
+    fontWeight: internalTheme.typography.weights.regular 
+  },
+};
+
+// 🎨 Merge Paper's default theme, brand colors, and the new font configuration
+const paperTheme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
     primary: '#004AAD',
     secondary: '#FF6B00',
+    background: internalTheme.colors.background,
+    surface: internalTheme.colors.surface,
+    error: internalTheme.colors.error,
   },
+  fonts: configureFonts({ config: fontConfig }),
 };
 
 const isVersionOlder = (current: string, required: string) => {
@@ -154,7 +194,7 @@ export default function App() {
   if (isUpdateRequired) {
     return (
       <SafeAreaProvider>
-        <PaperProvider theme={theme}>
+        <PaperProvider theme={paperTheme}>
           <View style={styles.forceUpdateContainer}>
             <Text variant="headlineMedium" style={styles.title}>Update Required</Text>
             <Text variant="bodyLarge" style={styles.subtitle}>
@@ -162,7 +202,7 @@ export default function App() {
             </Text>
             <Button 
               mode="contained" 
-              style={{ width: '80%', paddingVertical: 8 }}
+              style={{ width: '80%', paddingVertical: internalTheme.spacing.sm }}
               onPress={() => {
                 if (storeUrl) {
                   Linking.openURL(storeUrl).catch(err => console.error("Couldn't open store url", err));
@@ -181,7 +221,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <PaperProvider theme={theme}>
+      <PaperProvider theme={paperTheme}>
         <StatusBar style="dark" />
         <RootNavigator />
       </PaperProvider>
@@ -194,17 +234,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#F8FAFC',
+    padding: internalTheme.spacing.lg, // Replaced magic number 20
+    backgroundColor: internalTheme.colors.background,
   },
   title: {
-    fontWeight: 'bold',
+    // Removed fontWeight: 'bold' because configureFonts handles it now via 'headlineMedium' variant
     color: '#004AAD',
-    marginBottom: 16,
+    marginBottom: internalTheme.spacing.md, // Replaced magic number 16
   },
   subtitle: {
     textAlign: 'center',
-    color: '#64748B',
-    marginBottom: 32,
+    color: internalTheme.colors.textSecondary,
+    marginBottom: internalTheme.spacing.xl, // Replaced magic number 32
   },
 });

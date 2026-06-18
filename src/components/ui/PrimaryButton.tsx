@@ -1,69 +1,56 @@
-import React, { useRef } from 'react';
-import { Text, StyleSheet, ActivityIndicator, Animated, Pressable } from 'react-native';
+import React from 'react';
+import { TouchableOpacity, StyleSheet, ActivityIndicator, ViewStyle, StyleProp } from 'react-native';
 import { theme } from '../../theme';
+import { AppText } from './AppText';
 
 interface PrimaryButtonProps {
   title: string;
   onPress: () => void;
-  isLoading?: boolean;
+  disabled?: boolean;
+  loading?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
 
-export const PrimaryButton: React.FC<PrimaryButtonProps> = ({ title, onPress, isLoading }) => {
-  // 1. Initialize an animated value for the scale
-  const scaleValue = useRef(new Animated.Value(1)).current;
-
-  // 2. Define the animation for when the button is pressed down
-  const handlePressIn = () => {
-    if (isLoading) return;
-    Animated.spring(scaleValue, {
-      toValue: 0.95, // Shrink slightly to 95% size
-      useNativeDriver: true, // Use native driver for 60fps performance
-    }).start();
-  };
-
-  // 3. Define the animation for when the button is released
-  const handlePressOut = () => {
-    Animated.spring(scaleValue, {
-      toValue: 1, // Bounce back to 100% size
-      friction: 4, // Controls the "bounciness"
-      tension: 40, // Controls the speed
-      useNativeDriver: true,
-    }).start();
-  };
-
+export const PrimaryButton: React.FC<PrimaryButtonProps> = ({ title, onPress, disabled, loading, style }) => {
   return (
-    <Pressable 
-      onPress={onPress} 
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      disabled={isLoading}
-      style={{ width: '100%' }} // Ensure the pressable area takes full available width
+    <TouchableOpacity
+      style={[
+        styles.button,
+        disabled && styles.disabled,
+        style
+      ]}
+      onPress={onPress}
+      disabled={disabled || loading}
+      activeOpacity={0.8}
     >
-      {/* 4. Apply the animated scale to the button view */}
-      <Animated.View style={[styles.button, { transform: [{ scale: scaleValue }] }]}>
-        {isLoading ? (
-          <ActivityIndicator color={theme.colors.surface} />
-        ) : (
-          <Text style={styles.text}>{title}</Text>
-        )}
-      </Animated.View>
-    </Pressable>
+      {loading ? (
+        <ActivityIndicator color={theme.colors.surface} />
+      ) : (
+        <AppText variant="bodyLarge" color={theme.colors.surface} weight="semiBold" align="center">
+          {title}
+        </AppText>
+      )}
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   button: {
-    ...theme.cardStyle, 
-    backgroundColor: '#3B82F6', 
-    borderWidth: 0,             
+    backgroundColor: theme.colors.primary,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    // Component-level shadow (replacing the old theme.cardStyle dependency)
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  text: {
-    color: theme.colors.surface,
-    fontSize: theme.typography.sizes.reading,
-    fontWeight: theme.typography.weights.medium,
-  },
+  disabled: {
+    backgroundColor: theme.colors.textSecondary,
+    opacity: 0.7,
+  }
 });

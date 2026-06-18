@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Platform } from 'react-native';
+import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, Badge, useTheme } from 'react-native-paper';
@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
 import { db, auth } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
+import { theme as appTheme } from '../theme';
 
 import BuyerHome from '../screens/BuyerHome';
 import CategoriesScreen from '../screens/CategoriesScreen';
@@ -24,7 +25,6 @@ import PostRequirementScreen from '../screens/PostRequirementScreen';
 import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
 import CompareScreen from '../screens/CompareScreen';
 import BuyerRequirementsScreen from '../screens/BuyerRequirementsScreen'; 
-
 import CartScreen from '../screens/CartScreen'; 
 import BusinessGrowthScreen from '../screens/BusinessGrowthScreen';
 
@@ -49,7 +49,7 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<BuyerStackParamList>();
 
 function BuyerTabs() {
-  const theme = useTheme();
+  const paperTheme = useTheme();
   const { user } = useAppStore(); 
   const insets = useSafeAreaInsets();
 
@@ -60,30 +60,13 @@ function BuyerTabs() {
     const currentUser = auth.currentUser;
     if (!user?.uid || !currentUser) return;
 
-    const qRfq = query(
-      collection(db, 'rfqs'),
-      where('buyerId', '==', user.uid),
-      where('status', '==', 'NEGOTIATING') 
-    );
+    const qRfq = query(collection(db, 'rfqs'), where('buyerId', '==', user.uid), where('status', '==', 'NEGOTIATING'));
+    const unsubRfq = onSnapshot(qRfq, (snapshot) => { setActiveNegotiations(snapshot.docs.length); }, (error: any) => console.warn(error.message));
 
-    const unsubRfq = onSnapshot(qRfq, (snapshot) => {
-        setActiveNegotiations(snapshot.docs.length);
-      }, (error: any) => console.warn(error.message));
+    const qReq = query(collection(db, 'customRequirements'), where('buyerId', '==', user.uid), where('status', '==', 'QUOTED'));
+    const unsubReq = onSnapshot(qReq, (snapshot) => { setQuotedRequirements(snapshot.docs.length); }, (error: any) => console.warn(error.message));
 
-    const qReq = query(
-      collection(db, 'customRequirements'),
-      where('buyerId', '==', user.uid),
-      where('status', '==', 'QUOTED') 
-    );
-
-    const unsubReq = onSnapshot(qReq, (snapshot) => {
-        setQuotedRequirements(snapshot.docs.length);
-      }, (error: any) => console.warn(error.message));
-
-    return () => {
-      unsubRfq();
-      unsubReq();
-    };
+    return () => { unsubRfq(); unsubReq(); };
   }, [user?.uid]);
 
   const totalAlerts = activeNegotiations + quotedRequirements;
@@ -92,16 +75,15 @@ function BuyerTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: paperTheme.colors.primary,
+        tabBarInactiveTintColor: appTheme.colors.textSecondary,
         tabBarStyle: { 
-          // 2. APPLY INSETS TO BOTH PLATFORMS
           height: 60 + insets.bottom, 
-          paddingBottom: Math.max(insets.bottom, 10), 
-          paddingTop: 10, 
-          backgroundColor: '#FFFFFF',
+          paddingBottom: Math.max(insets.bottom, appTheme.spacing.sm), 
+          paddingTop: appTheme.spacing.sm, 
+          backgroundColor: appTheme.colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#E5E7EB', 
+          borderTopColor: appTheme.colors.border, 
           elevation: 0, 
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' }
@@ -131,10 +113,10 @@ export default function BuyerNavigator() {
       screenOptions={{ 
         headerShown: false,
         headerBackTitle: '', 
-        headerTintColor: '#1F2937', 
+        headerTintColor: appTheme.colors.textPrimary, 
         headerShadowVisible: false, 
-        headerStyle: { backgroundColor: '#FFFFFF' },
-        headerTitleStyle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
+        headerStyle: { backgroundColor: appTheme.colors.surface },
+        headerTitleStyle: { fontSize: appTheme.typography.sizes.bodyLarge, fontWeight: '600', color: appTheme.colors.textPrimary },
         headerTitleAlign: 'center', 
       }}
     >

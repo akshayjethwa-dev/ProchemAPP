@@ -3,10 +3,11 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconButton, useTheme, Badge } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Platform } from 'react-native';
+import { View } from 'react-native';
 import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
+import { theme as appTheme } from '../theme';
 
 import SellerDashboard from '../screens/SellerDashboard';
 import SellerOrdersScreen from '../screens/SellerOrdersScreen';
@@ -22,7 +23,7 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 function SellerTabs() {
-  const theme = useTheme();
+  const paperTheme = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAppStore();
   
@@ -39,16 +40,15 @@ function SellerTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: paperTheme.colors.primary,
+        tabBarInactiveTintColor: appTheme.colors.textSecondary,
         tabBarStyle: { 
-          // 🚀 FIX: Apply dynamic padding for both platforms safely
           height: 60 + insets.bottom, 
-          paddingBottom: Math.max(insets.bottom, 10), 
-          paddingTop: 10, 
-          backgroundColor: '#FFFFFF',
+          paddingBottom: Math.max(insets.bottom, appTheme.spacing.sm), 
+          paddingTop: appTheme.spacing.sm, 
+          backgroundColor: appTheme.colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#E5E7EB',
+          borderTopColor: appTheme.colors.border,
           elevation: 0,
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' }
@@ -77,11 +77,11 @@ export default function SellerNavigator() {
     <Stack.Navigator 
       screenOptions={{ 
         headerShown: false,
-        headerBackTitle: '', // FIX: Uses empty string
-        headerTintColor: '#1F2937', 
+        headerBackTitle: '', 
+        headerTintColor: appTheme.colors.textPrimary, 
         headerShadowVisible: false, 
-        headerStyle: { backgroundColor: '#FFFFFF' }, // FIX: Removed border properties
-        headerTitleStyle: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
+        headerStyle: { backgroundColor: appTheme.colors.surface }, 
+        headerTitleStyle: { fontSize: appTheme.typography.sizes.bodyLarge, fontWeight: '600', color: appTheme.colors.textPrimary },
         headerTitleAlign: 'center',
       }}
     >
