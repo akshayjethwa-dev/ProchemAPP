@@ -1,29 +1,32 @@
 // src/services/conversationService.ts
 import { collection, doc, addDoc, setDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../config/firebase'; // Uses your initialized Firestore instance
-import { Conversation, ConversationMessage } from '../types'; // Importing the types we just created
+import { db } from '../config/firebase'; 
+import { Conversation, ConversationMessage } from '../types'; 
 
 const CONVERSATIONS_COLLECTION = 'conversations';
 
 /**
  * Creates a new Conversation document when a negotiation is initiated.
  */
-export const createConversation = async (
-  rfqId: string, 
-  buyerUserId: string, 
-  sellerUserId: string
-): Promise<string> => {
+export const createConversation = async (params: {
+  rfqId?: string;
+  requirementId?: string;
+  quoteId?: string;
+  buyerUserId: string;
+  sellerUserId: string;
+}): Promise<string> => {
   try {
     const conversationData: Omit<Conversation, 'id'> = {
-      buyerUserId,
-      sellerUserId,
-      rfqId,
+      buyerUserId: params.buyerUserId,
+      sellerUserId: params.sellerUserId,
+      rfqId: params.rfqId || '', // Fallback for existing RFQ logic
+      requirementId: params.requirementId || '', // New logic for custom reqs
+      quoteId: params.quoteId || '', // New logic for quotes
       status: 'open',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
 
-    // Add to the 'conversations' root collection
     const docRef = await addDoc(collection(db, CONVERSATIONS_COLLECTION), conversationData);
     return docRef.id;
   } catch (error) {
@@ -40,7 +43,6 @@ export const addConversationMessage = async (
   messageData: Omit<ConversationMessage, 'id' | 'timestamp'>
 ): Promise<string> => {
   try {
-    // Reference to the subcollection: conversations/{conversationId}/messages
     const messagesRef = collection(db, `${CONVERSATIONS_COLLECTION}/${conversationId}/messages`);
     
     const newMessage = {
@@ -50,7 +52,6 @@ export const addConversationMessage = async (
 
     const docRef = await addDoc(messagesRef, newMessage);
 
-    // Update the parent conversation's updatedAt timestamp
     const conversationRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
     await setDoc(conversationRef, { updatedAt: serverTimestamp() }, { merge: true });
 

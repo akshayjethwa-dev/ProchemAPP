@@ -1,12 +1,13 @@
 // src/screens/BuyerRequirementsScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
-import { Text, IconButton, useTheme, FAB, Card, Chip, Divider } from 'react-native-paper';
+import { Text, IconButton, useTheme, FAB, Card, Divider, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
+import { Conversation } from '../types';
 
 export default function BuyerRequirementsScreen() {
   const navigation = useNavigation<any>();
@@ -14,29 +15,31 @@ export default function BuyerRequirementsScreen() {
   const { user } = useAppStore();
   
   const [requirements, setRequirements] = useState<any[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.uid) return;
 
-    const q = query(
-      collection(db, 'customRequirements'),
-      where('buyerId', '==', user.uid)
-      // orderBy('createdAt', 'desc') // Ensure indexing in Firebase if using orderBy
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // Fetch Requirements
+    const qReqs = query(collection(db, 'customRequirements'), where('buyerId', '==', user.uid));
+    const unsubReqs = onSnapshot(qReqs, (snapshot) => {
       const reqs: any[] = [];
-      snapshot.forEach((doc) => {
-        reqs.push({ id: doc.id, ...doc.data() });
-      });
-      // Sort manually if index is missing
+      snapshot.forEach((doc) => reqs.push({ id: doc.id, ...doc.data() }));
       reqs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setRequirements(reqs);
+    });
+
+    // Fetch active Conversations related to requirements
+    const qChats = query(collection(db, 'conversations'), where('buyerUserId', '==', user.uid));
+    const unsubChats = onSnapshot(qChats, (snapshot) => {
+      const chats: Conversation[] = [];
+      snapshot.forEach(doc => chats.push({ id: doc.id, ...doc.data() } as Conversation));
+      setConversations(chats);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => { unsubReqs(); unsubChats(); };
   }, [user]);
 
   const getStatusColor = (status: string) => {
@@ -44,12 +47,16 @@ export default function BuyerRequirementsScreen() {
       case 'QUOTED': return { bg: '#DCFCE7', text: '#166534' };
       case 'PENDING': return { bg: '#FEF3C7', text: '#D97706' };
       case 'CLOSED': return { bg: '#F1F5F9', text: '#64748B' };
+      case 'RESOLVED': return { bg: '#DBEAFE', text: '#1E40AF' };
       default: return { bg: '#F1F5F9', text: '#64748B' };
     }
   };
 
   const renderItem = ({ item }: { item: any }) => {
     const statusStyle = getStatusColor(item.status || 'PENDING');
+    
+    // Find if there are active approved chats for this requirement
+    const activeChats = conversations.filter(c => c.requirementId === item.id);
     
     return (
       <Card style={styles.card} mode="elevated" onPress={() => {}}>
@@ -73,6 +80,19 @@ export default function BuyerRequirementsScreen() {
            <Text style={styles.locationText}>📍 {item.deliveryPincode || 'N/A'}</Text>
            <Text style={styles.timelineText}>⏳ {item.timeline || 'Standard'}</Text>
         </View>
+
+        {/* 🚀 ACTION CTA: Open negotiation rooms if admin approved quotes */}
+        {activeChats.length > 0 && (
+           <View style={{ marginTop: 12 }}>
+             <Button 
+                mode="contained" 
+                buttonColor="#004AAD"
+                onPress={() => navigation.navigate('NegotiationsList')}
+             >
+                View Negotiations ({activeChats.length})
+             </Button>
+           </View>
+        )}
       </Card>
     );
   };
@@ -102,13 +122,7 @@ export default function BuyerRequirementsScreen() {
         />
       )}
 
-      <FAB
-        icon="plus"
-        label="Post Requirement"
-        style={styles.fab}
-        color="white"
-        onPress={() => navigation.navigate('PostRequirement')}
-      />
+      <FAB icon="plus" label="Post Requirement" style={styles.fab} color="white" onPress={() => navigation.navigate('PostRequirement')} />
     </SafeAreaView>
   );
 }

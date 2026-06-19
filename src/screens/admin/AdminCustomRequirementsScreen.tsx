@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList, ActivityIndicator, Linking, Alert } from 'react-native';
-import { Text, Card, Chip, IconButton, Button, useTheme } from 'react-native-paper';
+import { Text, Card, Chip, IconButton, Button, useTheme, Divider } from 'react-native-paper';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigation } from '@react-navigation/native';
+import { createConversation } from '../../services/conversationService';
+import { SupplierQuote } from '../../types';
 
 interface Requirement {
   id: string;
-  buyerId: string; // ✅ Ensure buyerId is here to fetch profile
+  buyerId: string;
   buyerName?: string;
   buyerPhone?: string;
   productName: string;
@@ -25,32 +27,39 @@ export default function AdminCustomRequirementsScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
   const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [quotes, setQuotes] = useState<SupplierQuote[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // ✅ Cache to hold dynamically fetched user details
   const [userCache, setUserCache] = useState<Record<string, { phone: string, name: string }>>({});
 
   useEffect(() => {
-    const q = query(collection(db, 'customRequirements'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // 1. Fetch Requirements
+    const qReqs = query(collection(db, 'customRequirements'), orderBy('createdAt', 'desc'));
+    const unsubReqs = onSnapshot(qReqs, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Requirement));
       setRequirements(data);
+    });
+
+    // 2. Fetch all Supplier Quotes
+    const qQuotes = query(collection(db, 'supplierQuotes'), orderBy('createdAt', 'desc'));
+    const unsubQuotes = onSnapshot(qQuotes, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupplierQuote));
+      setQuotes(data);
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubReqs();
+      unsubQuotes();
+    };
   }, []);
 
-  // ✅ New useEffect: Fetch user profiles for any requirements missing phone numbers
   useEffect(() => {
-    // Find unique buyer IDs that we haven't fetched yet
     const missingIds = [...new Set(requirements.map(r => r.buyerId).filter(id => id && !userCache[id]))];
-    
     if (missingIds.length === 0) return;
 
     const fetchMissingUsers = async () => {
       const newCache: Record<string, { phone: string, name: string }> = {};
-      
       for (const id of missingIds) {
         try {
           const userSnap = await getDoc(doc(db, 'users', id));
@@ -61,15 +70,12 @@ export default function AdminCustomRequirementsScreen() {
               name: uData.companyName || uData.businessName || uData.name || ''
             };
           } else {
-            // Document doesn't exist, store empty to prevent infinite retries
             newCache[id] = { phone: '', name: '' }; 
           }
         } catch (error) {
-          console.error(`Error fetching user ${id}:`, error);
           newCache[id] = { phone: '', name: '' };
         }
       }
-      
       setUserCache(prev => ({ ...prev, ...newCache }));
     };
 
@@ -78,30 +84,63 @@ export default function AdminCustomRequirementsScreen() {
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      await updateDoc(doc(db, 'customRequirements', id), {
-        status: newStatus
-      });
+      await updateDoc(doc(db, 'customRequirements', id), { status: newStatus });
     } catch (error) {
-      console.error("Error updating status:", error);
       Alert.alert('Error', 'Failed to update status');
     }
   };
 
   const handleCallBuyer = (phone: string) => {
-    if (!phone) {
-      Alert.alert('No Number', 'Buyer did not provide a phone number in their profile.');
-      return;
-    }
+    if (!phone) return Alert.alert('No Number', 'Buyer did not provide a phone number.');
     Linking.openURL(`tel:${phone}`);
+  };
+
+  // 🚀 ACTION: Approve quote and open chat room
+  const handleApproveQuote = async (req: Requirement, quote: SupplierQuote) => {
+    Alert.alert(
+      "Approve Quote",
+      "This will grant the seller chat access with the buyer. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Approve", 
+          onPress: async () => {
+            try {
+              // 1. Mark Quote as Accepted
+              await updateDoc(doc(db, 'supplierQuotes', quote.id!), { status: 'ACCEPTED' });
+              
+              // 2. Mark Requirement as Quoted if it was pending
+              if (req.status === 'PENDING') {
+                await updateDoc(doc(db, 'customRequirements', req.id), { status: 'QUOTED' });
+              }
+
+              // 3. Create the Conversation Room
+              await createConversation({
+                buyerUserId: req.buyerId,
+                sellerUserId: quote.supplierId,
+                requirementId: req.id,
+                quoteId: quote.id!
+              });
+
+              Alert.alert('Success', 'Quote approved and chat room created.');
+            } catch (error) {
+               console.error("Error approving quote:", error);
+               Alert.alert('Error', 'Could not process approval.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const renderItem = ({ item }: { item: Requirement }) => {
     const isPending = item.status === 'PENDING';
-    
-    // ✅ Determine final phone and name (Fallback to cache if not in item)
     const finalPhone = item.buyerPhone || userCache[item.buyerId]?.phone || '';
     const finalName = item.buyerName || userCache[item.buyerId]?.name || 'Unknown Buyer';
     
+    // Filter quotes for this specific requirement
+    const reqQuotes = quotes.filter(q => q.leadId === item.id);
+
     return (
       <Card style={[styles.card, isPending && { borderColor: theme.colors.error, borderWidth: 1 }]}>
         <Card.Content>
@@ -123,45 +162,40 @@ export default function AdminCustomRequirementsScreen() {
           <View style={styles.detailsBox}>
              <View style={styles.row}><Text style={styles.label}>Quantity:</Text><Text style={styles.value}>{item.quantity} {item.unit}</Text></View>
              {item.targetPrice ? <View style={styles.row}><Text style={styles.label}>Target Price:</Text><Text style={styles.value}>₹{item.targetPrice}</Text></View> : null}
-             
-             {/* ✅ Use the dynamically fetched Name & Phone */}
              <View style={styles.row}><Text style={styles.label}>Buyer Name:</Text><Text style={styles.value}>{finalName}</Text></View>
              <View style={styles.row}><Text style={styles.label}>Contact No:</Text><Text style={styles.value}>{finalPhone || 'N/A'}</Text></View>
-             
-             {item.description ? (
-                <View style={{marginTop: 8}}>
-                  <Text style={styles.label}>Notes:</Text>
-                  <Text style={{fontSize: 13, color: '#334155', marginTop: 2}}>{item.description}</Text>
-                </View>
-             ) : null}
           </View>
 
+          {/* 🚀 NEW: Quotes Section */}
+          {reqQuotes.length > 0 && (
+             <View style={{ marginTop: 8, marginBottom: 12 }}>
+                <Text style={{ fontWeight: 'bold', marginBottom: 8, color: '#334155' }}>Submitted Quotes ({reqQuotes.length})</Text>
+                {reqQuotes.map(quote => (
+                   <View key={quote.id} style={styles.quoteRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: 'bold' }}>{quote.supplierName}</Text>
+                        <Text style={{ fontSize: 12, color: '#64748B' }}>₹{quote.pricePerUnit} • {quote.availableQuantity} qty • {quote.dispatchDays}</Text>
+                      </View>
+                      {quote.status === 'PENDING' ? (
+                        <Button mode="contained" compact buttonColor="#004AAD" labelStyle={{ fontSize: 11 }} onPress={() => handleApproveQuote(item, quote)}>Approve Chat</Button>
+                      ) : (
+                        <Chip textStyle={{ fontSize: 10, color: '#166534' }} style={{ backgroundColor: '#DCFCE7' }}>{quote.status}</Chip>
+                      )}
+                   </View>
+                ))}
+             </View>
+          )}
+
           <View style={styles.actionRow}>
-            {/* ✅ Pass dynamically fetched phone to call button */}
-            <Button 
-               mode="contained-tonal" 
-               icon="phone" 
-               onPress={() => handleCallBuyer(finalPhone)}
-               style={{flex: 1, marginRight: 10}}
-            >
+            <Button mode="contained-tonal" icon="phone" onPress={() => handleCallBuyer(finalPhone)} style={{flex: 1, marginRight: 10}}>
               Call Buyer
             </Button>
-            
-            {isPending ? (
-              <Button 
-                 mode="contained" 
-                 buttonColor="#10B981" 
-                 onPress={() => handleUpdateStatus(item.id, 'RESOLVED')}
-                 style={{flex: 1}}
-              >
+            {isPending || item.status === 'QUOTED' ? (
+              <Button mode="contained" buttonColor="#10B981" onPress={() => handleUpdateStatus(item.id, 'RESOLVED')} style={{flex: 1}}>
                 Mark Resolved
               </Button>
             ) : (
-              <Button 
-                 mode="outlined" 
-                 onPress={() => handleUpdateStatus(item.id, 'PENDING')}
-                 style={{flex: 1}}
-              >
+              <Button mode="outlined" onPress={() => handleUpdateStatus(item.id, 'PENDING')} style={{flex: 1}}>
                 Reopen
               </Button>
             )}
@@ -177,7 +211,6 @@ export default function AdminCustomRequirementsScreen() {
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <Text variant="titleLarge" style={{fontWeight: 'bold'}}>Custom Requirements</Text>
       </View>
-
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#004AAD" /></View>
       ) : (
@@ -186,11 +219,7 @@ export default function AdminCustomRequirementsScreen() {
           keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-          ListEmptyComponent={
-            <View style={styles.center}>
-               <Text style={{color: '#64748B'}}>No custom requirements posted yet.</Text>
-            </View>
-          }
+          ListEmptyComponent={<View style={styles.center}><Text style={{color: '#64748B'}}>No custom requirements posted yet.</Text></View>}
         />
       )}
     </View>
@@ -209,5 +238,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   label: { color: '#64748B', fontSize: 13 },
   value: { fontWeight: 'bold', color: '#334155', fontSize: 13 },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-between' }
+  quoteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', padding: 8, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: '#E2E8F0' },
+  actionRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }
 });

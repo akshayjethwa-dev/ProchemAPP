@@ -4,14 +4,28 @@ import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 
 import { Text, Avatar, IconButton, Chip, useTheme, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-// REMOVED orderBy FROM IMPORTS TO PREVENT THE INDEX ERROR
-import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
+import { collection, query, where, onSnapshot, getDoc, doc } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { RFQ } from '../types';
 
-// 🚀 ADDED: Import the GST Modal
 import { GSTRequiredModal } from '../components/GSTRequiredModal';
+
+interface UnifiedListItem {
+  id: string; // rfqId or conversationId
+  type: 'rfq' | 'custom_req';
+  productName: string;
+  buyerName: string;
+  sellerName: string;
+  updatedAt: any;
+  status: string;
+  targetQuantity: string | number;
+  targetPrice: string | number;
+  unit: string;
+  requirementId?: string;
+  quoteId?: string;
+  conversationId?: string;
+}
 
 export default function NegotiationsListScreen() {
   const navigation = useNavigation<any>();
@@ -20,93 +34,144 @@ export default function NegotiationsListScreen() {
   
   const { user, viewMode } = useAppStore();
   const isBuyer = viewMode === 'buyer';
-
   const isAdminView = route.params?.isAdminView || user?.userType === 'admin' || user?.userType === 'sub_admin';
 
-  const [rfqsList, setRfqsList] = useState<RFQ[]>([]);
+  const [rfqsList, setRfqsList] = useState<UnifiedListItem[]>([]);
+  const [reqChatsList, setReqChatsList] = useState<UnifiedListItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // 🚀 ADDED: State for the GST Modal
   const [showGSTModal, setShowGSTModal] = useState(false);
 
   useEffect(() => {
     if (!user && !isAdminView) return;
 
-    let q;
-    if (isAdminView) {
-      // ✅ ADMIN MODE: Fetch all without orderBy to avoid index error
-      q = query(collection(db, 'rfqs'));
-    } else {
-      // ✅ USER MODE: Fetch by user ID without orderBy
-      q = query(
-        collection(db, 'rfqs'),
-        where(isBuyer ? 'buyerId' : 'sellerId', '==', user?.uid)
-      );
-    }
+    // ✅ FIX: TypeScript error 'user' is possibly 'null'. Added fallback user?.uid || ''
+    // 1. Fetch Standard RFQs
+    const qRfqs = isAdminView 
+      ? query(collection(db, 'rfqs'))
+      : query(collection(db, 'rfqs'), where(isBuyer ? 'buyerId' : 'sellerId', '==', user?.uid || ''));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RFQ));
-      
-      // ✅ FIX FOR ERROR 1: Sort the data on the client side instead of Firebase
-      data.sort((a, b) => {
-        const timeA = new Date(a.updatedAt).getTime() || 0;
-        const timeB = new Date(b.updatedAt).getTime() || 0;
-        return timeB - timeA; // Descending order (newest first)
+    const unsubRfqs = onSnapshot(qRfqs, (snapshot) => {
+      const data = snapshot.docs.map(doc => {
+        const d = doc.data() as RFQ;
+        return {
+          id: doc.id,
+          type: 'rfq',
+          productName: d.productName,
+          buyerName: d.buyerName || 'Buyer',
+          sellerName: d.sellerName || 'Supplier',
+          updatedAt: d.updatedAt,
+          status: d.status,
+          targetQuantity: d.targetQuantity,
+          targetPrice: d.targetPrice,
+          unit: d.unit
+        } as UnifiedListItem;
       });
-      
       setRfqsList(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching RFQs: ", error);
+    });
+
+    // ✅ FIX: TypeScript error 'user' is possibly 'null'. Added fallback user?.uid || ''
+    // 2. Fetch Custom Requirement Chats (from conversations collection)
+    const qChats = isAdminView
+      ? query(collection(db, 'conversations'))
+      : query(collection(db, 'conversations'), where(isBuyer ? 'buyerUserId' : 'sellerUserId', '==', user?.uid || ''));
+
+    const unsubChats = onSnapshot(qChats, async (snapshot) => {
+      const chats: UnifiedListItem[] = [];
+      for (const docSnap of snapshot.docs) {
+        const cData = docSnap.data();
+        // If it's a custom requirement chat
+        if (cData.requirementId && cData.quoteId) {
+          try {
+            const reqSnap = await getDoc(doc(db, 'customRequirements', cData.requirementId));
+            const quoteSnap = await getDoc(doc(db, 'supplierQuotes', cData.quoteId));
+            
+            if (reqSnap.exists() && quoteSnap.exists()) {
+              const req = reqSnap.data();
+              const quote = quoteSnap.data();
+              chats.push({
+                id: docSnap.id, 
+                type: 'custom_req',
+                productName: req.productName,
+                buyerName: req.buyerName || 'Buyer',
+                sellerName: quote.supplierName || 'Supplier',
+                updatedAt: cData.updatedAt || req.createdAt,
+                status: cData.status === 'open' ? 'NEGOTIATING' : (cData.status === 'won' ? 'CONVERTED' : 'CLOSED'),
+                targetQuantity: req.quantity,
+                targetPrice: quote.pricePerUnit, // Using quote price as the target indicator
+                unit: req.unit,
+                requirementId: cData.requirementId,
+                quoteId: cData.quoteId,
+                conversationId: docSnap.id
+              });
+            }
+          } catch (err) {
+            console.error("Error fetching req chat details", err);
+          }
+        }
+      }
+      setReqChatsList(chats);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubRfqs();
+      unsubChats();
+    };
   }, [user, isBuyer, isAdminView]);
+
+  // Combine and sort
+  const unifiedList = [...rfqsList, ...reqChatsList].sort((a, b) => {
+    const timeA = new Date(a.updatedAt).getTime() || 0;
+    const timeB = new Date(b.updatedAt).getTime() || 0;
+    return timeB - timeA;
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PENDING': return { bg: '#FEF3C7', text: '#B45309' }; 
       case 'NEGOTIATING': return { bg: '#DBEAFE', text: '#1D4ED8' }; 
       case 'CONVERTED': return { bg: '#DCFCE7', text: '#15803D' }; 
-      case 'REJECTED': return { bg: '#FEE2E2', text: '#B91C1C' }; 
+      case 'REJECTED': case 'CLOSED': return { bg: '#FEE2E2', text: '#B91C1C' }; 
       default: return { bg: '#F1F5F9', text: '#475569' }; 
     }
   };
 
-  // 🚀 ADDED: Handle Negotiation Tap Action
-  const handleNegotiationTap = (rfqId: string) => {
+  const handleNegotiationTap = (item: UnifiedListItem) => {
     if (user?.registrationType === 'mobile' && !user?.gstNumber) {
       setShowGSTModal(true);
       return;
     }
-    navigation.navigate('NegotiationRoom', { rfqId });
+    if (item.type === 'rfq') {
+      navigation.navigate('NegotiationRoom', { rfqId: item.id });
+    } else {
+      navigation.navigate('NegotiationRoom', { 
+        requirementId: item.requirementId, 
+        quoteId: item.quoteId,
+        conversationId: item.conversationId
+      });
+    }
   };
 
-  const renderItem = ({ item }: { item: RFQ }) => {
+  const renderItem = ({ item }: { item: UnifiedListItem }) => {
     const statusTheme = getStatusColor(item.status);
     const dateStr = new Date(item.updatedAt).toLocaleDateString();
 
     return (
-      <TouchableOpacity 
-        style={styles.card} 
-        activeOpacity={0.7}
-        onPress={() => handleNegotiationTap(item.id)} // 🚀 ADDED: Updated the onPress
-      >
+      <TouchableOpacity style={styles.card} activeOpacity={0.7} onPress={() => handleNegotiationTap(item)}>
         <View style={styles.cardHeader}>
            <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
-              <Avatar.Icon size={40} icon="handshake-outline" style={{backgroundColor: '#F1F5F9', marginRight: 12}} color="#64748B" />
+              <Avatar.Icon size={40} icon={item.type === 'custom_req' ? "clipboard-text-outline" : "handshake-outline"} style={{backgroundColor: '#F1F5F9', marginRight: 12}} color="#64748B" />
               <View style={{flex: 1}}>
                  <Text variant="titleMedium" style={{fontWeight: 'bold', color: '#1E293B'}} numberOfLines={1}>
                    {item.productName}
                  </Text>
                  <Text style={{fontSize: 12, color: '#64748B'}}>
                    {isAdminView 
-                    ? `Buyer: ${item.buyerName || 'User'} • Seller: ${item.sellerName || 'Supplier'}`
-                    : (isBuyer ? `To: Prochem Verified Supplier` : `From: Verified Buyer`)
+                    ? `Buyer: ${item.buyerName} • Seller: ${item.sellerName}`
+                    : (isBuyer ? `To: ${item.type === 'custom_req' ? item.sellerName : 'Prochem Supplier'}` : `From: ${item.buyerName}`)
                    }
                  </Text>
-                 <Text style={{fontSize: 11, color: '#94A3B8'}}>{dateStr}</Text>
+                 <Text style={{fontSize: 11, color: '#94A3B8'}}>{dateStr} • {item.type === 'custom_req' ? 'Custom Req' : 'RFQ'}</Text>
               </View>
            </View>
            <Chip style={{backgroundColor: statusTheme.bg, height: 28}}>
@@ -128,7 +193,7 @@ export default function NegotiationsListScreen() {
            <View style={[styles.infoCol, {alignItems: 'flex-end'}]}>
               <Text style={styles.infoLabel}>Total Est.</Text>
               <Text style={[styles.infoValue, {color: theme.colors.primary}]}>
-                ₹{(item.targetQuantity * item.targetPrice).toLocaleString()}
+                ₹{(Number(item.targetQuantity) * Number(item.targetPrice)).toLocaleString()}
               </Text>
            </View>
         </View>
@@ -138,15 +203,7 @@ export default function NegotiationsListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 🚀 ADDED: The GST Modal Component */}
-      <GSTRequiredModal 
-        visible={showGSTModal} 
-        onDismiss={() => setShowGSTModal(false)}
-        onAction={() => {
-          setShowGSTModal(false);
-          navigation.navigate('EditProfile');
-        }}
-      />
+      <GSTRequiredModal visible={showGSTModal} onDismiss={() => setShowGSTModal(false)} onAction={() => { setShowGSTModal(false); navigation.navigate('EditProfile'); }} />
 
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
@@ -159,7 +216,7 @@ export default function NegotiationsListScreen() {
          <View style={{flex: 1, justifyContent: 'center'}}><ActivityIndicator size="large" color="#004AAD" /></View>
       ) : (
         <FlatList
-          data={rfqsList}
+          data={unifiedList}
           keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={{padding: 16, flexGrow: 1}}

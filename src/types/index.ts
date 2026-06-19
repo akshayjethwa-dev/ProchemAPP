@@ -95,11 +95,11 @@ export interface CustomRequirement {
   unit: string;
   description?: string;
   targetPrice?: string;
-  status: 'PENDING' | 'REVIEWING' | 'FULFILLED' | 'REJECTED';
+  status: 'PENDING' | 'REVIEWING' | 'FULFILLED' | 'REJECTED' | 'QUOTED';
   createdAt: string;
 }
 
-// ✅ Product Types (UPDATED WITH CHEMICAL-SPECIFIC DATA)
+// ✅ Product Types
 export interface Product {
   id: string;
   name: string;
@@ -120,21 +120,16 @@ export interface Product {
   samplePrice?: number;
   sampleSize?: string;
   
-  // 🚀 NEW: Logistics & Packaging
   packagingType?: string; 
-  
-  // 🚀 NEW: Commercial & Tax
   gstPercent?: number;    
   moq?: number;
   
-  // 🚀 NEW: Compliance & Safety
   hazardClass?: string;   
   unNumber?: string;      
   storageConditions?: string; 
   manufactureDate?: string;
   expiryDate?: string;
 
-  // 🚀 NEW: Documentation (URLs)
   msdsUrl?: string;       
   tdsUrl?: string;        
   coaUrl?: string;        
@@ -172,18 +167,19 @@ export interface RFQ {
   updatedAt: string;
 }
 
-// 🚀 NEW: Masked Negotiation Conversation Schema (Task 5.1)
+// 🚀 UPDATED: Masked Negotiation Conversation Schema (Task 5.1 & Custom Requirement Chat)
 export interface Conversation {
   id?: string;
   buyerUserId: string;
   sellerUserId: string;
-  rfqId: string;
+  rfqId?: string; // Made optional so it supports custom requirements
+  requirementId?: string; // 🚀 ADDED: Reference to the custom requirement
+  quoteId?: string;       // 🚀 ADDED: Reference to the approved quote
   status: 'open' | 'closed';
   createdAt?: any; 
   updatedAt?: any; 
 }
 
-// 🚀 NEW: Masked Negotiation Message Schema (Task 5.1)
 export interface ConversationMessage {
   id?: string;
   conversationId?: string; 
@@ -194,7 +190,6 @@ export interface ConversationMessage {
   timestamp?: any; 
 }
 
-// 🚀 UPDATED: Negotiation Message Schema (for the chat room)
 export interface NegotiationMessage {
   id: string;
   rfqId?: string; 
@@ -282,7 +277,6 @@ export interface Notification {
   data?: any; 
 }
 
-// ✅ API Response Types
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -315,7 +309,6 @@ export interface Address {
   isDefault?: boolean;
 }
 
-// 🚀 NEW: Live Market / Broadcast Types
 export interface BroadcastLead {
   id?: string;
   originalOrderId?: string; 
@@ -334,7 +327,7 @@ export interface BroadcastLead {
 
 export interface SupplierQuote {
   id?: string;
-  leadId: string;
+  leadId: string; // Refers to BroadcastLead or CustomRequirement ID
   productName: string;
   supplierId: string;
   supplierName: string;

@@ -7,7 +7,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { doc, collection, query, where, onSnapshot, updateDoc, addDoc, getDoc, getDocs } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
-import { RFQ, NegotiationMessage } from '../types';
 
 export default function NegotiationRoomScreen() {
   const navigation = useNavigation<any>();
@@ -16,61 +15,88 @@ export default function NegotiationRoomScreen() {
   const { user, viewMode } = useAppStore();
   
   const rfqId = route.params?.rfqId;
+  const requirementId = route.params?.requirementId;
+  const quoteId = route.params?.quoteId;
   const passedConversationId = route.params?.conversationId;
+
   const isAdminView = route.params?.isAdminView || user?.userType === 'admin' || user?.userType === 'sub_admin';
 
-  const [activeRfq, setActiveRfq] = useState<RFQ | null>(null);
+  // Unified State for RFQ or Custom Requirement
+  const [activeItem, setActiveItem] = useState<any>(null);
   const [conversationId, setConversationId] = useState<string | null>(passedConversationId || null);
   const [roomMessages, setRoomMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [messageText, setMessageText] = useState('');
-  
   const [offerPrice, setOfferPrice] = useState('');
   const [offerQuantity, setOfferQuantity] = useState('');
   const [offerModalVisible, setOfferModalVisible] = useState(false);
 
   const [participantsInfo, setParticipantsInfo] = useState<{buyerName: string, sellerName: string, buyerPhone?: string, sellerPhone?: string}>({ buyerName: 'Buyer', sellerName: 'Supplier' });
 
-  // Fetch RFQ
+  // 1. Fetch Active Document (RFQ or Custom Req)
   useEffect(() => {
-    if (!rfqId) return;
+    if (rfqId) {
+      const unsub = onSnapshot(doc(db, 'rfqs', rfqId), (docSnap) => {
+        if (docSnap.exists()) setActiveItem({ id: docSnap.id, type: 'rfq', ...docSnap.data() });
+      });
+      return () => unsub();
+    } else if (requirementId && quoteId) {
+      const unsubReq = onSnapshot(doc(db, 'customRequirements', requirementId), async (reqSnap) => {
+        const reqData = reqSnap.data();
+        const quoteSnap = await getDoc(doc(db, 'supplierQuotes', quoteId));
+        const quoteData = quoteSnap.data();
+        if (reqData && quoteData) {
+          setActiveItem({
+            id: reqSnap.id,
+            type: 'custom_req',
+            productName: reqData.productName,
+            targetQuantity: reqData.quantity,
+            targetPrice: reqData.targetPrice || quoteData.pricePerUnit,
+            unit: reqData.unit,
+            status: reqData.status === 'QUOTED' ? 'NEGOTIATING' : reqData.status,
+            buyerId: reqData.buyerId,
+            sellerId: quoteData.supplierId,
+            buyerName: reqData.buyerName,
+            sellerName: quoteData.supplierName,
+            quoteId: quoteSnap.id
+          });
+        }
+      });
+      return () => unsubReq();
+    }
+  }, [rfqId, requirementId, quoteId]);
 
-    const unsubRfq = onSnapshot(doc(db, 'rfqs', rfqId), (docSnap) => {
-      if (docSnap.exists()) {
-        setActiveRfq(docSnap.data() as RFQ);
-      }
-    });
-
-    return () => unsubRfq();
-  }, [rfqId]);
-
-  // Setup Conversation dynamically if not passed in via routing
+  // 2. Setup Conversation Id
   useEffect(() => {
-    if (!activeRfq || !user || conversationId) return;
+    if (!activeItem || !user || conversationId) return;
 
     const setupConversation = async () => {
       try {
-        // ✅ FIX FOR ERROR 2: Explicitly include the user's ID in the query to satisfy Firestore security rules
         let q;
-        if (isAdminView) {
-          q = query(collection(db, 'conversations'), where('rfqId', '==', activeRfq.id));
-        } else if (viewMode === 'buyer') {
-          q = query(collection(db, 'conversations'), where('rfqId', '==', activeRfq.id), where('buyerUserId', '==', user.uid));
+        if (activeItem.type === 'custom_req') {
+           // For custom reqs, we expect the conversation to be created by the admin approval
+           q = query(collection(db, 'conversations'), where('requirementId', '==', activeItem.id), where('quoteId', '==', quoteId));
         } else {
-          q = query(collection(db, 'conversations'), where('rfqId', '==', activeRfq.id), where('sellerUserId', '==', user.uid));
+           if (isAdminView) {
+             q = query(collection(db, 'conversations'), where('rfqId', '==', activeItem.id));
+           } else if (viewMode === 'buyer') {
+             q = query(collection(db, 'conversations'), where('rfqId', '==', activeItem.id), where('buyerUserId', '==', user?.uid || ''));
+           } else {
+             q = query(collection(db, 'conversations'), where('rfqId', '==', activeItem.id), where('sellerUserId', '==', user?.uid || ''));
+           }
         }
 
         const snap = await getDocs(q);
-        
         if (!snap.empty) {
           setConversationId(snap.docs[0].id);
-        } else if (!isAdminView) {
+        } else if (!isAdminView && activeItem.type === 'rfq') {
+          // Auto create ONLY for RFQs if missing. Admin handles custom_req creations.
           const newConvRef = await addDoc(collection(db, 'conversations'), {
-            buyerUserId: activeRfq.buyerId,
-            sellerUserId: activeRfq.sellerId,
-            rfqId: activeRfq.id,
+            buyerUserId: activeItem.buyerId,
+            sellerUserId: activeItem.sellerId,
+            rfqId: activeItem.id,
             status: 'open',
             createdAt: Date.now(),
             updatedAt: Date.now()
@@ -83,15 +109,14 @@ export default function NegotiationRoomScreen() {
     };
 
     setupConversation();
-  }, [activeRfq, user, conversationId, isAdminView, viewMode]);
+  }, [activeItem, user, conversationId, isAdminView, viewMode]);
 
-  // Subscribe to new message subcollection
+  // 3. Fetch Messages
   useEffect(() => {
     if (!conversationId) {
-       setLoading(false);
+       setLoading(!activeItem); // Stop loading if activeItem exists but no chat found (pending)
        return;
     }
-
     const q = query(collection(db, 'conversations', conversationId, 'messages'));
     const unsubMessages = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -102,107 +127,60 @@ export default function NegotiationRoomScreen() {
       }));
       setLoading(false);
     });
-
     return () => unsubMessages();
   }, [conversationId]);
 
+  // 4. Load Participant Profiles
   useEffect(() => {
-    if (!activeRfq || !isAdminView) return;
-
+    if (!activeItem || !isAdminView) return;
     const fetchParticipants = async () => {
       try {
-        let bName = activeRfq.buyerName || 'Buyer';
-        let sName = activeRfq.sellerName || 'Supplier';
-        let bPhone = '';
-        let sPhone = '';
-
-        if (activeRfq.buyerId) {
-          const bSnap = await getDoc(doc(db, 'users', activeRfq.buyerId));
-          if (bSnap.exists()) {
-            const data = bSnap.data();
-            bName = data.companyName || data.businessName || data.name || bName;
-            bPhone = data.phone || data.phoneNumber || '';
-          }
+        let bPhone = ''; let sPhone = '';
+        if (activeItem.buyerId) {
+          const bSnap = await getDoc(doc(db, 'users', activeItem.buyerId));
+          if (bSnap.exists()) bPhone = bSnap.data().phone || '';
         }
-
-        if (activeRfq.sellerId) {
-          const sSnap = await getDoc(doc(db, 'users', activeRfq.sellerId));
-          if (sSnap.exists()) {
-            const data = sSnap.data();
-            sName = data.companyName || data.businessName || data.name || sName;
-            sPhone = data.phone || data.phoneNumber || '';
-          }
+        if (activeItem.sellerId) {
+          const sSnap = await getDoc(doc(db, 'users', activeItem.sellerId));
+          if (sSnap.exists()) sPhone = sSnap.data().phone || '';
         }
-
         setParticipantsInfo({
-          buyerName: bName,
-          sellerName: sName,
+          buyerName: activeItem.buyerName || 'Buyer',
+          sellerName: activeItem.sellerName || 'Supplier',
           buyerPhone: bPhone,
           sellerPhone: sPhone
         });
-      } catch (error) {
-        console.error("Error fetching participant info:", error);
-      }
+      } catch (error) {}
     };
-
     fetchParticipants();
-  }, [activeRfq?.id, isAdminView]);
+  }, [activeItem?.id, isAdminView]);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
-        <ActivityIndicator size="large" color="#004AAD" />
-      </SafeAreaView>
-    );
-  }
-
-  if (!activeRfq) {
-    return (
-      <SafeAreaView style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
-        <Text>Quote not found.</Text>
-        <Button onPress={() => navigation.goBack()}>Go Back</Button>
-      </SafeAreaView>
-    );
-  }
-
-  const adminOffer = (activeRfq as any).adminOffer;
+  if (loading) return <SafeAreaView style={{flex: 1, justifyContent: 'center'}}><ActivityIndicator size="large" color="#004AAD" /></SafeAreaView>;
+  if (!activeItem) return <SafeAreaView style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><Text>Quote not found.</Text><Button onPress={() => navigation.goBack()}>Go Back</Button></SafeAreaView>;
 
   const maskSensitiveInfo = (text: string) => {
     let filteredText = text;
-    const phoneRegex = /(\d[\s\-\.]?){8,12}/g;
-    filteredText = filteredText.replace(phoneRegex, ' [PHONE NUMBER HIDDEN] ');
-    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    filteredText = filteredText.replace(emailRegex, ' [EMAIL HIDDEN] ');
-    const sneakyWordsRegex = /\b(whatsapp|wa\.me|call me|contact me|insta|instagram)\b/gi;
-    filteredText = filteredText.replace(sneakyWordsRegex, ' [RESTRICTED] ');
+    filteredText = filteredText.replace(/(\d[\s\-\.]?){8,12}/g, ' [PHONE NUMBER HIDDEN] ');
+    filteredText = filteredText.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, ' [EMAIL HIDDEN] ');
+    filteredText = filteredText.replace(/\b(whatsapp|wa\.me|call me|contact me|insta|instagram)\b/gi, ' [RESTRICTED] ');
     return filteredText;
   };
 
   const sendChatMessage = async () => {
     if (!messageText.trim() || !user || !conversationId) return;
-    
     const safeTextToSend = maskSensitiveInfo(messageText);
     
-    if (messageText !== safeTextToSend) {
-       Alert.alert(
-         "Security Warning", 
-         "Sharing contact information like phone numbers or emails is strictly against platform policy. Your message has been masked."
-       );
-    }
-    
+    if (messageText !== safeTextToSend) Alert.alert("Warning", "Contact info is against policy and was masked.");
     setMessageText(''); 
     
     try {
-      const senderRole = viewMode === 'buyer' ? 'buyer' : 'seller';
-      const direction = viewMode === 'buyer' ? 'toSeller' : 'toBuyer';
-
       await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
-        rfqId: activeRfq.id,
+        [activeItem.type === 'rfq' ? 'rfqId' : 'requirementId']: activeItem.id,
         text: safeTextToSend, 
         body: safeTextToSend, 
         senderId: user.uid,
-        senderRole: senderRole,
-        direction: direction,
+        senderRole: viewMode === 'buyer' ? 'buyer' : 'seller',
+        direction: viewMode === 'buyer' ? 'toSeller' : 'toBuyer',
         source: 'app', 
         timestamp: Date.now(),
         isBuyer: viewMode === 'buyer',
@@ -211,14 +189,11 @@ export default function NegotiationRoomScreen() {
       
       await updateDoc(doc(db, 'conversations', conversationId), { updatedAt: Date.now() });
 
-      if (activeRfq.status === 'PENDING') {
-         await updateDoc(doc(db, 'rfqs', activeRfq.id), {
-            status: 'NEGOTIATING',
-            updatedAt: new Date().toISOString()
-         });
+      if (activeItem.status === 'PENDING') {
+         const table = activeItem.type === 'rfq' ? 'rfqs' : 'customRequirements';
+         await updateDoc(doc(db, table, activeItem.id), { status: 'NEGOTIATING', updatedAt: new Date().toISOString() });
       }
     } catch (e) {
-      console.error("Error sending message: ", e);
       Alert.alert("Error", "Message could not be sent.");
     }
   };
@@ -229,170 +204,91 @@ export default function NegotiationRoomScreen() {
     const qty = parseInt(offerQuantity, 10);
 
     if (isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0 || !user || !conversationId) {
-        Alert.alert("Invalid Input", "Please enter a valid price and quantity.");
-        return;
+        return Alert.alert("Invalid Input", "Please enter a valid price and quantity.");
     }
 
-    setOfferPrice('');
-    setOfferQuantity('');
-    setOfferModalVisible(false); 
+    setOfferPrice(''); setOfferQuantity(''); setOfferModalVisible(false); 
     
     try {
-      const offerText = `Sent a Custom Offer: ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}`;
-
+      const offerText = `Sent a Custom Offer: ${qty} ${activeItem.unit} at ₹${price} / ${activeItem.unit}`;
       await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
-        rfqId: activeRfq.id,
-        text: offerText, 
-        body: offerText, 
-        senderId: user.uid,
-        senderRole: 'seller',
-        direction: 'toBuyer',
-        source: 'app',
-        timestamp: Date.now(),
-        isBuyer: false,
-        isOffer: true,
-        proposedPrice: price,
-        proposedQty: qty 
+        [activeItem.type === 'rfq' ? 'rfqId' : 'requirementId']: activeItem.id,
+        text: offerText, body: offerText, 
+        senderId: user.uid, senderRole: 'seller', direction: 'toBuyer',
+        source: 'app', timestamp: Date.now(), isBuyer: false, isOffer: true,
+        proposedPrice: price, proposedQty: qty 
       });
-      
       await updateDoc(doc(db, 'conversations', conversationId), { updatedAt: Date.now() });
 
-      await updateDoc(doc(db, 'rfqs', activeRfq.id), {
-        status: 'NEGOTIATING',
-        updatedAt: new Date().toISOString()
-      });
+      const table = activeItem.type === 'rfq' ? 'rfqs' : 'customRequirements';
+      await updateDoc(doc(db, table, activeItem.id), { status: 'NEGOTIATING', updatedAt: new Date().toISOString() });
     } catch (e) {
-      console.error("Error sending offer: ", e);
       Alert.alert("Error", "Offer could not be sent.");
     }
   };
 
-  const proceedToCheckout = async (price: number, qty: number, overrideSellerId?: string) => {
+  const proceedToCheckout = async (price: number, qty: number) => {
     setIsProcessing(true);
     try {
       if (conversationId) {
-        await updateDoc(doc(db, 'conversations', conversationId), {
-          status: 'won',
-          updatedAt: Date.now()
-        });
-
+        await updateDoc(doc(db, 'conversations', conversationId), { status: 'won', updatedAt: Date.now() });
         await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
-          rfqId: activeRfq.id,
-          text: `System: This requirement has been successfully fulfilled and closed. Thank you for participating.`,
-          body: `System: This requirement has been successfully fulfilled and closed. Thank you for participating.`,
-          senderId: 'system',
-          senderRole: 'system',
-          source: 'app',
-          timestamp: Date.now(),
-          isBuyer: false,
-          isOffer: false
+          text: `System: This requirement has been successfully fulfilled and closed.`,
+          body: `System: This requirement has been successfully fulfilled and closed.`,
+          senderId: 'system', senderRole: 'system', source: 'app', timestamp: Date.now(), isBuyer: false, isOffer: false
         });
       }
 
-      await updateDoc(doc(db, 'rfqs', activeRfq.id), {
-        status: 'CONVERTED',
-        agreedPrice: price,
-        agreedQuantity: qty, 
-        updatedAt: new Date().toISOString()
-      });
-
-      try {
-        const leadsRef = collection(db, 'broadcastLeads');
-        const q1 = query(leadsRef, where('originalOrderId', '==', activeRfq.id), where('status', '==', 'OPEN'));
-        const snap1 = await getDocs(q1);
-        snap1.forEach(async (d) => {
-          await updateDoc(doc(db, 'broadcastLeads', d.id), { status: 'CLOSED' });
-        });
-        
-        const q2 = query(leadsRef, where('rfqId', '==', activeRfq.id), where('status', '==', 'OPEN'));
-        const snap2 = await getDocs(q2);
-        snap2.forEach(async (d) => {
-          await updateDoc(doc(db, 'broadcastLeads', d.id), { status: 'CLOSED' });
-        });
-      } catch (leadError) {
-        console.error("Error closing broadcast lead:", leadError);
+      if (activeItem.type === 'rfq') {
+         await updateDoc(doc(db, 'rfqs', activeItem.id), { status: 'CONVERTED', agreedPrice: price, agreedQuantity: qty, updatedAt: new Date().toISOString() });
+      } else {
+         await updateDoc(doc(db, 'customRequirements', activeItem.id), { status: 'FULFILLED' });
+         if (activeItem.quoteId) {
+           await updateDoc(doc(db, 'supplierQuotes', activeItem.quoteId), { status: 'ACCEPTED' });
+         }
       }
 
       const negotiatedItem = {
-        id: `${activeRfq.productId}_rfq`,
-        productId: activeRfq.productId,
-        name: overrideSellerId ? `${activeRfq.productName} (Prochem Sourced)` : `${activeRfq.productName} (Custom Quote)`,
+        id: activeItem.type === 'rfq' ? `${activeItem.productId}_rfq` : `custom_${activeItem.id}`,
+        productId: activeItem.productId || '',
+        name: activeItem.type === 'rfq' ? `${activeItem.productName} (Quote)` : `${activeItem.productName} (Custom Req)`,
         quantity: qty, 
         pricePerUnit: price,
-        unit: activeRfq.unit || 'unit',
-        sellerId: overrideSellerId || activeRfq.sellerId,
-        gstPercent: 18
+        unit: activeItem.unit || 'unit',
+        sellerId: activeItem.sellerId,
+        gstPercent: 18 // Default GST for chemicals if not linked to standard product catalog
       };
 
       setIsProcessing(false);
       navigation.navigate('Checkout', { negotiatedItem });
 
     } catch (error) {
-      console.error("Checkout Navigation Error: ", error);
       setIsProcessing(false);
-      Alert.alert("Error", "Could not complete the checkout process. Please check your connection.");
+      Alert.alert("Error", "Could not complete the checkout process.");
     }
   };
 
   const acceptOffer = (price: number, qty: number) => {
-    if (Platform.OS === 'web') {
-      const isConfirmed = window.confirm(`Do you agree to transact ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}?`);
-      if (isConfirmed) {
-        proceedToCheckout(price, qty);
-      }
-    } else {
-      Alert.alert('Confirm Custom Offer', `Do you agree to transact ${qty} ${activeRfq.unit} at ₹${price} / ${activeRfq.unit}?`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Agree & Checkout', onPress: () => proceedToCheckout(price, qty) }
-      ]);
-    }
-  };
-
-  const acceptAdminOffer = () => {
-    if (!adminOffer) return;
-    Alert.alert('Confirm Prochem Offer', `Accept verified supplier offer of ${adminOffer.quantity || activeRfq.targetQuantity} ${activeRfq.unit} at ₹${adminOffer.price} / ${activeRfq.unit}?`, [
+    Alert.alert('Confirm Custom Offer', `Do you agree to transact ${qty} ${activeItem.unit} at ₹${price} / ${activeItem.unit}?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Accept & Checkout', onPress: () => proceedToCheckout(adminOffer.price, adminOffer.quantity || activeRfq.targetQuantity, adminOffer.supplierId) }
+      { text: 'Agree & Checkout', onPress: () => proceedToCheckout(price, qty) }
     ]);
   };
 
   const closeNegotiation = async () => {
-    Alert.alert(
-      "End Negotiation",
-      "Are you sure you want to close this negotiation? Both parties will no longer be able to send messages.",
-      [
+    Alert.alert("End Negotiation", "Are you sure you want to close this negotiation?", [
         { text: "Cancel", style: "cancel" },
         { 
-          text: "Close Chat", 
-          style: "destructive",
+          text: "Close Chat", style: "destructive",
           onPress: async () => {
             setIsProcessing(true);
             try {
               if (conversationId) {
-                await updateDoc(doc(db, 'conversations', conversationId), {
-                  status: 'closed',
-                  updatedAt: Date.now()
-                });
-
-                await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
-                  rfqId: activeRfq.id,
-                  text: `System: This negotiation was closed by the ${viewMode === 'buyer' ? 'Buyer' : 'Supplier'}.`,
-                  body: `System: This negotiation was closed by the ${viewMode === 'buyer' ? 'Buyer' : 'Supplier'}.`,
-                  senderId: 'system',
-                  senderRole: 'system',
-                  source: 'app',
-                  timestamp: Date.now(),
-                  isBuyer: false,
-                  isOffer: false
-                });
+                await updateDoc(doc(db, 'conversations', conversationId), { status: 'closed', updatedAt: Date.now() });
               }
-
-              await updateDoc(doc(db, 'rfqs', activeRfq.id), {
-                status: 'REJECTED',
-                updatedAt: new Date().toISOString()
-              });
+              const table = activeItem.type === 'rfq' ? 'rfqs' : 'customRequirements';
+              await updateDoc(doc(db, table, activeItem.id), { status: 'REJECTED', updatedAt: new Date().toISOString() });
             } catch (err) {
-              console.error("Error closing negotiation:", err);
               Alert.alert("Error", "Could not close the chat.");
             } finally {
               setIsProcessing(false);
@@ -406,7 +302,6 @@ export default function NegotiationRoomScreen() {
   const renderMessage = ({ item }: { item: any }) => {
     const isMe = item.senderId === user?.uid;
     const isSystem = item.senderId === 'system' || item.senderRole === 'system';
-    
     const alignRight = isAdminView ? (!item.isBuyer && !isSystem) : isMe;
     
     let bubbleStyle: any = styles.msgBubbleThem;
@@ -434,36 +329,29 @@ export default function NegotiationRoomScreen() {
     return (
       <View style={[styles.msgWrapper, alignRight ? styles.msgRight : styles.msgLeft]}>
         {!alignRight && <Avatar.Icon size={32} icon={isSystem ? "robot-outline" : (item.isBuyer ? "account" : "store")} style={{marginRight: 8, backgroundColor: '#E2E8F0'}} color="#64748B" />}
-        
         <View>
           <View style={[styles.msgBubble, bubbleStyle]}>
             {isAdminView && !isSystem && (
               <Text style={{ fontSize: 10, fontWeight: 'bold', color: item.isBuyer ? '#1D4ED8' : '#15803D', marginBottom: 2 }}>
-                {item.isBuyer 
-                  ? `${participantsInfo.buyerName} ${participantsInfo.buyerPhone ? `(${participantsInfo.buyerPhone})` : ''}` 
-                  : `${participantsInfo.sellerName} ${participantsInfo.sellerPhone ? `(${participantsInfo.sellerPhone})` : ''}`}
+                {item.isBuyer ? participantsInfo.buyerName : participantsInfo.sellerName}
               </Text>
             )}
-
             <Text style={textStyle}>{item.text || item.body}</Text>
             
             {item.isOffer && (item.proposedPrice || item.proposedQty) && (
               <Card style={{marginTop: 10, backgroundColor: (!isAdminView && isMe) ? 'rgba(255,255,255,0.2)' : '#F1F5F9', elevation: 0}}>
                 <Card.Content style={{padding: 10}}>
                   <Text style={{fontWeight: 'bold', color: (!isAdminView && isMe) ? 'white' : '#0F172A'}}>
-                    {isAdminView ? `Offer by ${item.isBuyer ? participantsInfo.buyerName : participantsInfo.sellerName}:` : (isMe ? 'You Offered:' : 'Custom Offer:')} 
-                    {'\n'}{item.proposedQty || activeRfq.targetQuantity} {activeRfq.unit} at ₹{item.proposedPrice} / {activeRfq.unit}
+                    {isAdminView ? `Offer:` : (isMe ? 'You Offered:' : 'Custom Offer:')} {'\n'}
+                    {item.proposedQty} {activeItem.unit} at ₹{item.proposedPrice} / {activeItem.unit}
                   </Text>
                   
-                  {!isAdminView && !isMe && viewMode === 'buyer' && (activeRfq.status === 'PENDING' || activeRfq.status === 'NEGOTIATING') && (
+                  {!isAdminView && !isMe && viewMode === 'buyer' && (activeItem.status === 'PENDING' || activeItem.status === 'NEGOTIATING') && (
                     <Button 
-                      mode="contained" 
-                      compact 
-                      icon="check-circle"
-                      loading={isProcessing}
-                      disabled={isProcessing}
+                      mode="contained" compact icon="check-circle"
+                      loading={isProcessing} disabled={isProcessing}
                       style={{marginTop: 8, backgroundColor: '#10B981'}} 
-                      onPress={() => acceptOffer(item.proposedPrice!, item.proposedQty || activeRfq.targetQuantity)}
+                      onPress={() => acceptOffer(item.proposedPrice!, item.proposedQty)}
                     >
                       {isProcessing ? 'Processing...' : 'Accept & Checkout'}
                     </Button>
@@ -472,10 +360,6 @@ export default function NegotiationRoomScreen() {
               </Card>
             )}
           </View>
-          
-          <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 4, textAlign: alignRight ? 'right' : 'left' }}>
-            {item.source === 'whatsapp' ? '📱 via WhatsApp' : (isSystem ? '' : '💻 via App')}
-          </Text>
         </View>
       </View>
     );
@@ -486,107 +370,47 @@ export default function NegotiationRoomScreen() {
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <View style={{flex: 1}}>
-           <Text variant="titleMedium" style={{fontWeight: 'bold'}}>{activeRfq?.productName}</Text>
+           <Text variant="titleMedium" style={{fontWeight: 'bold'}}>{activeItem?.productName}</Text>
            <Text style={{fontSize: 12, color: '#666'}}>
              {isAdminView 
-                ? `Buyer: ${participantsInfo.buyerName}  •  Supplier: ${participantsInfo.sellerName}`
+                ? `${participantsInfo.buyerName} ↔ ${participantsInfo.sellerName}`
                 : `Chat with ${viewMode === 'buyer' ? 'Prochem Supplier' : 'Verified Buyer'}`
              }
            </Text>
         </View>
-        <Chip style={{backgroundColor: activeRfq?.status === 'CONVERTED' ? '#DCFCE7' : (activeRfq?.status === 'REJECTED' ? '#FEE2E2' : '#FEF9C3'), marginRight: 5}}>
-           <Text style={{fontSize: 10, color: activeRfq?.status === 'CONVERTED' ? '#166534' : (activeRfq?.status === 'REJECTED' ? '#991B1B' : '#854D0E')}}>
-              {activeRfq?.status}
+        <Chip style={{backgroundColor: activeItem?.status === 'CONVERTED' || activeItem?.status === 'FULFILLED' ? '#DCFCE7' : (activeItem?.status === 'REJECTED' || activeItem?.status === 'CLOSED' ? '#FEE2E2' : '#FEF9C3'), marginRight: 5}}>
+           <Text style={{fontSize: 10, color: activeItem?.status === 'CONVERTED' || activeItem?.status === 'FULFILLED' ? '#166534' : (activeItem?.status === 'REJECTED' || activeItem?.status === 'CLOSED' ? '#991B1B' : '#854D0E')}}>
+              {activeItem?.status}
            </Text>
         </Chip>
-
-        {!isAdminView && activeRfq?.status !== 'CONVERTED' && activeRfq?.status !== 'REJECTED' && (
-          <IconButton 
-            icon="close-circle-outline" 
-            iconColor="#EF4444" 
-            size={24} 
-            onPress={closeNegotiation} 
-            disabled={isProcessing}
-          />
+        {!isAdminView && activeItem?.status !== 'CONVERTED' && activeItem?.status !== 'FULFILLED' && activeItem?.status !== 'REJECTED' && (
+          <IconButton icon="close-circle-outline" iconColor="#EF4444" size={24} onPress={closeNegotiation} disabled={isProcessing} />
         )}
       </View>
 
       {isAdminView && (
          <View style={{ flexDirection: 'row', justifyContent: 'space-around', backgroundColor: 'white', paddingBottom: 10, borderBottomWidth: 1, borderColor: '#E2E8F0' }}>
-            <Button 
-               icon="phone" 
-               mode="text" 
-               textColor="#1D4ED8"
-               onPress={() => participantsInfo.buyerPhone ? Linking.openURL(`tel:${participantsInfo.buyerPhone}`) : Alert.alert('Error', 'No buyer phone number')}
-            >
-               Call Buyer
-            </Button>
-            <Button 
-               icon="phone" 
-               mode="text" 
-               textColor="#15803D"
-               onPress={() => participantsInfo.sellerPhone ? Linking.openURL(`tel:${participantsInfo.sellerPhone}`) : Alert.alert('Error', 'No seller phone number')}
-            >
-               Call Seller
-            </Button>
+            <Button icon="phone" mode="text" textColor="#1D4ED8" onPress={() => participantsInfo.buyerPhone ? Linking.openURL(`tel:${participantsInfo.buyerPhone}`) : Alert.alert('Error', 'No buyer phone')}>Call Buyer</Button>
+            <Button icon="phone" mode="text" textColor="#15803D" onPress={() => participantsInfo.sellerPhone ? Linking.openURL(`tel:${participantsInfo.sellerPhone}`) : Alert.alert('Error', 'No seller phone')}>Call Seller</Button>
          </View>
       )}
 
-      {adminOffer && viewMode === 'buyer' && activeRfq?.status !== 'CONVERTED' && activeRfq?.status !== 'REJECTED' && (
-        <Card style={{ margin: 10, backgroundColor: '#ECFDF5', borderColor: '#10B981', borderWidth: 1 }}>
-           <Card.Content style={{ padding: 12 }}>
-             <View style={{flexDirection: 'row', alignItems: 'center'}}>
-               <Avatar.Icon size={36} icon="star-shooting" style={{backgroundColor: '#D1FAE5'}} color="#059669" />
-               <View style={{marginLeft: 12, flex: 1}}>
-                 <Text style={{ color: '#065F46', fontWeight: 'bold', fontSize: 14 }}>
-                   🔥 Prochem Official Offer
-                 </Text>
-                 <Text style={{ color: '#047857', marginTop: 2, fontSize: 13 }}>
-                   We secured a verified supplier for <Text style={{fontWeight: 'bold'}}>₹{adminOffer.price}</Text> / {activeRfq.unit}.
-                 </Text>
-               </View>
-             </View>
-             <Button 
-               mode="contained" 
-               buttonColor="#10B981" 
-               style={{ marginTop: 12 }}
-               onPress={acceptAdminOffer}
-               loading={isProcessing}
-               disabled={isProcessing}
-             >
-               Accept & Checkout
-             </Button>
-           </Card.Content>
-        </Card>
-      )}
-
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <FlatList
           data={roomMessages}
           keyExtractor={item => item.id}
           renderItem={renderMessage}
           contentContainerStyle={{padding: 16, flexGrow: 1}}
           keyboardShouldPersistTaps="handled"
-          inverted={false} 
         />
 
-        {!isAdminView && activeRfq?.status !== 'CONVERTED' && activeRfq?.status !== 'REJECTED' && (
+        {!isAdminView && activeItem?.status !== 'CONVERTED' && activeItem?.status !== 'FULFILLED' && activeItem?.status !== 'REJECTED' && activeItem?.status !== 'CLOSED' && (
           <View>
             {viewMode === 'seller' && (
               <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
                 <Button 
-                  mode="contained" 
-                  icon="handshake" 
-                  buttonColor="#10B981" 
-                  contentStyle={{ height: 48 }}
-                  onPress={() => {
-                    setOfferPrice(String(activeRfq.targetPrice || ''));
-                    setOfferQuantity(String(activeRfq.targetQuantity || ''));
-                    setOfferModalVisible(true);
-                  }}
+                  mode="contained" icon="handshake" buttonColor="#10B981" contentStyle={{ height: 48 }}
+                  onPress={() => { setOfferPrice(String(activeItem.targetPrice || '')); setOfferQuantity(String(activeItem.targetQuantity || '')); setOfferModalVisible(true); }}
                 >
                   Create Offer
                 </Button>
@@ -594,70 +418,26 @@ export default function NegotiationRoomScreen() {
             )}
 
             <View style={styles.inputArea}>
-              <TextInput
-                mode="outlined"
-                placeholder="Type a message..."
-                value={messageText}
-                onChangeText={setMessageText}
-                style={styles.input}
-                outlineStyle={{borderRadius: 24, borderColor: '#E2E8F0'}}
-              />
-              
-              <IconButton 
-                icon="send" 
-                mode="contained" 
-                containerColor="#004AAD" 
-                iconColor="white" 
-                onPress={sendChatMessage} 
-                style={{marginTop: 8}} 
-                disabled={!conversationId}
-              />
+              <TextInput mode="outlined" placeholder="Type a message..." value={messageText} onChangeText={setMessageText} style={styles.input} outlineStyle={{borderRadius: 24, borderColor: '#E2E8F0'}} />
+              <IconButton icon="send" mode="contained" containerColor="#004AAD" iconColor="white" onPress={sendChatMessage} style={{marginTop: 8}} disabled={!conversationId} />
             </View>
           </View>
         )}
       </KeyboardAvoidingView>
 
       <Modal visible={offerModalVisible} transparent animationType="slide">
-        <KeyboardAvoidingView 
-          style={styles.modalOverlay} 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={[styles.modalContent, { maxHeight: '90%' }]}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
-              <Text variant="titleLarge" style={{fontWeight: 'bold', color: '#0F172A'}}>
-                 Send Offer
-              </Text>
+              <Text variant="titleLarge" style={{fontWeight: 'bold', color: '#0F172A'}}>Send Offer</Text>
               <IconButton icon="close" onPress={() => { Keyboard.dismiss(); setOfferModalVisible(false); }} />
             </View>
-            
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-               <TextInput
-                  mode="outlined"
-                  keyboardType="numeric"
-                  label={`Quantity Offered (${activeRfq?.unit})`}
-                  value={offerQuantity}
-                  onChangeText={setOfferQuantity}
-                  style={{backgroundColor: 'white', marginBottom: 15}}
-                  activeOutlineColor="#10B981"
-               />
-
-               <TextInput
-                  mode="outlined"
-                  keyboardType="numeric"
-                  label={`Final Agreed Price (₹ / ${activeRfq?.unit})`}
-                  value={offerPrice}
-                  onChangeText={setOfferPrice}
-                  style={{backgroundColor: 'white', marginBottom: 20}}
-                  activeOutlineColor="#10B981"
-               />
-
+               <TextInput mode="outlined" keyboardType="numeric" label={`Quantity Offered (${activeItem?.unit})`} value={offerQuantity} onChangeText={setOfferQuantity} style={{backgroundColor: 'white', marginBottom: 15}} activeOutlineColor="#10B981" />
+               <TextInput mode="outlined" keyboardType="numeric" label={`Final Agreed Price (₹ / ${activeItem?.unit})`} value={offerPrice} onChangeText={setOfferPrice} style={{backgroundColor: 'white', marginBottom: 20}} activeOutlineColor="#10B981" />
                <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingBottom: 15}}>
-                  <Button mode="text" onPress={() => setOfferModalVisible(false)} textColor="#64748B">
-                     Cancel
-                  </Button>
-                  <Button mode="contained" onPress={sendOffer} buttonColor="#10B981">
-                     Send Offer
-                  </Button>
+                  <Button mode="text" onPress={() => setOfferModalVisible(false)} textColor="#64748B">Cancel</Button>
+                  <Button mode="contained" onPress={sendOffer} buttonColor="#10B981">Send Offer</Button>
                </View>
             </ScrollView>
           </View>
