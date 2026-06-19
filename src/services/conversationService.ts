@@ -14,6 +14,7 @@ export const createConversation = async (params: {
   quoteId?: string;
   buyerUserId: string;
   sellerUserId: string;
+  initialMessage?: string; // ✅ Added support for system-generated initial message
 }): Promise<string> => {
   try {
     const conversationData: Omit<Conversation, 'id'> = {
@@ -28,6 +29,22 @@ export const createConversation = async (params: {
     };
 
     const docRef = await addDoc(collection(db, CONVERSATIONS_COLLECTION), conversationData);
+
+    // ✅ Generate the context message automatically if passed
+    if (params.initialMessage) {
+      await addDoc(collection(db, `${CONVERSATIONS_COLLECTION}/${docRef.id}/messages`), {
+        text: params.initialMessage,
+        body: params.initialMessage,
+        senderId: 'system',
+        senderRole: 'system',
+        direction: 'both',
+        source: 'app',
+        timestamp: serverTimestamp(),
+        isBuyer: false,
+        isOffer: false
+      });
+    }
+
     return docRef.id;
   } catch (error) {
     console.error("Error creating conversation:", error);

@@ -102,6 +102,27 @@ export default function NegotiationRoomScreen() {
             updatedAt: Date.now()
           });
           setConversationId(newConvRef.id);
+
+          // ✅ SYSTEM MESSAGE: Add initial context message for the new negotiation
+          const initialContextMsg = `System: Negotiation started for ${activeItem.productName || 'Product'}
+Quantity: ${activeItem.targetQuantity || 'N/A'} ${activeItem.unit || ''}
+Target Price: ₹${activeItem.targetPrice || 'N/A'} / ${activeItem.unit || ''}
+Reference ID: ${activeItem.id || 'N/A'}
+Buyer: ${activeItem.buyerName || 'N/A'}
+Supplier: ${activeItem.sellerName || 'N/A'}`;
+
+          await addDoc(collection(db, 'conversations', newConvRef.id, 'messages'), {
+            rfqId: activeItem.id,
+            text: initialContextMsg,
+            body: initialContextMsg,
+            senderId: 'system',
+            senderRole: 'system',
+            direction: 'both',
+            source: 'app',
+            timestamp: Date.now(),
+            isBuyer: false,
+            isOffer: false
+          });
         }
       } catch (err) {
         console.error("Error setting up conversation", err);
