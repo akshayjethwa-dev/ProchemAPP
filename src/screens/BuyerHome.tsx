@@ -167,9 +167,10 @@ export default function BuyerHome() {
             <Text style={styles.actionIcon}>📝</Text>
             <Text style={styles.actionTitle}>Post RFQ</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]} onPress={() => navigation.navigate('Orders')}>
-            <Text style={styles.actionIcon}>📦</Text>
-            <Text style={styles.actionTitle}>Orders</Text>
+          {/* 🚀 UPDATED: Points to CommerceHub instead of Orders */}
+          <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]} onPress={() => navigation.navigate('CommerceHub')}>
+            <Text style={styles.actionIcon}>🏪</Text>
+            <Text style={styles.actionTitle}>Market Orders</Text>
           </TouchableOpacity>
         </View>
 

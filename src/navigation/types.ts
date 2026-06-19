@@ -39,4 +39,5 @@ export type RootStackParamList = {
   AddChemical: undefined;
   ManageChemicals: undefined;
   OrderHistory: undefined;
+  CommerceHub: undefined;
 };

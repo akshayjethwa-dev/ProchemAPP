@@ -27,6 +27,7 @@ import CompareScreen from '../screens/CompareScreen';
 import BuyerRequirementsScreen from '../screens/BuyerRequirementsScreen'; 
 import CartScreen from '../screens/CartScreen'; 
 import BusinessGrowthScreen from '../screens/BusinessGrowthScreen';
+import CommerceHubScreen from '../screens/CommerceHubScreen';
 
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
@@ -43,6 +44,7 @@ export type BuyerStackParamList = {
   PaymentSuccess: any; 
   Compare: undefined;
   BuyerRequirements: undefined;
+  CommerceHub: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -134,6 +136,7 @@ export default function BuyerNavigator() {
       <Stack.Screen name="PostRequirement" component={PostRequirementScreen} options={{ headerShown: true, title: 'Post Custom Requirement' }} />
       <Stack.Screen name="Compare" component={CompareScreen} options={{ headerShown: true, title: 'Compare Products' }} />
       <Stack.Screen name="BuyerRequirements" component={BuyerRequirementsScreen} options={{ headerShown: true, title: 'My Sourcing Requests' }} />
+      <Stack.Screen name="CommerceHub" component={CommerceHubScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
