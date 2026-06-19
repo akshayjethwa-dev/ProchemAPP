@@ -1,5 +1,5 @@
 // File: src/services/adminService.ts
-import { collection, getDocs, doc, updateDoc, query, where, orderBy, getCountFromServer, writeBatch, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, orderBy, getCountFromServer, writeBatch, limit } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { User, Product } from '../types';
 
@@ -35,26 +35,42 @@ export const verifyUserKYC = async (uid: string, status: boolean) => {
   });
 };
 
-// 4. Product Moderation (Fetch Pending)
-export const getPendingProducts = async (): Promise<Product[]> => {
-  const q = query(collection(db, 'products'), where('verified', '==', false));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product));
-};
+// 4. Product Monitoring (Fetch All Enriched)
+export const getAllProductsForAdmin = async (): Promise<any[]> => {
+  try {
+    // Fetch all products
+    const productsSnap = await getDocs(collection(db, 'products'));
+    
+    // Fetch all users to map company/business names
+    const usersSnap = await getDocs(collection(db, 'users'));
+    const userMap: Record<string, any> = {};
+    usersSnap.docs.forEach(doc => {
+      userMap[doc.id] = doc.data();
+    });
 
-// 5. Approve Product
-export const approveProductListing = async (productId: string) => {
-  await updateDoc(doc(db, 'products', productId), { verified: true });
+    return productsSnap.docs.map(d => {
+      const productData = d.data();
+      const sellerData = userMap[productData.sellerId] || {};
+      
+      return {
+        id: d.id,
+        ...productData,
+        sellerCompanyName: sellerData.companyName || sellerData.businessName || 'N/A',
+        sellerName: productData.sellerName || sellerData.name || 'Unknown',
+      };
+    });
+  } catch (error) {
+    console.error("Error fetching products for admin:", error);
+    return [];
+  }
 };
 
 /**
- * NEW: Fetch all negotiation sessions for Admin monitoring
- * This allows the admin to oversee all price discussions on the platform
+ * Fetch all negotiation sessions for Admin monitoring
  */
 export const getAllNegotiations = async () => {
   try {
     const negotiationsRef = collection(db, 'negotiations');
-    // Fetching all negotiations ordered by most recent update
     const q = query(negotiationsRef, orderBy('updatedAt', 'desc'));
     const querySnapshot = await getDocs(q);
     
@@ -73,7 +89,6 @@ export const backfillUserSubscriptions = async (): Promise<number> => {
     const usersRef = collection(db, 'users');
     const snapshot = await getDocs(usersRef);
     
-    // Firestore batches allow a maximum of 500 operations per batch
     const batches = [];
     let currentBatch = writeBatch(db);
     let operationCount = 0;
@@ -81,8 +96,6 @@ export const backfillUserSubscriptions = async (): Promise<number> => {
 
     snapshot.docs.forEach((userDoc) => {
       const userData = userDoc.data();
-      
-      // Only update if they don't already have the subscription field
       if (userData.subscriptionTier === undefined) {
         currentBatch.update(userDoc.ref, {
           subscriptionTier: 'FREE',
@@ -93,7 +106,6 @@ export const backfillUserSubscriptions = async (): Promise<number> => {
         operationCount++;
         totalUpdated++;
 
-        // If we approach the 500 limit, commit the batch and start a new one
         if (operationCount >= 490) { 
           batches.push(currentBatch.commit());
           currentBatch = writeBatch(db);
@@ -102,13 +114,11 @@ export const backfillUserSubscriptions = async (): Promise<number> => {
       }
     });
 
-    // Commit any remaining operations in the final batch
     if (operationCount > 0) {
       batches.push(currentBatch.commit());
     }
 
     await Promise.all(batches);
-    console.log(`Successfully backfilled ${totalUpdated} users.`);
     return totalUpdated;
 
   } catch (error) {
@@ -118,8 +128,7 @@ export const backfillUserSubscriptions = async (): Promise<number> => {
 };
 
 /**
- * NEW: Fetch WhatsApp Logs
- * Fetches recent WhatsApp traffic logs for the admin dashboard
+ * Fetch WhatsApp Logs
  */
 export const getWhatsAppLogs = async (logLimit = 100) => {
   try {

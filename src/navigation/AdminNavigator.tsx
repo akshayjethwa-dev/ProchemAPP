@@ -20,6 +20,7 @@ import AdminPayment from '../screens/admin/AdminPayment';
 import AdminCustomRequirementsScreen from '../screens/admin/AdminCustomRequirementsScreen';
 import AdminWhatsAppLogsScreen from '../screens/admin/AdminWhatsAppLogsScreen'; 
 import AdminManualInvoiceScreen from '../screens/admin/AdminManualInvoiceScreen';
+import ProductDetail from '../screens/ProductDetail';
 
 // Negotiation Screens
 import NegotiationsListScreen from '../screens/NegotiationsListScreen';
@@ -38,6 +39,8 @@ export type AdminStackParamList = {
   AdminBroadcastBids: undefined; 
   AdminWhatsAppLogs: undefined; 
   AdminManualInvoice: undefined;
+  AdminProductsList: undefined;
+  ProductDetail: { product: any; isAdminView: boolean };
 };
 
 const Tab = createBottomTabNavigator();
@@ -49,6 +52,15 @@ function UserStackNavigator() {
       <Stack.Screen name="UsersList" component={AdminUsersScreen} />
       <Stack.Screen name="AdminUserDetails" component={AdminUserDetailsScreen} />
       <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function ProductsStackNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AdminProductsList" component={AdminProductsScreen} />
+      <Stack.Screen name="ProductDetail" component={ProductDetail} />
     </Stack.Navigator>
   );
 }
@@ -91,7 +103,8 @@ export default function AdminNavigator() {
     >
       <Tab.Screen name="DashboardTab" component={DashboardStackNavigator} options={{ tabBarLabel: 'Dashboard', tabBarIcon: ({color}) => <IconButton icon="view-dashboard" iconColor={color} size={24} /> }} />
       {!isSubAdmin && <Tab.Screen name="Users" component={UserStackNavigator} options={{ tabBarIcon: ({color}) => <IconButton icon="account-group" iconColor={color} size={24} /> }} />}
-      {!isSubAdmin && <Tab.Screen name="Moderation" component={AdminProductsScreen} options={{ tabBarIcon: ({color}) => <IconButton icon="shield-check" iconColor={color} size={24} /> }} />}
+      {/* Renamed to Products and bound to the new Stack */}
+      {!isSubAdmin && <Tab.Screen name="Products" component={ProductsStackNavigator} options={{ tabBarIcon: ({color}) => <IconButton icon="shield-check" iconColor={color} size={24} /> }} />}
       <Tab.Screen name="Orders" component={AdminOrderVerification} options={{ tabBarLabel: 'Verification', tabBarIcon: ({color}) => <IconButton icon="file-certificate" iconColor={color} size={24} /> }} />
       {!isSubAdmin && <Tab.Screen name="NAPayments" component={AdminPaymentsScreen} options={{ tabBarLabel: 'Finance', tabBarIcon: ({ color }) => <IconButton icon="finance" iconColor={color} size={24} /> }} />}
       {!isSubAdmin && <Tab.Screen name="Payments" component={AdminPayment} options={{ tabBarLabel: 'Finance', tabBarIcon: ({ color }) => <IconButton icon="cash-multiple" iconColor={color} size={24} /> }} />}

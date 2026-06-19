@@ -1,14 +1,13 @@
-import { collection, getDocs, addDoc, query, where, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Product } from '../types';
 
-// 1. Fetch Products for BUYERS (Only Active & Verified)
+// 1. Fetch Products for BUYERS (Only Active)
 export const getProducts = async (): Promise<Product[]> => {
   try {
     const q = query(
       collection(db, 'products'),
-      where('active', '==', true), // ✅ Only show Active products
-      // where('verified', '==', true) // Uncomment this when you want strict Admin moderation
+      where('active', '==', true) // ✅ Only show Active products
     );
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
@@ -30,7 +29,6 @@ export const addProduct = async (productData: any) => {
   await addDoc(collection(db, 'products'), {
     ...productData,
     active: true, // Default to true
-    verified: false, // Default to false (requires Admin approval)
     createdAt: new Date().toISOString()
   });
 };

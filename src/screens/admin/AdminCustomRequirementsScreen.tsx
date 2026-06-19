@@ -20,8 +20,24 @@ interface Requirement {
   targetPrice?: string;
   description?: string;
   status: 'PENDING' | 'RESOLVED' | 'REJECTED' | 'QUOTED' | 'FULFILLED';
-  createdAt: string;
+  createdAt: any;
 }
+
+// ✅ Helper to safely parse Firebase Timestamps, strings, or numbers
+const parseDate = (dateVal: any): Date | null => {
+  if (!dateVal) return null;
+  if (typeof dateVal.toDate === 'function') return dateVal.toDate();
+  if (dateVal.seconds) return new Date(dateVal.seconds * 1000);
+  const parsed = new Date(dateVal);
+  if (!isNaN(parsed.getTime())) return parsed;
+  return null;
+};
+
+const formatDate = (dateVal: any) => {
+  const date = parseDate(dateVal);
+  if (!date) return 'Just now';
+  return date.toLocaleString();
+};
 
 export default function AdminCustomRequirementsScreen() {
   const theme = useTheme();
@@ -95,7 +111,6 @@ export default function AdminCustomRequirementsScreen() {
     Linking.openURL(`tel:${phone}`);
   };
 
-  // 🚀 ACTION: Approve quote and open chat room
   const handleApproveQuote = async (req: Requirement, quote: SupplierQuote) => {
     Alert.alert(
       "Approve Quote",
@@ -148,7 +163,8 @@ export default function AdminCustomRequirementsScreen() {
             <View style={{flex: 1}}>
                <Text variant="titleMedium" style={styles.productName}>{item.productName}</Text>
                <Text style={styles.date}>
-                 {item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Just now'}
+                 {/* ✅ Safely formatted date */}
+                 {formatDate(item.createdAt)}
                </Text>
             </View>
             <Chip 
@@ -166,7 +182,7 @@ export default function AdminCustomRequirementsScreen() {
              <View style={styles.row}><Text style={styles.label}>Contact No:</Text><Text style={styles.value}>{finalPhone || 'N/A'}</Text></View>
           </View>
 
-          {/* 🚀 NEW: Quotes Section */}
+          {/* Quotes Section */}
           {reqQuotes.length > 0 && (
              <View style={{ marginTop: 8, marginBottom: 12 }}>
                 <Text style={{ fontWeight: 'bold', marginBottom: 8, color: '#334155' }}>Submitted Quotes ({reqQuotes.length})</Text>

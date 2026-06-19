@@ -6,6 +6,22 @@ import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'fi
 import { db } from '../../config/firebase';
 import { SupplierQuote } from '../../types';
 
+// ✅ Helper to safely parse Firebase Timestamps, strings, or numbers
+const parseDate = (dateVal: any): Date | null => {
+  if (!dateVal) return null;
+  if (typeof dateVal.toDate === 'function') return dateVal.toDate();
+  if (dateVal.seconds) return new Date(dateVal.seconds * 1000);
+  const parsed = new Date(dateVal);
+  if (!isNaN(parsed.getTime())) return parsed;
+  return null;
+};
+
+const formatDate = (dateVal: any) => {
+  const date = parseDate(dateVal);
+  if (!date) return 'N/A';
+  return date.toLocaleString();
+};
+
 export default function AdminBroadcastBidsScreen() {
   const theme = useTheme();
   const [quotes, setQuotes] = useState<SupplierQuote[]>([]);
@@ -13,19 +29,26 @@ export default function AdminBroadcastBidsScreen() {
   const [adminFinalPrice, setAdminFinalPrice] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // ✅ Cache to dynamically hold supplier contact info
+  // Cache to dynamically hold supplier contact info
   const [userCache, setUserCache] = useState<Record<string, { phone: string }>>({});
 
   useEffect(() => {
     const q = query(collection(db, 'supplierQuotes'), where('status', '==', 'PENDING'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedQuotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupplierQuote));
+      
+      // ✅ Sort descending (Newest first)
+      fetchedQuotes.sort((a, b) => {
+        const dateA = parseDate(a.createdAt)?.getTime() || 0;
+        const dateB = parseDate(b.createdAt)?.getTime() || 0;
+        return dateB - dateA; 
+      });
+
       setQuotes(fetchedQuotes);
     });
     return () => unsubscribe();
   }, []);
 
-  // ✅ Fetch user profiles for any suppliers missing phone numbers in our cache
   useEffect(() => {
     const missingIds = [...new Set(quotes.map(q => q.supplierId).filter(id => id && !userCache[id]))];
     
@@ -74,9 +97,6 @@ export default function AdminBroadcastBidsScreen() {
       // 2. Mark Quote as Accepted
       await updateDoc(doc(db, 'supplierQuotes', selectedQuote!.id!), { status: 'ACCEPTED' });
       
-      // ❌ REMOVED: We DO NOT close the Live Lead here anymore. 
-      // The lead stays 'OPEN' on the Live Market until the Buyer officially accepts it.
-
       // 3. Handle based on where the requirement originated from
       if (originalReqId) {
         if (sourceType === 'RFQ' || leadData?.rfqId) {
@@ -126,13 +146,18 @@ export default function AdminBroadcastBidsScreen() {
     return (
       <Card style={styles.card} mode="outlined">
         <Card.Content>
-          <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{item.productName}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{flex: 1}}>
+              <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{item.productName}</Text>
+              {/* ✅ Added Date properly parsed */}
+              <Text style={{ fontSize: 11, color: '#94A3B8', marginBottom: 8 }}>{formatDate(item.createdAt)}</Text>
+            </View>
+          </View>
           <View style={styles.supplierBox}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                <Text variant="bodyMedium" style={{ color: '#64748B' }}>Supplier:</Text>
                <Text variant="bodyMedium" style={{ fontWeight: 'bold' }}>{item.supplierName}</Text>
             </View>
-            {/* ✅ Added Contact Details visually */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                <Text variant="bodyMedium" style={{ color: '#64748B' }}>Contact No:</Text>
                <Text variant="bodyMedium" style={{ fontWeight: 'bold' }}>{finalPhone || 'N/A'}</Text>
@@ -152,7 +177,6 @@ export default function AdminBroadcastBidsScreen() {
           </View>
         </Card.Content>
         <Card.Actions style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 16 }}>
-          {/* ✅ Call Supplier Button Added */}
           <Button 
             mode="contained-tonal" 
             icon="phone" 

@@ -46,7 +46,7 @@ export interface User {
     shopLicense?: boolean;
     udyogAadhar?: boolean;
   }  
-  verified: boolean;
+  verified?: boolean;
   kycStatus?: 'pending' | 'verified' | 'rejected';
   profile?: any;
   createdAt?: any;
