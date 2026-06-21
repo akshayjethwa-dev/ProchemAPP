@@ -115,7 +115,6 @@ exports.onRequirementCreated = onDocumentCreated(
       const displayPrice = targetPrice ? `₹${targetPrice}` : "Negotiable";
       const displayQty = `${quantity} ${unit}`.trim() || "Check App";
       
-      // Clean text backup message structured line-by-line
       const msg = `🔔 *New Buyer Requirement on Prochem*\n\n🧪 *Product:* ${productName}\n📦 *Quantity:* ${displayQty}\n💰 *Target Price:* ${displayPrice}\n🔢 *Requirement ID:* #${docId}\n\nPlease open the Prochem app to view full details and submit your quotation.`;
 
       const usersToAlert = [];
@@ -125,6 +124,9 @@ exports.onRequirementCreated = onDocumentCreated(
         const userData = doc.data();
         const userId = doc.id;
 
+        // FIX 1: Support both 'phone' and 'phoneNumber' database fields
+        const userPhone = userData.phoneNumber || userData.phone;
+
         const isExcluded = 
           userId === buyerId || 
           (reqData.excludedSellerIds && reqData.excludedSellerIds.includes(userId)) || 
@@ -132,22 +134,24 @@ exports.onRequirementCreated = onDocumentCreated(
 
         const prefs = userData.whatsappPreferences || {};
         const wantsMarketAlerts = prefs.marketAlerts !== false; 
-        const hasOptIn = userData.whatsappOptIn === true;
-        const hasPhone = !!userData.phoneNumber;
+        
+        // FIX 2: Relax explicit check to true so legacy users without this field still get notifications
+        const hasOptIn = userData.whatsappOptIn !== false; 
+        const hasPhone = !!userPhone;
 
         if (userId === buyerId) {
-           debugLog += `- Skipped ${userData.phoneNumber || userId}: This is the buyer.\n`;
-        } else if (!hasOptIn) {
-           debugLog += `- Skipped ${userData.phoneNumber || userId}: whatsappOptIn is missing/false.\n`;
+           debugLog += `- Skipped ${userPhone || userId}: This is the buyer.\n`;
         } else if (!hasPhone) {
            debugLog += `- Skipped ${userId}: No phone number on profile.\n`;
+        } else if (!hasOptIn) {
+           debugLog += `- Skipped ${userPhone}: User explicitly opted out of WhatsApp (whatsappOptIn is false).\n`;
         } else if (!wantsMarketAlerts) {
-           debugLog += `- Skipped ${userData.phoneNumber}: User turned off market alerts.\n`;
+           debugLog += `- Skipped ${userPhone}: User turned off market alerts.\n`;
         } else if (isExcluded) {
-           debugLog += `- Skipped ${userData.phoneNumber}: User explicitly excluded.\n`;
+           debugLog += `- Skipped ${userPhone}: User explicitly excluded.\n`;
         } else {
-           usersToAlert.push({ userId, phoneNumber: userData.phoneNumber });
-           debugLog += `✅ ADDED ${userData.phoneNumber} to broadcast list.\n`;
+           usersToAlert.push({ userId, phoneNumber: userPhone });
+           debugLog += `✅ ADDED ${userPhone} to broadcast list.\n`;
         }
       });
 
@@ -166,7 +170,6 @@ exports.onRequirementCreated = onDocumentCreated(
          return null;
       }
 
-      // 🚀 Batch Sender with 3-second pacing delays to comply with Meta high volume rules
       const chunkSize = 10; 
       
       for (let i = 0; i < usersToAlert.length; i += chunkSize) {
@@ -175,7 +178,7 @@ exports.onRequirementCreated = onDocumentCreated(
         await Promise.all(chunk.map(user => 
           sendWhatsApp(user.phoneNumber, msg, null, {
             templateName: "prochem_requirement_utility", 
-            templateSid: "HX22bc4b7900f3e532683be8f71cb1a1cc", // Update this when Twilio provides the SID
+            templateSid: "HX22bc4b7900f3e532683be8f71cb1a1cc", 
             templateVariables: {
               "1": String(productName),
               "2": String(displayQty),
@@ -223,8 +226,9 @@ exports.onDirectRfqCreated = onDocumentCreated(
       if (!sellerDoc.exists) return null;
       
       const sellerData = sellerDoc.data();
+      const sellerPhone = sellerData.phoneNumber || sellerData.phone;
       
-      if (sellerData.phoneNumber && sellerData.whatsappOptIn) {
+      if (sellerPhone && sellerData.whatsappOptIn !== false) {
           const companyName = sellerData.companyName || sellerData.businessName || "Supplier";
           const targetPrice = rfqData.targetPrice || "Negotiable";
           const location = rfqData.deliveryPincode || "Check App";
@@ -232,9 +236,9 @@ exports.onDirectRfqCreated = onDocumentCreated(
           
           const msg = `🔔 *New Negotiation Request — Prochem*\n\nHi ${companyName},\n\nA verified buyer wants to negotiate on your product:\n\n🧪 *Product:* ${rfqData.productName}\n📦 *Qty Requested:* ${rfqData.targetQuantity} ${rfqData.unit}\n💰 *Buyer's Target Price:* ₹${targetPrice} / ${rfqData.unit}\n📍 *Delivery Location:* ${location}\n\n*Negotiation ID:* #${rfqId}\n\nTo view details and chat with the buyer, please click the button below.`;
           
-          await sendWhatsApp(sellerData.phoneNumber, msg, null, {
+          await sendWhatsApp(sellerPhone, msg, null, {
             templateName: "new_negotiation_alert",
-            templateSid: "HX672fc71PbWWqgKDBDorh525uecKaGZD21FGSoCeR", // 🚀 REPLACE WITH APPROVED SID
+            templateSid: "EME9M9cSy9FvfHvcx2gMPkp1H5Dj4YaKufPRsAyon8Tf", 
             templateVariables: {
                 "1": companyName,
                 "2": rfqData.productName,
@@ -257,26 +261,7 @@ exports.onDirectRfqCreated = onDocumentCreated(
 );
 
 // ==========================================
-// 🚀 TWILIO WHATSAPP INTEGRATION TEST
-// ==========================================
-exports.sendWhatsAppTest = functions
-  .region("asia-south1") 
-  .https.onRequest(async (req, res) => {
-  if (!process.env.MY_PERSONAL_WHATSAPP) return res.status(500).send("MY_PERSONAL_WHATSAPP is not configured in .env yet.");
-  try {
-    const messageSid = await sendWhatsApp(process.env.MY_PERSONAL_WHATSAPP, "Hello! This is a test message from the new Prochem reusable WhatsApp module.", null, {
-      templateName: "System_Test",
-      type: "service"
-    });
-    res.status(200).send(`Message sent successfully! Message SID: ${messageSid}`);
-  } catch (error) {
-    res.status(500).send(`Failed to send message. Check Firebase logs for details. Error: ${error.message}`);
-  }
-});
-
-// ==========================================
 // 🚀 INBOUND WHATSAPP WEBHOOK (TWILIO)
-// Handles "INTEREST" and redirects chat attempts
 // ==========================================
 exports.whatsappWebhook = functions
   .region("asia-south1")
@@ -300,6 +285,9 @@ exports.whatsappWebhook = functions
       const usersRef = admin.firestore().collection("users");
       let snapshot = await usersRef.where("phoneNumber", "==", localNumber).get();
       if (snapshot.empty) snapshot = await usersRef.where("phoneNumber", "==", incomingNumber).get();
+      // FIX 3: Also search for incoming numbers registered under the "phone" field
+      if (snapshot.empty) snapshot = await usersRef.where("phone", "==", localNumber).get();
+      if (snapshot.empty) snapshot = await usersRef.where("phone", "==", incomingNumber).get();
 
       let senderId = snapshot.empty ? null : snapshot.docs[0].id;
       const db = admin.firestore();
@@ -328,9 +316,6 @@ exports.whatsappWebhook = functions
 
         const upperCleanBody = rawBody.toUpperCase().replace(/\*/g, '');
         
-        // ==========================================
-        // 🚀 FLOW 1: NEW NEGOTIATION COMMAND (INTEREST)
-        // ==========================================
         if (upperCleanBody.startsWith("INTEREST ")) {
           const rfqId = upperCleanBody.split(" ")[1];
           
@@ -382,18 +367,14 @@ exports.whatsappWebhook = functions
               await sendWhatsApp(incomingNumber, `❌ We couldn't find an RFQ with ID: ${rfqId}. It may have been fulfilled or expired.`, null, { templateName: "System_Error", type: "service", userId: senderId });
             }
           }
-        } 
-        // ==========================================
-        // 🚀 FLOW 2: REDIRECT CHAT ATTEMPTS TO APP
-        // ==========================================
-        else {
+        } else {
           await sendWhatsApp(
             incomingNumber, 
             `🚫 Direct replies via WhatsApp are not supported.\n\nTo keep your negotiations secure and prevent missing messages, please view and reply to active chats directly inside the platform.`, 
             null, 
             { 
               templateName: "app_redirect_notice", 
-              templateSid: "HX_APP_REDIRECT_NOTICE_SID", // 🚀 REPLACE WITH APPROVED SID
+              templateSid: "HX_APP_REDIRECT_NOTICE_SID", 
               type: "service", 
               userId: senderId 
             }
@@ -452,21 +433,21 @@ exports.onAppMessageCreated = onDocumentCreated(
         
         const prefs = targetUserData.whatsappPreferences || {};
         const wantsNegotiations = prefs.negotiations !== false; 
+        const targetPhone = targetUserData.phoneNumber || targetUserData.phone;
 
-        if (targetUserData.phoneNumber && targetUserData.whatsappOptIn && wantsNegotiations) {
+        if (targetPhone && targetUserData.whatsappOptIn !== false && wantsNegotiations) {
           const deepLink = `https://app.prochemapp.com/negotiation/${convData.rfqId}`;
           let outMsg = "";
           let templateUsed = "";
           let templateSid = "";
           let templateVariables = {};
 
-          // 🚀 TEMPLATE 3: FORMAL OFFER 
           if (messageData.isOffer && messageData.senderRole === 'seller') {
              const totalValue = (messageData.proposedQty * messageData.proposedPrice).toFixed(2);
              
              outMsg = `💰 *Formal Offer Received*\n_Prochem — Negotiation #${convData.rfqId}_\n\nThe supplier has sent you a confirmed offer:\n\n🧪 ${rfqData.productName}\n📦 Qty: ${messageData.proposedQty} ${rfqData.unit}\n💵 Price: ₹${messageData.proposedPrice}\n\n*Total Value: ₹${totalValue}* (excl. GST & fees)\n\n👉 Open in App to Accept: ${deepLink}`;
              templateUsed = "formal_offer_received";
-             templateSid = "HX3b3ccf973fe8a1dcea5586c1714bc671"; // 🚀 REPLACE WITH APPROVED SID
+             templateSid = "HX3b3ccf973fe8a1dcea5586c1714bc671"; 
              templateVariables = {
                  "1": convData.rfqId,
                  "2": rfqData.productName,
@@ -475,15 +456,13 @@ exports.onAppMessageCreated = onDocumentCreated(
                  "5": totalValue,
                  "6": deepLink
              };
-          } 
-          // 🚀 TEMPLATE 2: STANDARD CHAT MESSAGES
-          else {
+          } else {
              const actualMsg = messageData.body || messageData.text;
              if (!actualMsg) return null;
 
              outMsg = `💬 *New Message — Prochem Negotiation*\n\n*Requirement:* ${rfqData.productName} (#${convData.rfqId})\n\n*Message:*\n"${actualMsg}"\n\n_To reply to this message securely, please open the app._`;
              templateUsed = "chat_message_relay";
-             templateSid = "HXde0a53b6349cdd5e03b33dd6a6638245"; // 🚀 REPLACE WITH APPROVED SID
+             templateSid = "HXde0a53b6349cdd5e03b33dd6a6638245";
              templateVariables = {
                  "1": rfqData.productName,
                  "2": convData.rfqId,
@@ -493,7 +472,7 @@ exports.onAppMessageCreated = onDocumentCreated(
           }
 
           if (outMsg !== "") {
-            await sendWhatsApp(targetUserData.phoneNumber, outMsg, null, {
+            await sendWhatsApp(targetPhone, outMsg, null, {
               templateName: templateUsed,
               templateSid: templateSid,
               templateVariables: templateVariables,
@@ -533,7 +512,9 @@ exports.onRfqUpdated = onDocumentUpdated(
              if (!sellerDoc.exists) return null;
              
              const sellerData = sellerDoc.data();
-             if (sellerData.phoneNumber && sellerData.whatsappOptIn) {
+             const sellerPhone = sellerData.phoneNumber || sellerData.phone;
+
+             if (sellerPhone && sellerData.whatsappOptIn !== false) {
                  
                  const subtotal = after.agreedQuantity * after.agreedPrice;
                  const gst = subtotal * 0.18; 
@@ -544,9 +525,9 @@ exports.onRfqUpdated = onDocumentUpdated(
                  
                  const msg = `🎉 *Buyer Accepted Your Offer!*\n_Prochem — Negotiation #${rfqId}_\n\n*Product:* ${after.productName}\n*Quantity:* ${after.agreedQuantity} ${after.unit}\n*Agreed Price:* ₹${after.agreedPrice}\n*Your Payout:* ₹${payoutAmount} _(after Prochem fees)_\n\nThe buyer is completing payment now.\nYou will receive a dispatch notification once payment is verified.\nPlease keep stock ready.`;
                  
-                 await sendWhatsApp(sellerData.phoneNumber, msg, null, {
+                 await sendWhatsApp(sellerPhone, msg, null, {
                    templateName: "offer_accepted_alert",
-                   templateSid: "HX71d16959f0a9fe8498278db4e34daab4", // 🚀 REPLACE WITH APPROVED SID
+                   templateSid: "HX71d16959f0a9fe8498278db4e34daab4",
                    templateVariables: {
                        "1": rfqId,
                        "2": after.productName,
@@ -584,16 +565,17 @@ exports.onUserCreated = onDocumentCreated(
 
     const userData = snap.data();
     const userId = event.params.userId;
+    const userPhone = userData.phoneNumber || userData.phone;
 
-    if (userData.phoneNumber && userData.whatsappOptIn) {
+    if (userPhone && userData.whatsappOptIn !== false) {
       try {
         const companyName = userData.companyName || "Valued User";
         
         const msg = `🧪 *Welcome to Prochem!*\n\nHi ${companyName}, your account is now active.\n\n*What you can do on Prochem:*\n• 🔍 Browse chemicals & pharma products\n• 📋 Post your requirements to get seller quotes\n• 💬 Negotiate price directly via this chat\n• 📦 Track your orders in real-time\n\nHere's how to get started:\n✅ *Step 1:* Complete your company profile\n✅ *Step 2:* Add your chemicals/products\n✅ *Step 3:* Start receiving live buyer requirements\n\n_Prochem — India's Trusted B2B Chemical Marketplace_`;
         
-        await sendWhatsApp(userData.phoneNumber, msg, null, {
+        await sendWhatsApp(userPhone, msg, null, {
           templateName: "prochem_welcome", 
-          templateSid: "HXcb7cb50a9601acbe304cc5a01fc1b89b", // Kept original welcome SID
+          templateSid: "HXcb7cb50a9601acbe304cc5a01fc1b89b",
           templateVariables: { "1": companyName },
           type: "marketing", 
           userId: userId
@@ -609,6 +591,24 @@ exports.onUserCreated = onDocumentCreated(
     return null;
   }
 );
+
+// ==========================================
+// 🚀 TWILIO WHATSAPP INTEGRATION TEST
+// ==========================================
+exports.sendWhatsAppTest = functions
+  .region("asia-south1") 
+  .https.onRequest(async (req, res) => {
+  if (!process.env.MY_PERSONAL_WHATSAPP) return res.status(500).send("MY_PERSONAL_WHATSAPP is not configured in .env yet.");
+  try {
+    const messageSid = await sendWhatsApp(process.env.MY_PERSONAL_WHATSAPP, "Hello! This is a test message from the new Prochem reusable WhatsApp module.", null, {
+      templateName: "System_Test",
+      type: "service"
+    });
+    res.status(200).send(`Message sent successfully! Message SID: ${messageSid}`);
+  } catch (error) {
+    res.status(500).send(`Failed to send message. Check Firebase logs for details. Error: ${error.message}`);
+  }
+});
 
 // ==========================================
 // 🚀 CASHFREE: CREATE ORDER
