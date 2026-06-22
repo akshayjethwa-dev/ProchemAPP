@@ -7,7 +7,10 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 
-// 🚀 UPDATED: Imported processMobileLogin
+// 🚀 FIX: Imported Web Auth modules to fix the SDK mismatch
+import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
+import { auth } from '../config/firebase';
+
 import { completeRegistrationAfterOTP, processMobileLogin } from '../services/authService';
 import { useAppStore } from '../store/appStore'; 
 
@@ -58,7 +61,10 @@ export default function OTPVerificationScreen() {
       if (Platform.OS === 'web') {
         userCredential = await webConfirmation.confirm(otp);
       } else {
-        userCredential = await nativeConfirmation.confirm(otp);
+        // 🚀 FIX: SDK MISMATCH RESOLUTION
+        // Confirm the native verification ID using the Web SDK so Firestore gets the auth token
+        const credential = PhoneAuthProvider.credential(nativeConfirmation.verificationId, otp);
+        userCredential = await signInWithCredential(auth, credential);
       }
 
       // 2. Process based on Mode
@@ -73,7 +79,6 @@ export default function OTPVerificationScreen() {
       // Reset onboarding state so that RootNavigator handles redirect to OnboardingScreen
       useAppStore.getState().resetOnboarding();
 
-      // SUCCESS! Keep the button spinning while RootNavigator handles the redirect
     } catch (error: any) {
       console.error('OTP Verification Error:', error);
       

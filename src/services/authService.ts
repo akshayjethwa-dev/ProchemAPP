@@ -15,18 +15,13 @@ import {
   doc, 
   getDoc, 
   setDoc, 
-  updateDoc, // 🚀 NEW: Added for the new function
+  updateDoc, 
   deleteDoc,
   collection,   
   addDoc
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User, UserRole } from '../types';
-
-let nativeAuthModule: any;
-if (Platform.OS !== 'web') {
-  nativeAuthModule = require('@react-native-firebase/auth').default;
-}
 
 interface RegisterData {
   email: string;
@@ -84,7 +79,6 @@ export const processMobileLogin = async (firebaseUser: any, phoneNumber: string)
         kycStatus: 'pending',
         createdAt: new Date().toISOString(),
         
-        // 🚀 CRITICAL NEW FIELDS FOR TASK 8
         registrationType: 'mobile',
         hasPassword: false,
         isGSTVerified: false,
@@ -102,7 +96,6 @@ export const processMobileLogin = async (firebaseUser: any, phoneNumber: string)
   }
 }
 
-
 // Complete full registration after phone is verified
 export const completeRegistrationAfterOTP = async (
   firebaseUser: any, 
@@ -110,15 +103,11 @@ export const completeRegistrationAfterOTP = async (
 ): Promise<any> => {
   try {
     try {
-      if (Platform.OS === 'web') {
-        const credential = WebEmailAuthProvider.credential(formData.email, formData.password);
-        await webLinkWithCredential(firebaseUser, credential);
-        await webUpdateProfile(firebaseUser, { displayName: formData.companyName });
-      } else {
-        const credential = nativeAuthModule.EmailAuthProvider.credential(formData.email, formData.password);
-        await firebaseUser.linkWithCredential(credential);
-        await firebaseUser.updateProfile({ displayName: formData.companyName });
-      }
+      // 🚀 FIX: Unified linking process. 
+      // 'firebaseUser' is compatible with WebEmailAuthProvider everywhere now.
+      const credential = WebEmailAuthProvider.credential(formData.email, formData.password);
+      await webLinkWithCredential(firebaseUser, credential);
+      await webUpdateProfile(firebaseUser, { displayName: formData.companyName });
     } catch (linkError: any) {
       console.error("Linking error:", linkError);
       if (linkError.code === 'auth/provider-already-linked' || linkError.code === 'auth/credential-already-in-use') {
@@ -145,7 +134,6 @@ export const completeRegistrationAfterOTP = async (
       documents: { gstin: false, shopLicense: false, udyogAadhar: false },
       createdAt: new Date().toISOString(),
       
-      // 🚀 CRITICAL NEW FIELDS FOR TASK 8
       registrationType: 'full',
       hasPassword: true,
       isGSTVerified: formData.gstVerified || false,
