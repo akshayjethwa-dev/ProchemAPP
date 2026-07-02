@@ -1,10 +1,17 @@
+// File: src/screens/admin/AdminUsersScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, FlatList, Alert, Linking, StyleSheet } from 'react-native';
+import { View, FlatList, Alert, Linking, StyleSheet, Platform } from 'react-native'; // 🚀 FIX: Imported Platform
 import { Text, Card, Button, Chip, ActivityIndicator, IconButton, SegmentedButtons, Avatar, Divider, Searchbar } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { getAllUsers, verifyUserKYC } from '../../services/adminService';
 import { User } from '../../types';
 import { useAppStore } from '../../store/appStore';
+
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../config/firebase'; 
+
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 export default function AdminUsersScreen() {
   const navigation = useNavigation<any>();
@@ -43,6 +50,67 @@ export default function AdminUsersScreen() {
     setLoading(false);
   };
 
+  const exportUsersToCSV = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        Alert.alert('Exporting', 'Preparing your CSV file...');
+      }
+      
+      const querySnapshot = await getDocs(collection(db, 'users'));
+      
+      let csvString = 'UID,Company Name,Email,Phone,User Type,GST Verified,Registration Type\n';
+  
+      querySnapshot.forEach((doc) => {
+        const user = doc.data();
+        const safeString = (str: any) => str ? `"${String(str).replace(/"/g, '""')}"` : '""';
+  
+        csvString += `${safeString(user.uid)},` +
+                     `${safeString(user.companyName)},` +
+                     `${safeString(user.email)},` +
+                     `${safeString(user.phoneNumber)},` +
+                     `${safeString(user.userType)},` +
+                     `${user.isGSTVerified ? 'Yes' : 'No'},` +
+                     `${safeString(user.registrationType)}\n`;
+      });
+  
+      // 🚀 FIX: Branch logic based on platform
+      if (Platform.OS === 'web') {
+        // --- WEB BROWSER DOWNLOAD ---
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'Prochem_Users_Export.csv');
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+      } else {
+        // --- NATIVE MOBILE DOWNLOAD ---
+        const fileUri = FileSystem.cacheDirectory + 'Prochem_Users_Export.csv';
+    
+        await FileSystem.writeAsStringAsync(fileUri, csvString);
+    
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'text/csv',
+            dialogTitle: 'Download Users Data',
+            UTI: 'public.comma-separated-values-text'
+          });
+        } else {
+          Alert.alert('Error', 'Sharing is not available on this device');
+        }
+      }
+  
+    } catch (error) {
+      console.error('Error exporting users:', error);
+      Alert.alert('Export Failed', 'Could not generate the CSV file.');
+    }
+  };
+
   const handleVerify = (uid: string, name: string) => {
     Alert.alert('Approve KYC', `Verify ${name} as a trusted business?`, [
       { text: 'Cancel' },
@@ -69,7 +137,6 @@ export default function AdminUsersScreen() {
         { 
           text: 'Proceed', 
           onPress: () => {
-            // 🚀 FIX: Delay the state update so the Alert closes before unmounting
             setTimeout(() => {
               impersonateUser(targetUser, currentAdmin);
             }, 400);
@@ -135,7 +202,11 @@ export default function AdminUsersScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text variant="headlineSmall" style={{fontWeight:'bold'}}>Company Directory</Text>
-        <IconButton icon="refresh" onPress={loadData} />
+        
+        <View style={{ flexDirection: 'row' }}>
+          <IconButton icon="file-export" iconColor="#004AAD" onPress={exportUsersToCSV} />
+          <IconButton icon="refresh" onPress={loadData} />
+        </View>
       </View>
 
       <View style={{paddingHorizontal: 16, paddingBottom: 10}}>

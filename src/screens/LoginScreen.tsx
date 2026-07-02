@@ -268,7 +268,7 @@ export default function LoginScreen() {
                 labelStyle={styles.registerBtnLabel}
                 textColor="#2563EB"
               >
-                Continue with mobile number (Coming soon)
+                Continue with mobile number
               </Button>
             </View>
 
