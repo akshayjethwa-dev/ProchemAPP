@@ -103,13 +103,11 @@ export default function NegotiationRoomScreen() {
           });
           setConversationId(newConvRef.id);
 
-          // ✅ SYSTEM MESSAGE: Add initial context message for the new negotiation
+          // ✅ UPDATED SYSTEM MESSAGE: Removed Buyer and Supplier names for privacy
           const initialContextMsg = `System: Negotiation started for ${activeItem.productName || 'Product'}
 Quantity: ${activeItem.targetQuantity || 'N/A'} ${activeItem.unit || ''}
 Target Price: ₹${activeItem.targetPrice || 'N/A'} / ${activeItem.unit || ''}
-Reference ID: ${activeItem.id || 'N/A'}
-Buyer: ${activeItem.buyerName || 'N/A'}
-Supplier: ${activeItem.sellerName || 'N/A'}`;
+Reference ID: ${activeItem.id || 'N/A'}`;
 
           await addDoc(collection(db, 'conversations', newConvRef.id, 'messages'), {
             rfqId: activeItem.id,

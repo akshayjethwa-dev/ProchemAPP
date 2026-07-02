@@ -64,10 +64,12 @@ export default function SellerLiveLeadsScreen() {
     const filtered = rawLeads.filter(lead => {
       if (lead.excludedSellerId === user?.uid) return false;
       if (user?.uid && lead.excludedSellerIds && lead.excludedSellerIds.includes(user.uid)) return false;
+      
+      // ✅ UPDATED: Hide the lead if the seller is currently negotiating this specific product
       const isNegotiating = activeRfqs.some(rfq => 
         (lead.rfqId && lead.rfqId === rfq.id) || 
         (lead.originalOrderId && lead.originalOrderId === rfq.id) || 
-        (rfq.productName.toLowerCase() === lead.productName.toLowerCase() && String(rfq.targetQuantity) === String(lead.quantityRequired))
+        (rfq.productName?.toLowerCase().trim() === lead.productName?.toLowerCase().trim()) // Exclude by product name match
       );
       return !isNegotiating;
     });
