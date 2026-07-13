@@ -102,8 +102,10 @@ export default function AdminNavigator() {
       }}
     >
       <Tab.Screen name="DashboardTab" component={DashboardStackNavigator} options={{ tabBarLabel: 'Dashboard', tabBarIcon: ({color}) => <IconButton icon="view-dashboard" iconColor={color} size={24} /> }} />
-      {!isSubAdmin && <Tab.Screen name="Users" component={UserStackNavigator} options={{ tabBarIcon: ({color}) => <IconButton icon="account-group" iconColor={color} size={24} /> }} />}
-      {/* Renamed to Products and bound to the new Stack */}
+      
+      {/* ✅ Sub-Admins now have access to the Users (Companies) list tab */}
+      <Tab.Screen name="Users" component={UserStackNavigator} options={{ tabBarIcon: ({color}) => <IconButton icon="account-group" iconColor={color} size={24} /> }} />
+      
       {!isSubAdmin && <Tab.Screen name="Products" component={ProductsStackNavigator} options={{ tabBarIcon: ({color}) => <IconButton icon="shield-check" iconColor={color} size={24} /> }} />}
       <Tab.Screen name="Orders" component={AdminOrderVerification} options={{ tabBarLabel: 'Verification', tabBarIcon: ({color}) => <IconButton icon="file-certificate" iconColor={color} size={24} /> }} />
       {!isSubAdmin && <Tab.Screen name="NAPayments" component={AdminPaymentsScreen} options={{ tabBarLabel: 'Finance', tabBarIcon: ({ color }) => <IconButton icon="finance" iconColor={color} size={24} /> }} />}

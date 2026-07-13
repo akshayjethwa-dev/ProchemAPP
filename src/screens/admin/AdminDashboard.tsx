@@ -117,7 +117,7 @@ export default function AdminDashboard() {
         {loading ? <ActivityIndicator size="large" color={theme.colors.primary} /> : (
           <View style={styles.grid}>
             
-            {/* 🛑 HIDE: Remove Total Users and Total Products for sub_admin */}
+            {/* 🛑 HIDE FROM SUB_ADMIN: Total Users and Total Products are now back inside the conditional restriction */}
             {!isSubAdmin && (
               <>
                 <Card style={styles.card}>
@@ -135,7 +135,7 @@ export default function AdminDashboard() {
               </>
             )}
 
-            {/* ✅ KEEP: Sub_admin only sees Total Orders in the platform overview */}
+            {/* ✅ KEEP: Both sub_admin and full admin see Total Orders in the platform overview */}
             <Card style={styles.card}>
               <Card.Content>
                 <Text variant="displaySmall" style={{color: '#2E7D32', fontWeight:'bold'}}>{stats.totalOrders}</Text>
@@ -246,7 +246,7 @@ export default function AdminDashboard() {
 
             <Text variant="titleMedium" style={{marginBottom: 10, fontWeight:'bold'}}>System Health & Logs</Text>
             
-            {/* ✅ NEW: WhatsApp Logs Navigation Card */}
+            {/* ✅ WhatsApp Logs Navigation Card */}
             <Card 
               style={{backgroundColor:'#E8F5E9', marginBottom: 12}} 
               onPress={() => navigation.navigate('AdminWhatsAppLogs')}
@@ -276,7 +276,6 @@ export default function AdminDashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  // 🚀 FIX: Removed uniform padding, leaving horizontal/bottom to allow dynamic paddingTop to work cleanly
   header: { backgroundColor: '#1E293B', paddingHorizontal: 20, paddingBottom: 20, flexDirection:'row', justifyContent:'space-between', alignItems:'center' },
   content: { padding: 16 },
   grid: { flexDirection: 'row', gap: 10, flexWrap:'wrap' },
