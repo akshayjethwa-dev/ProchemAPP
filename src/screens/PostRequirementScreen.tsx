@@ -51,6 +51,7 @@ export default function PostRequirementScreen() {
         await addDoc(collection(db, 'broadcastLeads'), {
           originalOrderId: docRef.id,
           sourceType: 'CUSTOM', // Identifies this as a Custom Requirement
+          buyerId: user?.uid || 'UNKNOWN', // 🚀 FIXED: Added buyerId so the creator doesn't see their own post
           productName: productName.trim(),
           quantityRequired: quantity.trim(),
           unit: unit.trim(),

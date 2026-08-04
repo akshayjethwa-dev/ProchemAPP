@@ -43,7 +43,7 @@ interface AppState {
   stopImpersonating: () => void;
 
   upgradeUserToPremium: (expiryDate: string | Date, paymentRef: string) => void;
-  updateUserCredits: (updates: Partial<User>) => void;
+  // ✅ REMOVED: updateUserCredits
 }
 
 export const useAppStore = create<AppState>()(
@@ -138,10 +138,7 @@ export const useAppStore = create<AppState>()(
         };
       }),
 
-      updateUserCredits: (updates) => set((state) => {
-        if (!state.user) return state;
-        return { user: { ...state.user, ...updates } as User };
-      }),
+      // ✅ REMOVED: updateUserCredits implementation
     }),
     {
       name: 'prochem-app-storage', 

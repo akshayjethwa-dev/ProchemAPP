@@ -4,7 +4,7 @@ import { View, ScrollView, StyleSheet, TouchableOpacity, Share, Alert, Linking }
 import { Text, Card, ActivityIndicator, Button, useTheme, Avatar, IconButton, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, getDocs, onSnapshot, limit, orderBy, doc, updateDoc, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { logoutUser } from '../services/authService';
@@ -14,7 +14,7 @@ import { ProfileCompletionBanner } from '../components/ProfileCompletionBanner';
 export default function SellerDashboard() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
-  const { user, updateUserCredits } = useAppStore();
+  const { user } = useAppStore();
   
   const [stats, setStats] = useState({ activeOrders: 0, totalProducts: 0, totalRevenue: 0 });
   const [loading, setLoading] = useState(true);
@@ -27,9 +27,19 @@ export default function SellerDashboard() {
     if (!user) return;
     loadSellerStats();
     
-    const leadsQuery = query(collection(db, 'broadcastLeads'), where('status', '==', 'OPEN'), orderBy('createdAt', 'desc'), limit(3));
+    const leadsQuery = query(collection(db, 'broadcastLeads'), where('status', '==', 'OPEN'), orderBy('createdAt', 'desc'));
     const unsubscribeLeads = onSnapshot(leadsQuery, (snapshot) => {
-      setRecentLeads(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead)));
+      const allLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead));
+      
+      // 🚀 FIXED: Filter out leads that belong to the current user
+      const filteredLeads = allLeads.filter(lead => {
+        if (lead.buyerId === user.uid) return false;
+        if (lead.excludedSellerId === user.uid) return false;
+        if (lead.excludedSellerIds && lead.excludedSellerIds.includes(user.uid)) return false;
+        return true;
+      });
+
+      setRecentLeads(filteredLeads);
     });
 
     return () => unsubscribeLeads();
@@ -65,13 +75,7 @@ export default function SellerDashboard() {
     try {
       const result = await Share.share({ message: `Grow your chemical business on Prochem! Access live market requirements. Register: https://play.google.com/store/apps/details?id=com.prochem.app` });
       if (result.action === Share.sharedAction && user?.uid) {
-        if (!isPremium) {
-          await updateDoc(doc(db, 'users', user.uid), { liveQuoteCredits: increment(1) });
-          updateUserCredits({ liveQuoteCredits: (user.liveQuoteCredits || 3) + 1 });
-          Alert.alert("Reward Unlocked! 🚀", "You've earned 1 extra FREE Live Market Quote.");
-        } else {
-          Alert.alert("Thank You! 🙏", "Thanks for helping grow the Prochem network!");
-        }
+        Alert.alert("Thank You! 🙏", "Thanks for helping grow the Prochem network!");
       }
     } catch (error: any) { console.error(error.message); }
   };
@@ -92,7 +96,6 @@ export default function SellerDashboard() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 🚀 NEW: Profile Completion Banner */}
         {user && (
           <ProfileCompletionBanner 
             user={user} 
@@ -128,7 +131,7 @@ export default function SellerDashboard() {
           {recentLeads.length === 0 ? (
             <View style={{padding: 20, alignItems: 'center'}}><Text style={{color: '#64748B'}}>No live requirements right now.</Text></View>
           ) : (
-            recentLeads.map((lead, index) => (
+            recentLeads.slice(0, 3).map((lead, index) => (
               <View key={lead.id}>
                 <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('SellerLiveLeads')}>
                   <View style={[styles.iconBox, {backgroundColor: '#E0F2FE'}]}><Text>🎯</Text></View>
@@ -138,7 +141,7 @@ export default function SellerDashboard() {
                   </View>
                   <IconButton icon="chevron-right" size={20} iconColor="#CBD5E1" style={{margin: 0}} />
                 </TouchableOpacity>
-                {index < recentLeads.length - 1 && <Divider style={{marginLeft: 56}} />}
+                {index < 2 && index < recentLeads.length - 1 && <Divider style={{marginLeft: 56}} />}
               </View>
             ))
           )}
@@ -188,8 +191,7 @@ export default function SellerDashboard() {
         <View style={styles.inviteBanner}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.inviteTitle}>Grow the Network</Text>
-            <Text style={styles.inviteText}>{isPremium ? 'Invite other suppliers to join the marketplace.' : 'Invite a supplier and get 1 extra FREE Live quote!'}</Text>
-            {!isPremium && <Text style={styles.creditsText}>Live Quotes Available: <Text style={{fontWeight: 'bold'}}>{user?.liveQuoteCredits || 3}</Text></Text>}
+            <Text style={styles.inviteText}>Invite other suppliers to join the marketplace.</Text>
           </View>
           <TouchableOpacity style={styles.inviteBtn} onPress={handleInviteSupplier}>
             <Text style={styles.inviteBtnText}>Share</Text>

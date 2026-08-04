@@ -9,7 +9,6 @@ import { useAppStore } from '../store/appStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BroadcastLead, RFQ } from '../types';
 
-// 🚀 ADDED: Import the reusable GST Modal
 import { GSTRequiredModal } from '../components/GSTRequiredModal';
 
 export default function SellerLiveLeadsScreen() {
@@ -23,7 +22,6 @@ export default function SellerLiveLeadsScreen() {
   const [loading, setLoading] = useState(true);
   
   const [selectedLead, setSelectedLead] = useState<BroadcastLead | null>(null);
-  const [quotesUsedThisMonth, setQuotesUsedThisMonth] = useState(0);
   const isPremium = user?.subscriptionTier === 'GROWTH_PACKAGE';
 
   const [price, setPrice] = useState('');
@@ -31,7 +29,6 @@ export default function SellerLiveLeadsScreen() {
   const [dispatchDays, setDispatchDays] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 ADDED: State for GST restriction modal
   const [showGSTModal, setShowGSTModal] = useState(false);
 
   useEffect(() => {
@@ -46,37 +43,29 @@ export default function SellerLiveLeadsScreen() {
       setActiveRfqs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RFQ)).filter(rfq => rfq.status === 'PENDING' || rfq.status === 'NEGOTIATING'));
     });
 
-    const unsubQuotes = onSnapshot(query(collection(db, 'supplierQuotes'), where('supplierId', '==', user.uid)), snap => {
-      const now = new Date();
-      setQuotesUsedThisMonth(snap.docs.filter(doc => {
-        const data = doc.data();
-        if (!data.createdAt) return false;
-        const dateObj = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-        return dateObj.getMonth() === now.getMonth() && dateObj.getFullYear() === now.getFullYear();
-      }).length);
-      setLoading(false);
-    });
+    setLoading(false);
 
-    return () => { unsubLeads(); unsubRfqs(); unsubQuotes(); };
+    return () => { unsubLeads(); unsubRfqs(); };
   }, [user?.uid]);
 
   useEffect(() => {
     const filtered = rawLeads.filter(lead => {
+      // 🚀 FIXED: Prevent user from seeing their OWN posted requirements
+      if (lead.buyerId === user?.uid) return false;
+
       if (lead.excludedSellerId === user?.uid) return false;
       if (user?.uid && lead.excludedSellerIds && lead.excludedSellerIds.includes(user.uid)) return false;
       
-      // ✅ UPDATED: Hide the lead if the seller is currently negotiating this specific product
       const isNegotiating = activeRfqs.some(rfq => 
         (lead.rfqId && lead.rfqId === rfq.id) || 
         (lead.originalOrderId && lead.originalOrderId === rfq.id) || 
-        (rfq.productName?.toLowerCase().trim() === lead.productName?.toLowerCase().trim()) // Exclude by product name match
+        (rfq.productName?.toLowerCase().trim() === lead.productName?.toLowerCase().trim())
       );
       return !isNegotiating;
     });
     setLeads(filtered);
   }, [rawLeads, activeRfqs, user?.uid]);
 
-  // 🚀 ADDED: Intercept the Quote Action
   const handleQuotePress = (lead: BroadcastLead) => {
     if (user?.registrationType === 'mobile' && !user?.gstNumber) {
       setShowGSTModal(true);
@@ -113,24 +102,15 @@ export default function SellerLiveLeadsScreen() {
         <Text style={styles.metaText}>📍 {item.deliveryRegion} • ⏳ {(item as any).timeline || 'Flexible'}</Text>
       </View>
       <View style={styles.actionCol}>
-        {isPremium ? (
-          <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => handleQuotePress(item)}>Quote</Button>
-        ) : quotesUsedThisMonth < 3 ? (
-          <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => handleQuotePress(item)}>
-            Quote <Text style={{fontSize: 9, color: 'white'}}>({3 - quotesUsedThisMonth} left)</Text>
-          </Button>
-        ) : (
-          <Button mode="contained" compact labelStyle={{fontSize: 10, marginHorizontal: 10}} style={{backgroundColor: '#F59E0B', borderRadius: 6}} onPress={() => navigation.navigate('BusinessGrowth')}>
-            👑 Upgrade
-          </Button>
-        )}
+        <Button mode="contained" compact labelStyle={{fontSize: 11, marginHorizontal: 10}} style={{backgroundColor: '#10B981', borderRadius: 6}} onPress={() => handleQuotePress(item)}>
+          Quote
+        </Button>
       </View>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 🚀 ADDED: GST Required Modal Render */}
       <GSTRequiredModal 
         visible={showGSTModal} 
         title="GST Details Required"

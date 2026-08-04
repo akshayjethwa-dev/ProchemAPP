@@ -67,6 +67,9 @@ export default function CommerceHubScreen() {
       const leads = leadSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead));
 
       const filteredLeads = leads.filter(lead => {
+        // 🚀 FIXED: Hide if user is the creator (buyer) of this lead
+        if (lead.buyerId === user.uid) return false;
+
         // Hide if user is explicitly excluded (i.e. they are the original buyer)
         if (lead.excludedSellerId === user.uid) return false;
         if (lead.excludedSellerIds && lead.excludedSellerIds.includes(user.uid)) return false;

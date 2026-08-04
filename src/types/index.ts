@@ -56,7 +56,7 @@ export interface User {
   paymentHistory?: string[]; 
 
   premiumNegotiationCredits?: number; 
-  liveQuoteCredits?: number;
+  // ✅ REMOVED: liveQuoteCredits field entirely
 
   whatsappOptIn?: boolean;
   whatsappPreferences?: {
@@ -314,6 +314,7 @@ export interface BroadcastLead {
   originalOrderId?: string; 
   productName: string;
   rfqId?: string;
+  buyerId?: string;
   excludedSellerId?: string;
   excludedSellerIds?: string[];
   casNumber?: string;
