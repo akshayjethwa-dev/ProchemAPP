@@ -1,6 +1,6 @@
 import { withAndroidManifest } from '@expo/config-plugins';
 
-// 👇 CUSTOM PLUGIN TO FIX ANDROID 11+ UPI PACKAGE VISIBILITY 👇
+// 👇 CUSTOM PLUGIN TO FIX ANDROID 11+ UPI PACKAGE VISIBILITY (Android only)
 const withUPIIntents = (config) => {
   return withAndroidManifest(config, async (config) => {
     const androidManifest = config.modResults;
@@ -43,41 +43,41 @@ export default ({ config }) => {
     slug: "prochem-app",
     version: "2.1.2",
     
-    // 👇 ADDED: The custom scheme for your app deep links 👇
-    scheme: "prochem",
+    scheme: "prochem", // Deep link scheme
     
     orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     newArchEnabled: true,
     
-    // 👇 ADDED FOR EAS UPDATE 👇
+    // EAS Update configuration
     updates: {
       url: "https://u.expo.dev/7a075ff7-f9b3-47cf-ab49-523d173d19ae"
     },
     runtimeVersion: {
       policy: "appVersion"
     },
-    // 👆 END EAS UPDATE CONFIG 👆
 
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
       backgroundColor: "#ffffff"
     },
+
+    // ========== iOS CONFIGURATION ==========
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.prochem.app", // Recommended to match Android package
+      bundleIdentifier: "com.prochemapp.prochem", // Must match your App ID in Apple Developer
       
-      // 👇 ADDED: iOS Firebase config
+      // Firebase iOS config file (must be placed in the project root)
       googleServicesFile: "./GoogleService-Info.plist",
 
-      // 👇 ADDED: Associated Domains for iOS Universal Links 👇
+      // Universal Links – allows your app to open from https://app.prochemapp.com
       associatedDomains: [
         "applinks:app.prochemapp.com"
       ],
       
-      // 👇 ADDED TO ALLOW IOS TO OPEN UPI APPS 👇
+      // Allow iOS to open external UPI payment apps
       infoPlist: {
         LSApplicationQueriesSchemes: [
           "tez",      // Google Pay
@@ -85,25 +85,27 @@ export default ({ config }) => {
           "paytmmp",  // Paytm
           "bhim",     // BHIM
           "upi"       // Generic UPI
-        ]
+        ],
+        // ✅ ADDED: Encryption exemption declaration
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
+    // ===================================================
+
     android: {
-      package: "com.prochem.app", // Updated to be slightly more unique
-      // Removed versionCode as EAS remote versioning is handling it
+      package: "com.prochem.app",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
-      // Reads from EAS Secret if available, otherwise uses local file
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       compileSdkVersion: 34,
       targetSdkVersion: 34,
       
       intentFilters: [
-        // Note: This intentFilter makes YOUR app respond to upi:// links. 
+        // Handle UPI schemes (Android)
         {
           action: "VIEW",
           data: [
@@ -113,7 +115,7 @@ export default ({ config }) => {
             { scheme: "paytmmp" }
           ]
         },
-        // 👇 ADDED: Catches https://app.prochemapp.com links and opens the app 👇
+        // Handle deep links from https://app.prochemapp.com (Android)
         {
           action: "VIEW",
           autoVerify: true,
@@ -125,28 +127,36 @@ export default ({ config }) => {
         }
       ]
     },
+
     web: {
       favicon: "./assets/favicon.png"
     },
+
     extra: {
       eas: {
         projectId: "7a075ff7-f9b3-47cf-ab49-523d173d19ae"
       }
     },
-    // 👇 ADD THIS PLUGINS ARRAY 👇
+
+    // Plugins – important for Firebase and static frameworks
     plugins: [
       "@react-native-firebase/app",
       [
         "expo-build-properties",
         {
           ios: {
-            useFrameworks: "static" // CRITICAL: Required for Firebase on iOS
+            useFrameworks: "static", // Required for Firebase on iOS
+            forceStaticLinking: [
+              "RNFBApp",
+              "RNFBAuth",
+              "RNFBFirestore",
+            ],
           }
         }
       ]
     ]
   };
 
-  // ✅ Apply the custom Android UPI intent plugin to the config before exporting
+  // Apply the Android-only UPI plugin (does not affect iOS)
   return withUPIIntents(baseConfig);
 };
