@@ -2,10 +2,22 @@ import { addDoc, collection, doc, updateDoc, query, where, orderBy, getDocs } fr
 import { db } from '../config/firebase';
 import { Order, OrderStatus } from '../types';
 
+const removeUndefined = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(removeUndefined);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entry]) => entry !== undefined)
+        .map(([key, entry]) => [key, removeUndefined(entry)])
+    );
+  }
+  return value;
+};
+
 // 1. Create Order & RETURN ID
 export const placeOrder = async (orderData: Omit<Order, 'id'>) => {
   const docRef = await addDoc(collection(db, 'orders'), {
-    ...orderData,
+    ...(removeUndefined(orderData) as Omit<Order, 'id'>),
     status: 'PENDING_SELLER', // Start Status
     sellerDocuments: null,
     createdAt: new Date().toISOString()

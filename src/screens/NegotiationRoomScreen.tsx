@@ -21,7 +21,6 @@ export default function NegotiationRoomScreen() {
 
   const isAdminView = route.params?.isAdminView || user?.userType === 'admin' || user?.userType === 'sub_admin';
 
-  // Unified State for RFQ or Custom Requirement
   const [activeItem, setActiveItem] = useState<any>(null);
   const [conversationId, setConversationId] = useState<string | null>(passedConversationId || null);
   const [roomMessages, setRoomMessages] = useState<any[]>([]);
@@ -35,7 +34,6 @@ export default function NegotiationRoomScreen() {
 
   const [participantsInfo, setParticipantsInfo] = useState<{buyerName: string, sellerName: string, buyerPhone?: string, sellerPhone?: string}>({ buyerName: 'Buyer', sellerName: 'Supplier' });
 
-  // 1. Fetch Active Document (RFQ or Custom Req)
   useEffect(() => {
     if (rfqId) {
       const unsub = onSnapshot(doc(db, 'rfqs', rfqId), (docSnap) => {
@@ -68,7 +66,6 @@ export default function NegotiationRoomScreen() {
     }
   }, [rfqId, requirementId, quoteId]);
 
-  // 2. Setup Conversation Id
   useEffect(() => {
     if (!activeItem || !user || conversationId) return;
 
@@ -76,7 +73,6 @@ export default function NegotiationRoomScreen() {
       try {
         let q;
         if (activeItem.type === 'custom_req') {
-           // For custom reqs, we expect the conversation to be created by the admin approval
            q = query(collection(db, 'conversations'), where('requirementId', '==', activeItem.id), where('quoteId', '==', quoteId));
         } else {
            if (isAdminView) {
@@ -92,7 +88,6 @@ export default function NegotiationRoomScreen() {
         if (!snap.empty) {
           setConversationId(snap.docs[0].id);
         } else if (!isAdminView && activeItem.type === 'rfq') {
-          // Auto create ONLY for RFQs if missing. Admin handles custom_req creations.
           const newConvRef = await addDoc(collection(db, 'conversations'), {
             buyerUserId: activeItem.buyerId,
             sellerUserId: activeItem.sellerId,
@@ -103,7 +98,6 @@ export default function NegotiationRoomScreen() {
           });
           setConversationId(newConvRef.id);
 
-          // ✅ UPDATED SYSTEM MESSAGE: Removed Buyer and Supplier names for privacy
           const initialContextMsg = `System: Negotiation started for ${activeItem.productName || 'Product'}
 Quantity: ${activeItem.targetQuantity || 'N/A'} ${activeItem.unit || ''}
 Target Price: ₹${activeItem.targetPrice || 'N/A'} / ${activeItem.unit || ''}
@@ -130,10 +124,9 @@ Reference ID: ${activeItem.id || 'N/A'}`;
     setupConversation();
   }, [activeItem, user, conversationId, isAdminView, viewMode]);
 
-  // 3. Fetch Messages
   useEffect(() => {
     if (!conversationId) {
-       setLoading(!activeItem); // Stop loading if activeItem exists but no chat found (pending)
+       setLoading(!activeItem); 
        return;
     }
     const q = query(collection(db, 'conversations', conversationId, 'messages'));
@@ -149,7 +142,6 @@ Reference ID: ${activeItem.id || 'N/A'}`;
     return () => unsubMessages();
   }, [conversationId]);
 
-  // 4. Load Participant Profiles
   useEffect(() => {
     if (!activeItem || !isAdminView) return;
     const fetchParticipants = async () => {
@@ -258,15 +250,11 @@ Reference ID: ${activeItem.id || 'N/A'}`;
         unit: activeItem.unit || 'unit',
         sellerId: activeItem.sellerId,
         gstPercent: activeItem.gstPercent || 18,
-        customRequirementId: activeItem.type === 'custom_req' ? activeItem.id : undefined,
-        rfqId: activeItem.type === 'rfq' ? activeItem.id : undefined,
-        quoteId: activeItem.quoteId,
+        ...(activeItem.type === 'custom_req' ? { customRequirementId: activeItem.id } : { rfqId: activeItem.id }),
+        ...(activeItem.quoteId ? { quoteId: activeItem.quoteId } : {}),
       };
 
-      // Open checkout immediately. Payment completion is responsible for final fulfillment.
-      setIsProcessing(false);
-      navigation.navigate('Checkout', { negotiatedItem });
-
+      // FIX: Ensure all Firestore updates are completed BEFORE navigating
       if (conversationId) {
         await updateDoc(doc(db, 'conversations', conversationId), { status: 'won', updatedAt: Date.now() });
         await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
@@ -284,41 +272,69 @@ Reference ID: ${activeItem.id || 'N/A'}`;
          }
       }
 
+      setIsProcessing(false);
+      navigation.navigate('Checkout', { negotiatedItem });
+
     } catch (error) {
       setIsProcessing(false);
       console.error("Checkout preparation update failed:", error);
+      if (Platform.OS === 'web') {
+        window.alert("Something went wrong preparing the checkout. Please try again.");
+      } else {
+        Alert.alert("Error", "Something went wrong preparing the checkout. Please try again.");
+      }
     }
   };
 
   const acceptOffer = (price: number, qty: number) => {
-    Alert.alert('Confirm Custom Offer', `Do you agree to transact ${qty} ${activeItem.unit} at ₹${price} / ${activeItem.unit}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Agree & Checkout', onPress: () => proceedToCheckout(price, qty) }
-    ]);
+    const message = `Do you agree to transact ${qty} ${activeItem.unit} at ₹${price} / ${activeItem.unit}?`;
+    
+    // FIX: Map accurately to web browser standards to prevent silent failures on 'Accept'
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Confirm Custom Offer\n\n${message}`)) {
+        proceedToCheckout(price, qty);
+      }
+    } else {
+      Alert.alert('Confirm Custom Offer', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Agree & Checkout', onPress: () => proceedToCheckout(price, qty) }
+      ]);
+    }
+  };
+
+  const executeCloseNegotiation = async () => {
+    setIsProcessing(true);
+    try {
+      if (conversationId) {
+        await updateDoc(doc(db, 'conversations', conversationId), { status: 'closed', updatedAt: Date.now() });
+      }
+      const table = activeItem.type === 'rfq' ? 'rfqs' : 'customRequirements';
+      await updateDoc(doc(db, table, activeItem.id), { status: 'REJECTED', updatedAt: new Date().toISOString() });
+    } catch (err) {
+      if (Platform.OS === 'web') {
+         window.alert("Could not close the chat.");
+      } else {
+         Alert.alert("Error", "Could not close the chat.");
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const closeNegotiation = async () => {
-    Alert.alert("End Negotiation", "Are you sure you want to close this negotiation?", [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Close Chat", style: "destructive",
-          onPress: async () => {
-            setIsProcessing(true);
-            try {
-              if (conversationId) {
-                await updateDoc(doc(db, 'conversations', conversationId), { status: 'closed', updatedAt: Date.now() });
-              }
-              const table = activeItem.type === 'rfq' ? 'rfqs' : 'customRequirements';
-              await updateDoc(doc(db, table, activeItem.id), { status: 'REJECTED', updatedAt: new Date().toISOString() });
-            } catch (err) {
-              Alert.alert("Error", "Could not close the chat.");
-            } finally {
-              setIsProcessing(false);
-            }
-          }
-        }
-      ]
-    );
+    const message = "Are you sure you want to close this negotiation?";
+    
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) {
+        executeCloseNegotiation();
+      }
+    } else {
+      Alert.alert("End Negotiation", message, [
+          { text: "Cancel", style: "cancel" },
+          { text: "Close Chat", style: "destructive", onPress: executeCloseNegotiation }
+        ]
+      );
+    }
   };
 
   const renderMessage = ({ item }: { item: any }) => {

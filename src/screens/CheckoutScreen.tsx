@@ -68,7 +68,8 @@ export default function CheckoutScreen() {
   }, [user, route.params]);
 
   const fetchSellerDetails = async () => {
-    if (activeCart.length === 0) {
+    // FIX: Added safety check ensuring activeCart and sellerId exist to prevent silent failures 
+    if (!activeCart || activeCart.length === 0 || !activeCart[0].sellerId) {
       setCalculatingTax(false);
       return;
     }
@@ -114,7 +115,7 @@ export default function CheckoutScreen() {
       igst = totalGstAmount;
     }
   } else {
-     igst = totalGstAmount;
+      igst = totalGstAmount;
   }
 
   const productTotalWithTax = productTotal + totalGstAmount;
@@ -166,7 +167,11 @@ export default function CheckoutScreen() {
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
       setErrors({ address: true });
-      Alert.alert("Required Fields", "Please select a Delivery Address.");
+      if (Platform.OS === 'web') {
+        window.alert("Please select a Delivery Address.");
+      } else {
+        Alert.alert("Required Fields", "Please select a Delivery Address.");
+      }
       return;
     }
 
@@ -235,7 +240,11 @@ export default function CheckoutScreen() {
     } catch (error: any) {
       console.error("Order Generation Failure:", error);
       setLoading(false);
-      Alert.alert('Error', error.message || 'Failed to initialize payment gateway.');
+      if (Platform.OS === 'web') {
+        window.alert(error.message || 'Failed to initialize payment gateway.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to initialize payment gateway.');
+      }
     }
   };
 
