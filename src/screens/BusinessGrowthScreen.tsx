@@ -1,11 +1,12 @@
 // src/screens/BusinessGrowthScreen.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, ScrollView, StyleSheet, TouchableOpacity, Dimensions,
   ActivityIndicator, FlatList, Alert, Linking, Modal as RNModal,
   Platform
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import {
   Text, Card, Button, useTheme, Surface, Avatar, Chip,
   Portal, Modal, TextInput
@@ -22,8 +23,6 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
-
-import { startCashfreePayment, removeCashfreeCallback } from '../services/cashfree/CashfreeService';
 
 const { width } = Dimensions.get('window');
 const WHATSAPP_NUMBER = '917984856652'; 
@@ -343,7 +342,7 @@ function PremiumSellerHubContent() {
 }
 
 // ==========================================
-// 3. UPGRADE PAYMENT MODAL (Cashfree Integration)
+// 3. UPGRADE PAYMENT MODAL (Juspay HyperCheckout)
 // ==========================================
 function UpgradePaymentModal({
   visible,
@@ -356,10 +355,13 @@ function UpgradePaymentModal({
 }) {
   const { user } = useAppStore();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [juspayOrderId, setJuspayOrderId] = useState<string | null>(null);
+  const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
-      removeCashfreeCallback();
+      if (paymentPollRef.current) clearInterval(paymentPollRef.current);
     };
   }, []);
 
@@ -367,74 +369,125 @@ function UpgradePaymentModal({
 
   const handlePayNow = async () => {
     if (!user) return;
+
+    const paymentWindow = Platform.OS === 'web'
+      ? window.open('', '_blank', 'width=480,height=800')
+      : null;
+    if (Platform.OS === 'web' && !paymentWindow) {
+      Alert.alert('Popup blocked', 'Please allow pop-ups for Prochem to open Juspay checkout.');
+      return;
+    }
     
     try {
       setIsProcessing(true);
       
       const app = getApp();
       const functions = getFunctions(app, 'asia-south1'); 
-      const createCashfreeOrder = httpsCallable(functions, 'createCashfreeOrder');
+      const createJuspaySession = httpsCallable(functions, 'createJuspaySession');
       
-      // ✅ SANITIZE PHONE NUMBER TO PREVENT CASHFREE 500 ERROR
       let safePhone = user?.phoneNumber || user?.phone || "9876543210";
-      safePhone = safePhone.replace(/[^0-9]/g, ''); // Remove all non-numeric chars (like +)
-      if (safePhone.length > 10) safePhone = safePhone.slice(-10); // Keep last 10 digits
-      if (safePhone.length < 10) safePhone = "9876543210"; // Fallback if malformed
+      safePhone = safePhone.replace(/[^0-9]/g, '');
+      if (safePhone.length > 10) safePhone = safePhone.slice(-10);
+      if (safePhone.length < 10) safePhone = "9876543210";
       
-      const response: any = await createCashfreeOrder({ 
+      const response: any = await createJuspaySession({ 
         amount: plan.amountRaw, 
         type: 'subscription',
         referenceId: plan.key,
         customerDetails: {
           name: user?.companyName || user?.businessName || 'Prochem User',
           email: user?.email || 'user@prochem.in',
-          phone: safePhone // Passed the sanitized phone
+          phone: safePhone
         }
       });
 
-      const paymentSessionId = response.data.payment_session_id;
-      const orderId = response.data.order_id || plan.key; 
+      const paymentUrl = response.data?.payment_url;
+      const orderId = response.data?.order_id;
+      if (!paymentUrl || !orderId) throw new Error("Could not retrieve Juspay payment session.");
+      setJuspayOrderId(orderId);
+      if (Platform.OS === 'web') {
+        paymentWindow!.location.href = paymentUrl;
 
-      if (!paymentSessionId) {
-        throw new Error("Could not retrieve payment session from server.");
-      }
-        
-      await startCashfreePayment(
-        paymentSessionId,
-        orderId,
-        async (verifiedId) => {
-          try {
-            // 1. Optimistic Database Update (Fallback if webhook is delayed)
-            const userRef = doc(db, 'users', user.uid);
-            await updateDoc(userRef, {
-              subscriptionTier: 'GROWTH_PACKAGE',
-              updatedAt: serverTimestamp()
-            });
-      
-            // 2. Update Local Zustand State (so the UI flips to Premium immediately)
-            useAppStore.getState().updateUser({ subscriptionTier: 'GROWTH_PACKAGE' });
-      
-            Alert.alert('Payment Successful! 🎉', 'Welcome to the Premium Hub. Your features are now unlocked!');
+        const checkPayment = async () => {
+          if (paymentWindow!.closed) {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setJuspayOrderId(null);
             setIsProcessing(false);
-            onClose();
-          } catch (err) {
-            console.error("Failed to update user status:", err);
-            Alert.alert('Payment processing', 'Payment succeeded. Your account will be upgraded momentarily.');
-            setIsProcessing(false);
-            onClose();
+            return;
           }
-        },
-        (error) => {
-          console.error("Payment Error:", error);
-          setIsProcessing(false);
-          Alert.alert('Payment Failed', error?.message || 'Transaction failed or was cancelled.');
-        }
-      );
+          try {
+            const statusResponse: any = await httpsCallable(
+              getFunctions(getApp(), 'asia-south1'),
+              'getJuspayOrderStatus'
+            )({ orderId });
+            const status = String(statusResponse.data?.status || '').toUpperCase();
+            if (status === 'CHARGED' || ['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
+              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+              setJuspayOrderId(null);
+              if (status === 'CHARGED') {
+                await completePayment();
+              } else {
+                setIsProcessing(false);
+                Alert.alert('Payment not completed', `Juspay status: ${status}`);
+              }
+            }
+          } catch (error) {
+            console.error('Juspay status polling failed:', error);
+            const code = (error as { code?: string })?.code;
+            if (code === 'functions/permission-denied' || code === 'permission-denied') {
+              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+              setJuspayOrderId(null);
+              if (!paymentWindow!.closed) paymentWindow!.close();
+              setIsProcessing(false);
+              Alert.alert('Payment session expired', 'Please start the payment again.');
+            }
+          }
+        };
+
+        void checkPayment();
+        paymentPollRef.current = setInterval(checkPayment, 2500);
+        return;
+      }
+      setPaymentUrl(paymentUrl);
 
     } catch (error: any) {
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       console.error(error);
       Alert.alert("Error", error.message || "Could not initialize payment. Try again.");
       setIsProcessing(false);
+    }
+  };
+
+  const completePayment = async () => {
+    if (!user) return;
+    await updateDoc(doc(db, 'users', user.uid), {
+      subscriptionTier: 'GROWTH_PACKAGE',
+      updatedAt: serverTimestamp()
+    });
+    useAppStore.getState().updateUser({ subscriptionTier: 'GROWTH_PACKAGE' });
+    Alert.alert('Payment Successful!', 'Welcome to the Premium Hub. Your features are now unlocked!');
+    setIsProcessing(false);
+    onClose();
+  };
+
+  const verifyPayment = async () => {
+    if (!juspayOrderId || !user) return;
+    try {
+      const functions = getFunctions(getApp(), 'asia-south1');
+      const getStatus = httpsCallable(functions, 'getJuspayOrderStatus');
+      const response: any = await getStatus({ orderId: juspayOrderId });
+      setPaymentUrl(null);
+      setJuspayOrderId(null);
+      if (response.data?.status?.toUpperCase() !== 'CHARGED') {
+        setIsProcessing(false);
+        Alert.alert('Payment not completed', `Juspay status: ${response.data?.status || 'PENDING'}`);
+        return;
+      }
+
+      await completePayment();
+    } catch (error: any) {
+      setIsProcessing(false);
+      Alert.alert('Payment verification failed', error.message || 'Please check your payment status shortly.');
     }
   };
 
@@ -490,7 +543,7 @@ function UpgradePaymentModal({
               <MaterialCommunityIcons name="information-outline" size={18} color="#004AAD" style={{ marginTop: 2 }} />
               <Text style={upgradeStyles.noteText}>
                 <Text style={{ fontWeight: '700' }}>Secure Checkout: </Text>
-                Your payment will be securely processed under Prochem Marketplace Private Limited via Cashfree.
+                Your payment will be securely processed under Prochem Marketplace Private Limited via Juspay.
               </Text>
             </View>
 
@@ -536,6 +589,19 @@ function UpgradePaymentModal({
           </ScrollView>
         </View>
       </View>
+      <RNModal visible={Platform.OS !== 'web' && !!paymentUrl} animationType="slide" onRequestClose={verifyPayment}>
+        <View style={upgradeStyles.paymentModal}>
+          <View style={upgradeStyles.paymentHeader}>
+            <Text variant="titleMedium">Secure Juspay Checkout</Text>
+            <TouchableOpacity onPress={verifyPayment} accessibilityLabel="Close payment">
+              <MaterialCommunityIcons name="close" size={24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+          {paymentUrl && <WebView source={{ uri: paymentUrl }} onNavigationStateChange={(state) => {
+            if (state.url.startsWith('https://asia-south1-prochemapp-dev.cloudfunctions.net/juspayReturn')) verifyPayment();
+          }} />}
+        </View>
+      </RNModal>
     </RNModal>
   );
 }
@@ -889,4 +955,6 @@ const upgradeStyles = StyleSheet.create({
   radioCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center' },
   radioCircleSelected: { borderColor: '#004AAD' },
   radioInner: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#004AAD' },
+  paymentModal: { flex: 1, paddingTop: 35, backgroundColor: 'white' },
+  paymentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
 });

@@ -1,8 +1,9 @@
 // src/screens/CheckoutScreen.tsx
 
 import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { View, ScrollView, StyleSheet, Alert, BackHandler, ActivityIndicator } from 'react-native'; 
+import { View, ScrollView, StyleSheet, Alert, BackHandler, ActivityIndicator, Modal, Platform } from 'react-native';
 import { Text, Card, Button, Divider, IconButton, useTheme } from 'react-native-paper';
+import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute } from '@react-navigation/native'; 
 import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
 
@@ -14,7 +15,6 @@ import { placeOrder, updateOrderStatus } from '../services/orderService';
 import { db } from '../config/firebase';
 import { Address, User } from '../types';
 
-import { startCashfreePayment, removeCashfreeCallback } from '../services/cashfree/CashfreeService';
 
 export default function CheckoutScreen() {
   const navigation = useNavigation<any>();
@@ -29,6 +29,9 @@ export default function CheckoutScreen() {
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
   const [sellerState, setSellerState] = useState<string | null>(null);
   const [calculatingTax, setCalculatingTax] = useState(true);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null);
+  const [firestoreOrderId, setFirestoreOrderId] = useState<string | null>(null);
 
   const [errors, setErrors] = useState({ address: false });
 
@@ -45,7 +48,6 @@ export default function CheckoutScreen() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => {
       backHandler.remove();
-      removeCashfreeCallback(); 
     };
   }, []);
 
@@ -190,24 +192,25 @@ export default function CheckoutScreen() {
         payoutAmount: payoutAmount,
         status: 'PENDING_SELLER',  
         paymentStatus: 'pending',
-        paymentMode: 'BANK_TRANSFER', 
+        paymentMode: 'JUSPAY', 
         sellerPayoutStatus: 'PENDING',
-        paymentReference: 'CASHFREE_GATEWAY', 
+        paymentReference: 'JUSPAY_HYPERCHECKOUT', 
         createdAt: new Date().toISOString(),
         date: new Date().toISOString(),
       } as any);
+      setFirestoreOrderId(orderId);
 
-      // 2. Call backend to get Cashfree session
+      // 2. Call the server to get a Juspay HyperCheckout session
       const app = getApp();
       const functions = getFunctions(app, 'asia-south1');
-      const createCashfreeOrderFn = httpsCallable(functions, 'createCashfreeOrder');
+      const createJuspaySessionFn = httpsCallable(functions, 'createJuspaySession');
       
       let safePhone = user?.phoneNumber || user?.phone || "9876543210";
       safePhone = safePhone.replace(/[^0-9]/g, ''); 
       if (safePhone.length > 10) safePhone = safePhone.slice(-10); 
       if (safePhone.length < 10) safePhone = "9876543210"; 
       
-      const response: any = await createCashfreeOrderFn({
+      const response: any = await createJuspaySessionFn({
         amount: finalPayableAmount.toFixed(2),
         type: 'product',
         referenceId: orderId,
@@ -218,26 +221,16 @@ export default function CheckoutScreen() {
         }
       });
 
-      const paymentSessionId = response.data?.payment_session_id;
-      
-      // ✅ FIX: Extract the actual `order_id` returned by the Cashfree backend
-      const cashfreeOrderId = response.data?.order_id || orderId;
-
-      if (!paymentSessionId) {
-        throw new Error("Could not retrieve payment session from server.");
+      const paymentUrl = response.data?.payment_url;
+      const juspayOrderId = response.data?.order_id;
+      if (!paymentUrl || !juspayOrderId) throw new Error("Could not retrieve Juspay payment session from server.");
+      setPaymentOrderId(juspayOrderId);
+      if (Platform.OS === 'web') {
+        window.location.assign(paymentUrl);
+        return;
       }
-
-      // 3. Trigger our Multi-Platform Cashfree Wrapper
-      await startCashfreePayment(
-        paymentSessionId, 
-        cashfreeOrderId, // ✅ Pass the exact Cashfree Order ID to SDK
-        () => handlePaymentSuccess(orderId), // ✅ Use closure to keep original Firestore orderId for DB updates
-        (error) => {
-          console.error("Payment Error:", error);
-          setLoading(false);
-          Alert.alert("Payment Failed", error?.message || "The payment could not be completed.");
-        }
-      );
+      setPaymentUrl(paymentUrl);
+      setLoading(false);
 
     } catch (error: any) {
       console.error("Order Generation Failure:", error);
@@ -246,11 +239,32 @@ export default function CheckoutScreen() {
     }
   };
 
+  const reconcileJuspayPayment = async () => {
+    if (!paymentOrderId) return;
+    try {
+      const functions = getFunctions(getApp(), 'asia-south1');
+      const getStatus = httpsCallable(functions, 'getJuspayOrderStatus');
+      const response: any = await getStatus({ orderId: paymentOrderId });
+      setPaymentUrl(null);
+      setPaymentOrderId(null);
+      if (response.data?.status?.toUpperCase() === 'CHARGED' && firestoreOrderId) {
+        await handlePaymentSuccess(firestoreOrderId);
+      } else {
+        setLoading(false);
+        Alert.alert('Payment not completed', `Juspay status: ${response.data?.status || 'PENDING'}`);
+      }
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert('Payment verification failed', error.message || 'Please check your order status shortly.');
+    }
+  };
+
   if (calculatingTax || activeCart.length === 0) {
     return <View style={{flex:1, justifyContent:'center'}}><ActivityIndicator /></View>;
   }
 
   return (
+    <>
     <ScrollView contentContainerStyle={styles.container}>
       {/* 1. Address Section */}
       <Card style={[styles.card, errors.address && { borderColor: theme.colors.error, borderWidth: 1 }]}>
@@ -325,6 +339,18 @@ export default function CheckoutScreen() {
         {loading ? 'Processing...' : 'Pay Securely'}
       </Button>
     </ScrollView>
+    <Modal visible={Platform.OS !== 'web' && !!paymentUrl} animationType="slide" onRequestClose={reconcileJuspayPayment}>
+      <View style={styles.paymentModal}>
+        <View style={styles.paymentHeader}>
+          <Text variant="titleMedium">Secure Juspay Checkout</Text>
+          <IconButton icon="close" onPress={reconcileJuspayPayment} />
+        </View>
+        {paymentUrl && <WebView source={{ uri: paymentUrl }} onNavigationStateChange={(state) => {
+          if (state.url.startsWith('https://asia-south1-prochemapp-dev.cloudfunctions.net/juspayReturn')) reconcileJuspayPayment();
+        }} />}
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -332,4 +358,6 @@ const styles = StyleSheet.create({
   container: { padding: 16, backgroundColor: '#F8FAFC', flexGrow: 1 },
   card: { marginBottom: 16, backgroundColor: 'white', borderRadius: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, alignItems:'center' }
+  ,paymentModal: { flex: 1, paddingTop: 35, backgroundColor: 'white' }
+  ,paymentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 }
 });

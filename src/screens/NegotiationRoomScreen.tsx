@@ -249,6 +249,24 @@ Reference ID: ${activeItem.id || 'N/A'}`;
   const proceedToCheckout = async (price: number, qty: number) => {
     setIsProcessing(true);
     try {
+      const negotiatedItem = {
+        id: activeItem.type === 'rfq' ? `${activeItem.productId || activeItem.id}_rfq` : `custom_${activeItem.id}`,
+        productId: activeItem.productId || '',
+        name: activeItem.type === 'rfq' ? `${activeItem.productName} (Quote)` : `${activeItem.productName} (Custom Req)`,
+        quantity: qty,
+        pricePerUnit: price,
+        unit: activeItem.unit || 'unit',
+        sellerId: activeItem.sellerId,
+        gstPercent: activeItem.gstPercent || 18,
+        customRequirementId: activeItem.type === 'custom_req' ? activeItem.id : undefined,
+        rfqId: activeItem.type === 'rfq' ? activeItem.id : undefined,
+        quoteId: activeItem.quoteId,
+      };
+
+      // Open checkout immediately. Payment completion is responsible for final fulfillment.
+      setIsProcessing(false);
+      navigation.navigate('Checkout', { negotiatedItem });
+
       if (conversationId) {
         await updateDoc(doc(db, 'conversations', conversationId), { status: 'won', updatedAt: Date.now() });
         await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
@@ -261,29 +279,14 @@ Reference ID: ${activeItem.id || 'N/A'}`;
       if (activeItem.type === 'rfq') {
          await updateDoc(doc(db, 'rfqs', activeItem.id), { status: 'CONVERTED', agreedPrice: price, agreedQuantity: qty, updatedAt: new Date().toISOString() });
       } else {
-         await updateDoc(doc(db, 'customRequirements', activeItem.id), { status: 'FULFILLED' });
          if (activeItem.quoteId) {
            await updateDoc(doc(db, 'supplierQuotes', activeItem.quoteId), { status: 'ACCEPTED' });
          }
       }
 
-      const negotiatedItem = {
-        id: activeItem.type === 'rfq' ? `${activeItem.productId}_rfq` : `custom_${activeItem.id}`,
-        productId: activeItem.productId || '',
-        name: activeItem.type === 'rfq' ? `${activeItem.productName} (Quote)` : `${activeItem.productName} (Custom Req)`,
-        quantity: qty, 
-        pricePerUnit: price,
-        unit: activeItem.unit || 'unit',
-        sellerId: activeItem.sellerId,
-        gstPercent: 18 // Default GST for chemicals if not linked to standard product catalog
-      };
-
-      setIsProcessing(false);
-      navigation.navigate('Checkout', { negotiatedItem });
-
     } catch (error) {
       setIsProcessing(false);
-      Alert.alert("Error", "Could not complete the checkout process.");
+      console.error("Checkout preparation update failed:", error);
     }
   };
 

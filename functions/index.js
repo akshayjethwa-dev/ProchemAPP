@@ -748,3 +748,245 @@ exports.cashfreeWebhook = functions
       res.status(400).send("Webhook verification failed");
     }
 });
+
+// ==========================================
+// JUSPAY HYPERCHECKOUT: CREATE SESSION
+// ==========================================
+exports.createJuspaySession = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const { amount, type = "product", referenceId, customerDetails } = data || {};
+    if (!amount || !referenceId) {
+      throw new functions.https.HttpsError("invalid-argument", "Amount and referenceId are required.");
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const clientId = process.env.JUSPAY_CLIENT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !clientId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay server credentials are not configured.");
+    }
+
+    const juspayOrderId = `jp_${referenceId}_${Date.now()}`.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 21);
+    const phone = String(customerDetails?.phone || "9999999999").replace(/[^0-9]/g, "").slice(-10);
+    const email = customerDetails?.email || "buyer@prochem.in";
+    const name = customerDetails?.name || "Prochem Buyer";
+    const sessionUrl = process.env.JUSPAY_API_URL || "https://api.juspay.in/session";
+
+    try {
+      const response = await fetch(sessionUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`,
+          "Content-Type": "application/json",
+          "x-merchantid": merchantId,
+          "x-routing-id": context.auth.uid,
+        },
+        body: JSON.stringify({
+          order_id: juspayOrderId,
+          amount: Number(amount).toFixed(2),
+          customer_id: context.auth.uid,
+          customer_email: email,
+          customer_phone: phone,
+          payment_page_client_id: clientId,
+          action: "paymentPage",
+          return_url: "https://asia-south1-prochemapp-dev.cloudfunctions.net/juspayReturn",
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.sdk_payload && !payload.payment_links?.mobile) {
+        console.error("Juspay session error:", { status: response.status, payload });
+        throw new Error("Juspay did not return a payment session.");
+      }
+
+      await admin.firestore().collection("juspaySessions").doc(juspayOrderId).set({
+        juspayOrderId,
+        userId: context.auth.uid,
+        type,
+        referenceId,
+        amount: Number(amount),
+        status: "PENDING",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      if (type === "product") {
+        await admin.firestore().collection("orders").doc(referenceId).update({
+          juspayOrderId,
+          paymentStatus: "PENDING_GATEWAY",
+          paymentReference: "JUSPAY_HYPERCHECKOUT",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      return {
+        order_id: juspayOrderId,
+        sdk_payload: payload.sdk_payload || null,
+        payment_url: payload.payment_links?.mobile || payload.payment_links?.web,
+      };
+    } catch (error) {
+      console.error("Juspay session error:", error.response?.data || error.message);
+      throw new functions.https.HttpsError("internal", "Failed to create Juspay payment session.");
+    }
+  });
+
+// ==========================================
+// JUSPAY HYPERCHECKOUT: ORDER STATUS
+// ==========================================
+exports.getJuspayOrderStatus = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+    const { orderId } = data || {};
+    if (!orderId) throw new functions.https.HttpsError("invalid-argument", "orderId is required.");
+
+    const session = await admin.firestore().collection("juspaySessions").doc(orderId).get();
+    if (!session.exists || session.data().userId !== context.auth.uid) {
+      throw new functions.https.HttpsError("permission-denied", "Order does not belong to the current user.");
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay server credentials are not configured.");
+    }
+
+    try {
+      const statusUrl = (process.env.JUSPAY_API_URL || "https://api.juspay.in/session").replace(/\/session\/?$/, "");
+      const response = await fetch(`${statusUrl}/orders/${encodeURIComponent(orderId)}`, {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`,
+          "x-merchantid": merchantId,
+        },
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        console.error("Juspay status error:", { status: response.status, payload });
+        throw new Error("Juspay status request failed.");
+      }
+      return { status: payload.status, payload };
+    } catch (error) {
+      console.error("Juspay status error:", error.response?.data || error.message);
+      throw new functions.https.HttpsError("internal", "Failed to retrieve Juspay order status.");
+    }
+  });
+
+// ==========================================
+// JUSPAY HYPERCHECKOUT: WEBHOOK LISTENER
+// ==========================================
+exports.juspayWebhook = functions
+  .region("asia-south1")
+  .https.onRequest(async (req, res) => {
+    if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
+
+    const expectedUsername = process.env.JUSPAY_WEBHOOK_USERNAME;
+    const expectedPassword = process.env.JUSPAY_WEBHOOK_PASSWORD;
+    const authorization = req.headers.authorization || "";
+    const expectedAuthorization = expectedUsername && expectedPassword
+      ? `Basic ${Buffer.from(`${expectedUsername}:${expectedPassword}`).toString("base64")}`
+      : null;
+    if (!expectedAuthorization || authorization !== expectedAuthorization) {
+      return res.status(401).send("Unauthorized");
+    }
+
+    try {
+      const payload = req.body || {};
+      const orderId = payload.order_id || payload.order?.order_id;
+      const status = String(payload.status || payload.order?.status || "").toUpperCase();
+      if (!orderId) return res.status(400).send("Missing order_id");
+
+      const eventId = payload.id || payload.event_id || `${orderId}:${status}:${payload.txn_id || "event"}`;
+      const eventRef = admin.firestore().collection("juspayWebhookEvents").doc(String(eventId));
+      const eventSnap = await eventRef.get();
+      if (eventSnap.exists) return res.status(200).send("OK");
+      await eventRef.set({ orderId, status, receivedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+      if (status === "CHARGED") {
+        const sessionRef = admin.firestore().collection("juspaySessions").doc(String(orderId));
+        const sessionSnap = await sessionRef.get();
+        if (sessionSnap.exists) {
+          await sessionRef.update({ status: "CHARGED", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        }
+
+        const sessionData = sessionSnap.data() || {};
+        if (sessionData.type === "subscription") {
+          await admin.firestore().collection("users").doc(sessionData.userId).update({
+            subscriptionTier: "GROWTH_PACKAGE",
+            subscriptionPlan: sessionData.referenceId,
+            subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+
+        const orders = await admin.firestore().collection("orders")
+          .where("juspayOrderId", "==", orderId).limit(1).get();
+        if (!orders.empty) {
+          await orders.docs[0].ref.update({
+            status: "PENDING_SELLER",
+            paymentStatus: "PAID",
+            paymentDetails: {
+              provider: "JUSPAY_HYPERCHECKOUT",
+              juspayOrderId: orderId,
+              transactionId: payload.txn_id || payload.payment?.txn_id || null,
+              paidAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+          });
+        }
+      }
+
+      return res.status(200).send("OK");
+    } catch (error) {
+      console.error("Juspay webhook error:", error.message);
+      return res.status(500).send("Webhook processing failed");
+    }
+  });
+
+// ==========================================
+// JUSPAY HYPERCHECKOUT: RETURN URL
+// ==========================================
+exports.juspayReturn = functions
+  .region("asia-south1")
+  .https.onRequest(async (req, res) => {
+    const orderId = req.query.order_id;
+    if (!orderId) return res.status(400).send("Missing order_id");
+
+    try {
+      const sessionRef = admin.firestore().collection("juspaySessions").doc(String(orderId));
+      const sessionSnap = await sessionRef.get();
+      if (!sessionSnap.exists) return res.status(404).send("Payment session not found");
+
+      const sessionData = sessionSnap.data();
+      const statusUrl = (process.env.JUSPAY_API_URL || "https://api.juspay.in/session").replace(/\/session\/?$/, "");
+      const statusResponse = await fetch(`${statusUrl}/orders/${encodeURIComponent(orderId)}`, {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${process.env.JUSPAY_API_KEY}:`).toString("base64")}`,
+          "x-merchantid": process.env.JUSPAY_MERCHANT_ID,
+        },
+      });
+      const statusPayload = await statusResponse.json();
+      const status = statusResponse.ok
+        ? String(statusPayload.status || "").toUpperCase()
+        : "UNKNOWN";
+
+      if (status === "CHARGED") {
+        await sessionRef.update({ status: "CHARGED", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        if (sessionData.type === "subscription") {
+          await admin.firestore().collection("users").doc(sessionData.userId).update({
+            subscriptionTier: "GROWTH_PACKAGE",
+            subscriptionPlan: sessionData.referenceId,
+            subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
+      const isSuccess = status === "CHARGED";
+      const title = isSuccess ? "Payment successful" : `Payment status: ${status || "PENDING"}`;
+      const message = isSuccess
+        ? "Your Prochem Premium features are being unlocked in the app."
+        : "You can return to Prochem and check the payment status again.";
+      return res.status(statusResponse.ok ? 200 : 502).send(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Prochem Payment</title><style>body{font-family:Arial,sans-serif;text-align:center;padding:48px 20px;color:#1e293b}h2{color:${isSuccess ? "#15803d" : "#b45309"}}</style></head><body><h2>${title}</h2><p>${message}</p><p>This window will close automatically in <span id="countdown">3</span> seconds.</p><script>let seconds=3;const countdown=document.getElementById("countdown");const timer=setInterval(()=>{seconds-=1;countdown.textContent=seconds;if(seconds<=0){clearInterval(timer);window.close();}},1000);</script></body></html>`);
+    } catch (error) {
+      console.error("Juspay return error:", error.message);
+      return res.status(500).send("Unable to verify payment");
+    }
+  });
