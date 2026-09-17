@@ -1,8 +1,6 @@
-// src/screens/PaymentSuccessScreen.tsx
-
-import React, { useState } from 'react';
-import { View, StyleSheet, Platform, Alert, ScrollView } from 'react-native';
-import { Text, Button, Card, useTheme, Divider } from 'react-native-paper';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Platform, Alert, ScrollView, TouchableOpacity } from 'react-native';
+import { Text, Button, Card, useTheme, Divider, Chip } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
 import * as Print from 'expo-print';
@@ -15,12 +13,53 @@ export default function PaymentSuccessScreen() {
   const route = useRoute<any>();
   
   // 📦 1. Get the order details passed from CheckoutScreen
-  const { orderId, totalAmount, productName, quantity, unit, utr, buyerName, date } = route.params || {};
+  const { 
+    orderId, 
+    rawOrderId, 
+    firestoreOrderId, 
+    displayOrderId, 
+    totalAmount, 
+    productName, 
+    quantity, 
+    unit, 
+    utr, 
+    buyerName, 
+    date 
+  } = route.params || {};
+
+  const targetOrderId = rawOrderId || firestoreOrderId || orderId;
+  const receiptCode = displayOrderId || (orderId && orderId.length > 12 ? orderId.slice(0, 10).toUpperCase() : orderId) || 'PROCHEM';
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [secondsRemaining, setSecondsRemaining] = useState(4);
+  const [isAutoRedirectActive, setIsAutoRedirectActive] = useState(true);
+
+  // 🚚 Navigate directly to Order Status / Tracking
+  const handleGoToOrderStatus = () => {
+    setIsAutoRedirectActive(false);
+    if (targetOrderId) {
+      navigation.replace('OrderTracking', { orderId: targetOrderId });
+    } else {
+      handleGoToOrders();
+    }
+  };
+
+  // ⏱️ Auto-redirect timer to order status
+  useEffect(() => {
+    if (!isAutoRedirectActive) return;
+    if (secondsRemaining <= 0) {
+      handleGoToOrderStatus();
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSecondsRemaining((prev) => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [secondsRemaining, isAutoRedirectActive]);
 
   // 🖨️ 2. Function to generate and download the Professional PDF
   const generatePDF = async () => {
+    setIsAutoRedirectActive(false);
     setIsGenerating(true);
     try {
       // Clean, professional, B2B-standard HTML template
@@ -82,7 +121,7 @@ export default function PaymentSuccessScreen() {
                         </td>
                         <td style="text-align: right; vertical-align: top;">
                             <h2 class="receipt-title">PAYMENT RECEIPT</h2>
-                            <p style="margin: 8px 0 2px; font-size: 14px; color: #64748b;">Receipt #: <strong>${orderId}</strong></p>
+                            <p style="margin: 8px 0 2px; font-size: 14px; color: #64748b;">Receipt #: <strong>${receiptCode}</strong></p>
                             <p style="margin: 2px 0 0; font-size: 14px; color: #64748b;">Date: <strong>${date}</strong></p>
                         </td>
                     </tr>
@@ -96,9 +135,9 @@ export default function PaymentSuccessScreen() {
                         </td>
                         <td style="vertical-align: top; width: 50%;">
                             <table class="meta-table">
-                                <tr><td class="meta-label">Payment Method:</td><td class="meta-val">Bank Transfer (RTGS/NEFT)</td></tr>
-                                <tr><td class="meta-label">UTR / Ref No:</td><td class="meta-val">${utr}</td></tr>
-                                <tr><td class="meta-label">Payment Status:</td><td class="meta-val" style="color: #d97706;">Pending Verification</td></tr>
+                                <tr><td class="meta-label">Payment Method:</td><td class="meta-val">Online Payment (Juspay / Gateway)</td></tr>
+                                <tr><td class="meta-label">Ref No:</td><td class="meta-val">${utr || targetOrderId}</td></tr>
+                                <tr><td class="meta-label">Payment Status:</td><td class="meta-val" style="color: #10b981;">Successful</td></tr>
                             </table>
                         </td>
                     </tr>
@@ -114,7 +153,7 @@ export default function PaymentSuccessScreen() {
                     </thead>
                     <tbody>
                         <tr>
-                            <td><strong>${productName}</strong><br/><span style="font-size: 12px; color: #64748b;">Order Ref: ${orderId}</span></td>
+                            <td><strong>${productName}</strong><br/><span style="font-size: 12px; color: #64748b;">Order Ref: ${targetOrderId}</span></td>
                             <td style="text-align: center;">${quantity} ${unit}</td>
                             <td style="text-align: right;">₹${totalAmount}</td>
                         </tr>
@@ -134,8 +173,8 @@ export default function PaymentSuccessScreen() {
                 <div class="terms">
                     <h4>Terms & Conditions</h4>
                     <ul>
-                        <li>This receipt acknowledges the submission of your payment reference. The order will be officially confirmed upon successful realization of funds in Prochem Marketplace Private Limited's bank account.</li>
-                        <li>Logistics and freight charges are not included in this payment and will be billed separately prior to dispatch.</li>
+                        <li>This receipt acknowledges the payment for your chemical order. The seller is notified to prepare dispatch documents for verification.</li>
+                        <li>Logistics and freight charges are billed separately prior to dispatch.</li>
                         <li>For any discrepancies regarding this transaction, please notify us within 24 hours.</li>
                         <li>All disputes are subject to the exclusive jurisdiction of the courts in Anand, Gujarat.</li>
                     </ul>
@@ -159,7 +198,7 @@ export default function PaymentSuccessScreen() {
          if (canShare) {
            await Sharing.shareAsync(uri, {
              mimeType: 'application/pdf',
-             dialogTitle: `Prochem_Receipt_${orderId}.pdf`,
+             dialogTitle: `Prochem_Receipt_${receiptCode}.pdf`,
            });
          } else {
            Alert.alert('Error', 'Sharing/Downloading is not available on this device');
@@ -173,15 +212,16 @@ export default function PaymentSuccessScreen() {
     }
   };
 
-  // 🚀 3. CORRECTED: Navigate back to Orders Tab
+  // 🚀 3. Navigate back to Orders Tab
   const handleGoToOrders = () => {
+    setIsAutoRedirectActive(false);
     navigation.dispatch(
       CommonActions.reset({
         index: 0,
         routes: [{
           name: 'BuyerTabs',
           state: {
-            routes: [{ name: 'Orders' }], // Explicitly pushes the state into the 'Orders' tab route
+            routes: [{ name: 'Orders' }],
           },
         }],
       })
@@ -198,31 +238,47 @@ export default function PaymentSuccessScreen() {
               <View style={styles.iconCircle}>
                 <MaterialCommunityIcons name="check" size={50} color="white" />
               </View>
-              <Text variant="headlineSmall" style={styles.title}>Payment Submitted</Text>
+              <Text variant="headlineSmall" style={styles.title}>Payment Successful!</Text>
               <Text variant="bodyMedium" style={styles.subtitle}>
-                We are verifying your UTR details. You will receive an update once the payment clears.
+                Your order has been created and payment confirmed. You can now monitor live order milestones and fulfillment status.
               </Text>
+
+              {isAutoRedirectActive && (
+                <View style={styles.countdownPill}>
+                  <MaterialCommunityIcons name="clock-outline" size={16} color="#004AAD" />
+                  <Text style={styles.countdownText}>
+                    Redirecting to Order Status in <Text style={{fontWeight:'bold', color:'#004AAD'}}>{secondsRemaining}s</Text>
+                  </Text>
+                  <TouchableOpacity onPress={() => setIsAutoRedirectActive(false)}>
+                    <Text style={styles.pauseText}>Pause</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
 
             <View style={styles.receiptPaper}>
               <View style={styles.receiptHeader}>
                 <Text style={styles.receiptTitle}>Prochem</Text>
-                <Text style={styles.receiptSub}>Order Receipt</Text>
+                <Text style={styles.receiptSub}>Order Confirmation & Receipt</Text>
               </View>
               
               <Divider style={styles.dashedDivider} />
 
               <View style={styles.row}>
-                 <Text style={styles.label}>Order ID</Text>
-                 <Text style={styles.value}>{orderId}</Text>
+                 <Text style={styles.label}>Order Reference</Text>
+                 <Text style={styles.value}>{receiptCode}</Text>
+              </View>
+              <View style={styles.row}>
+                 <Text style={styles.label}>Product</Text>
+                 <Text style={[styles.value, {maxWidth: '60%', textAlign: 'right'}]} numberOfLines={1}>{productName || 'Chemical Order'}</Text>
               </View>
               <View style={styles.row}>
                  <Text style={styles.label}>Date</Text>
                  <Text style={styles.value}>{date}</Text>
               </View>
               <View style={styles.row}>
-                 <Text style={styles.label}>UTR No</Text>
-                 <Text style={styles.value}>{utr}</Text>
+                 <Text style={styles.label}>Payment Status</Text>
+                 <Text style={[styles.value, { color: '#10B981' }]}>Completed</Text>
               </View>
               
               <Divider style={styles.dashedDivider} />
@@ -236,13 +292,24 @@ export default function PaymentSuccessScreen() {
             <View style={styles.actionArea}>
               <Button 
                 mode="contained" 
+                icon="truck-fast" 
+                onPress={handleGoToOrderStatus} 
+                style={styles.statusButton}
+                contentStyle={styles.btnContent}
+                labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
+              >
+                Track Order Status {isAutoRedirectActive ? `(${secondsRemaining}s)` : ''}
+              </Button>
+
+              <Button 
+                mode="outlined" 
                 icon="file-download" 
                 loading={isGenerating}
                 disabled={isGenerating}
                 onPress={generatePDF} 
                 style={styles.downloadButton}
                 contentStyle={styles.btnContent}
-                labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                labelStyle={{ fontSize: 15, fontWeight: '600', color: '#004AAD' }}
               >
                 Download PDF Receipt
               </Button>
@@ -253,7 +320,7 @@ export default function PaymentSuccessScreen() {
                 style={styles.ordersButton}
                 textColor="#64748B"
               >
-                Return to Orders
+                View All Orders
               </Button>
             </View>
 
@@ -270,28 +337,53 @@ const styles = StyleSheet.create({
   card: { borderRadius: 24, backgroundColor: 'white', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10 },
   content: { padding: 10 },
   
-  headerArea: { alignItems: 'center', marginBottom: 24, marginTop: 10 },
+  headerArea: { alignItems: 'center', marginBottom: 20, marginTop: 10 },
   iconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center', marginBottom: 16, elevation: 4 },
   title: { fontWeight: '900', color: '#0F172A', marginBottom: 8 },
-  subtitle: { color: '#64748B', textAlign: 'center', paddingHorizontal: 20, lineHeight: 22 },
+  subtitle: { color: '#64748B', textAlign: 'center', paddingHorizontal: 20, lineHeight: 20, fontSize: 14 },
   
-  receiptPaper: { backgroundColor: '#F8FAFC', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 30 },
+  countdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    gap: 6
+  },
+  countdownText: {
+    fontSize: 13,
+    color: '#1E40AF'
+  },
+  pauseText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#64748B',
+    marginLeft: 6,
+    textDecorationLine: 'underline'
+  },
+
+  receiptPaper: { backgroundColor: '#F8FAFC', padding: 18, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 24 },
   receiptHeader: { alignItems: 'center', marginBottom: 10 },
   receiptTitle: { fontSize: 20, fontWeight: 'bold', color: '#0F172A', textTransform: 'uppercase', letterSpacing: 2 },
   receiptSub: { color: '#64748B', fontSize: 12, marginTop: 2 },
   
-  dashedDivider: { borderStyle: 'dashed', borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: 'transparent', marginVertical: 15 },
+  dashedDivider: { borderStyle: 'dashed', borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: 'transparent', marginVertical: 12 },
   
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   label: { color: '#64748B', fontSize: 14 },
   value: { fontWeight: 'bold', color: '#0F172A', fontSize: 14 },
   
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
   totalLabel: { fontSize: 16, fontWeight: 'bold', color: '#0F172A' },
   totalValue: { fontSize: 22, fontWeight: '900', color: '#004AAD' },
   
-  actionArea: { paddingHorizontal: 10 },
-  downloadButton: { width: '100%', backgroundColor: '#004AAD', borderRadius: 12, marginBottom: 12 },
+  actionArea: { paddingHorizontal: 10, gap: 10 },
+  statusButton: { width: '100%', backgroundColor: '#004AAD', borderRadius: 12 },
+  downloadButton: { width: '100%', borderColor: '#004AAD', borderRadius: 12 },
   btnContent: { paddingVertical: 8 },
   ordersButton: { width: '100%' }
 });

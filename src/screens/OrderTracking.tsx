@@ -19,23 +19,31 @@ export default function OrderTracking() {
   const [loading, setLoading] = useState(true);
 
   // ✅ FIX: Custom Back Navigation Handler
-  // Navigates to Home instead of going back to Checkout/Cart
+  // Navigates to Orders tab instead of going back to Checkout/Cart
   const handleBackNavigation = () => {
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [
-          {
-            name: 'BuyerApp',
-            state: {
-              routes: [{ name: 'BuyerTabs', params: { screen: 'HomeTab' } }],
+    try {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [
+            {
+              name: 'BuyerTabs',
+              state: {
+                routes: [{ name: 'Orders' }],
+              },
             },
-          },
-        ],
-      })
-    );
-    // Fallback if reset doesn't work in your specific stack structure:
-    // navigation.navigate('BuyerApp', { screen: 'BuyerTabs', params: { screen: 'HomeTab' } });
+          ],
+        })
+      );
+    } catch {
+      try {
+        navigation.navigate('BuyerTabs', { screen: 'Orders' });
+      } catch {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        }
+      }
+    }
   };
 
   // ✅ FIX: Handle Android Hardware Back Button
@@ -172,13 +180,22 @@ export default function OrderTracking() {
       <ScrollView contentContainerStyle={{padding: 20}}>
         <Card style={styles.banner}>
           <Card.Content>
-             <Text style={{color:'rgba(255,255,255,0.7)', fontSize:12, fontWeight:'bold', letterSpacing:1}}>
-               ORDER ID: {order.id.slice(0,8).toUpperCase()}
+             <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+               <Text style={{color:'rgba(255,255,255,0.85)', fontSize:12, fontWeight:'bold', letterSpacing:1}}>
+                 ORDER REF: {order.id.slice(0,10).toUpperCase()}
+               </Text>
+               <View style={{backgroundColor:'rgba(16, 185, 129, 0.25)', paddingHorizontal:8, paddingVertical:3, borderRadius:12, borderWidth:1, borderColor:'rgba(16, 185, 129, 0.5)'}}>
+                 <Text style={{color:'#A7F3D0', fontSize:11, fontWeight:'bold'}}>
+                   {order.paymentStatus === 'completed' ? 'PAID' : 'PAYMENT VERIFIED'}
+                 </Text>
+               </View>
+             </View>
+             <Text variant="headlineMedium" style={{color:'white', fontWeight:'bold', marginTop:8}}>
+               {order.status ? order.status.replace(/_/g, ' ') : 'IN PROGRESS'}
              </Text>
-             <Text variant="headlineMedium" style={{color:'white', fontWeight:'bold', marginTop:5}}>
-               {order.status.replace('_', ' ')}
+             <Text style={{color:'white', opacity:0.85, marginTop:2}}>
+               {order.createdAt ? new Date(order.createdAt).toDateString() : new Date().toDateString()}
              </Text>
-             <Text style={{color:'white', opacity:0.9}}>{new Date(order.createdAt).toDateString()}</Text>
           </Card.Content>
         </Card>
 
@@ -224,19 +241,49 @@ export default function OrderTracking() {
            <Card.Title title="Order Summary" left={(props) => <Avatar.Icon {...props} icon="receipt" size={40} style={{backgroundColor:'#F1F5F9'}} color="black" />} />
            <Divider />
            <Card.Content style={{marginTop:10}}>
-             {order.items.map((item: any, idx: number) => (
-                <View key={idx} style={{flexDirection:'row', justifyContent:'space-between', marginBottom:5}}>
-                   <Text>{item.name} (x{item.quantity})</Text>
-                   <Text style={{fontWeight:'bold'}}>₹{item.pricePerUnit * item.quantity}</Text>
-                </View>
-             ))}
+             {(order.items || []).map((item: any, idx: number) => {
+                const itemName = item.name || item.productName || 'Chemical Item';
+                const qty = item.quantity || 1;
+                const unit = item.unit || 'units';
+                const price = item.pricePerUnit || item.price || 0;
+                const lineTotal = item.total || (price * qty);
+                return (
+                  <View key={idx} style={{flexDirection:'row', justifyContent:'space-between', marginBottom:8}}>
+                     <Text style={{flex: 1, marginRight: 8}} numberOfLines={1}>{itemName} ({qty} {unit})</Text>
+                     <Text style={{fontWeight:'bold'}}>₹{Number(lineTotal).toFixed(2)}</Text>
+                  </View>
+                );
+             })}
              <Divider style={{marginVertical:10}} />
              <View style={{flexDirection:'row', justifyContent:'space-between'}}>
                 <Text variant="titleMedium" style={{fontWeight:'bold'}}>Total Amount</Text>
-                <Text variant="titleMedium" style={{fontWeight:'bold', color:'#004AAD'}}>₹{order.totalAmount}</Text>
+                <Text variant="titleMedium" style={{fontWeight:'bold', color:'#004AAD'}}>₹{Number(order.totalAmount || 0).toFixed(2)}</Text>
              </View>
            </Card.Content>
         </Card>
+
+        <View style={{gap: 12, marginBottom: 40}}>
+          <Button 
+            mode="contained" 
+            buttonColor="#004AAD" 
+            icon="clipboard-list" 
+            onPress={handleBackNavigation}
+            style={{borderRadius: 12}}
+            contentStyle={{paddingVertical: 6}}
+          >
+            View All My Orders
+          </Button>
+          <Button 
+            mode="outlined" 
+            textColor="#004AAD" 
+            icon="storefront" 
+            onPress={() => navigation.navigate('BuyerTabs', { screen: 'HomeTab' })}
+            style={{borderRadius: 12, borderColor: '#004AAD'}}
+            contentStyle={{paddingVertical: 6}}
+          >
+            Continue Shopping
+          </Button>
+        </View>
       </ScrollView>
     </View>
   );

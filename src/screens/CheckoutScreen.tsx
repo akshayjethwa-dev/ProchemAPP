@@ -1,6 +1,6 @@
 // src/screens/CheckoutScreen.tsx
 
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Alert, BackHandler, ActivityIndicator, Modal, Platform } from 'react-native';
 import { Text, Card, Button, Divider, IconButton, useTheme } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
@@ -32,6 +32,7 @@ export default function CheckoutScreen() {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null);
   const [firestoreOrderId, setFirestoreOrderId] = useState<string | null>(null);
+  const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [errors, setErrors] = useState({ address: false });
 
@@ -48,6 +49,7 @@ export default function CheckoutScreen() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => {
       backHandler.remove();
+      if (paymentPollRef.current) clearInterval(paymentPollRef.current);
     };
   }, []);
 
@@ -145,15 +147,7 @@ export default function CheckoutScreen() {
         clearCart();
       }
 
-      navigation.navigate('PaymentSuccess', {
-        orderId: originalFirestoreOrderId.slice(0, 10).toUpperCase(),
-        totalAmount: finalPayableAmount.toFixed(2),
-        productName: activeCart.length > 1 ? 'Multiple Products' : activeCart[0]?.name,
-        quantity: activeCart[0]?.quantity,
-        unit: activeCart[0]?.unit || 'kg',
-        buyerName: user?.companyName || user?.businessName || 'Prochem Buyer',
-        date: new Date().toLocaleDateString()
-      });
+      navigation.replace('OrderTracking', { orderId: originalFirestoreOrderId });
 
     } catch (error) {
       console.error("Error in post-payment logic:", error);
@@ -176,6 +170,14 @@ export default function CheckoutScreen() {
     }
 
     setLoading(true);
+    const paymentWindow = Platform.OS === 'web'
+      ? window.open('', '_blank', 'width=480,height=800')
+      : null;
+    if (Platform.OS === 'web' && !paymentWindow) {
+      setLoading(false);
+      window.alert('Please allow pop-ups to open Juspay checkout.');
+      return;
+    }
 
     try {
       // 1. Save the Order to Firestore FIRST
@@ -231,15 +233,46 @@ export default function CheckoutScreen() {
       if (!paymentUrl || !juspayOrderId) throw new Error("Could not retrieve Juspay payment session from server.");
       setPaymentOrderId(juspayOrderId);
       if (Platform.OS === 'web') {
-        window.location.assign(paymentUrl);
+        paymentWindow!.location.href = paymentUrl;
+        const checkPayment = async () => {
+          if (paymentWindow!.closed) {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setPaymentOrderId(null);
+            setLoading(false);
+            return;
+          }
+          try {
+            const statusResponse: any = await httpsCallable(
+              getFunctions(getApp(), 'asia-south1'),
+              'getJuspayOrderStatus'
+            )({ orderId: juspayOrderId });
+            const status = String(statusResponse.data?.status || '').toUpperCase();
+            if (status === 'CHARGED' || ['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
+              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+              setPaymentOrderId(null);
+              if (status === 'CHARGED' && firestoreOrderId) {
+                await handlePaymentSuccess(firestoreOrderId);
+              } else {
+                setLoading(false);
+                window.alert(`Payment not completed: ${status}`);
+              }
+            }
+          } catch (error) {
+            console.error('Juspay status polling failed:', error);
+          }
+        };
+        void checkPayment();
+        paymentPollRef.current = setInterval(checkPayment, 2500);
         return;
       }
       setPaymentUrl(paymentUrl);
       setLoading(false);
 
     } catch (error: any) {
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       console.error("Order Generation Failure:", error);
       setLoading(false);
+
       if (Platform.OS === 'web') {
         window.alert(error.message || 'Failed to initialize payment gateway.');
       } else {

@@ -982,9 +982,9 @@ exports.juspayReturn = functions
       const isSuccess = status === "CHARGED";
       const title = isSuccess ? "Payment successful" : `Payment status: ${status || "PENDING"}`;
       const message = isSuccess
-        ? "Your Prochem Premium features are being unlocked in the app."
+        ? "Your order is being placed."
         : "You can return to Prochem and check the payment status again.";
-      return res.status(statusResponse.ok ? 200 : 502).send(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Prochem Payment</title><style>body{font-family:Arial,sans-serif;text-align:center;padding:48px 20px;color:#1e293b}h2{color:${isSuccess ? "#15803d" : "#b45309"}}</style></head><body><h2>${title}</h2><p>${message}</p><p>This window will close automatically in <span id="countdown">3</span> seconds.</p><script>let seconds=3;const countdown=document.getElementById("countdown");const timer=setInterval(()=>{seconds-=1;countdown.textContent=seconds;if(seconds<=0){clearInterval(timer);window.close();}},1000);</script></body></html>`);
+      return res.status(statusResponse.ok ? 200 : 502).send(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Prochem Payment</title><style>body{font-family:Arial,sans-serif;text-align:center;padding:48px 20px;color:#1e293b}h2{color:${isSuccess ? "#15803d" : "#b45309"}}</style></head><body><h2>${isSuccess ? "Payment successful" : title}</h2><p>${message}</p><p>This window will close automatically in <span id="countdown">0</span> seconds.</p><script>setTimeout(()=>window.close(),3000);</script></body></html>`);
     } catch (error) {
       console.error("Juspay return error:", error.message);
       return res.status(500).send("Unable to verify payment");
