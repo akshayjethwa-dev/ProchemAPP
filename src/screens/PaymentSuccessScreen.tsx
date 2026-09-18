@@ -6,14 +6,21 @@ import { useNavigation, useRoute, CommonActions } from '@react-navigation/native
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAppStore } from '../store/appStore';
 
 export default function PaymentSuccessScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const currentUser = useAppStore((state) => state.user);
+  const viewMode = useAppStore((state) => state.viewMode);
   
-  // 📦 1. Get the order details passed from CheckoutScreen
+  // 📦 1. Get the order details passed from CheckoutScreen / PaymentScreen
   const { 
+    isSubscription,
+    planName,
+    planTier,
+    paymentReference,
     orderId, 
     rawOrderId, 
     firestoreOrderId, 
@@ -28,11 +35,20 @@ export default function PaymentSuccessScreen() {
   } = route.params || {};
 
   const targetOrderId = rawOrderId || firestoreOrderId || orderId;
-  const receiptCode = displayOrderId || (orderId && orderId.length > 12 ? orderId.slice(0, 10).toUpperCase() : orderId) || 'PROCHEM';
+  const receiptCode = displayOrderId || paymentReference || (orderId && orderId.length > 12 ? orderId.slice(0, 10).toUpperCase() : orderId) || 'PROCHEM';
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(4);
-  const [isAutoRedirectActive, setIsAutoRedirectActive] = useState(true);
+  const [isAutoRedirectActive, setIsAutoRedirectActive] = useState(!isSubscription);
+
+  const handleEnterMarketplace = () => {
+    useAppStore.getState().completeOnboarding();
+    const targetApp = (currentUser?.userType === 'seller' || viewMode === 'seller') ? 'SellerApp' : 'BuyerApp';
+    navigation.reset({
+      index: 0,
+      routes: [{ name: targetApp }],
+    });
+  };
 
   // 🚚 Navigate directly to Order Status / Tracking
   const handleGoToOrderStatus = () => {
@@ -235,15 +251,19 @@ export default function PaymentSuccessScreen() {
           <Card.Content style={styles.content}>
             
             <View style={styles.headerArea}>
-              <View style={styles.iconCircle}>
-                <MaterialCommunityIcons name="check" size={50} color="white" />
+              <View style={[styles.iconCircle, isSubscription && { backgroundColor: '#004AAD' }]}>
+                <MaterialCommunityIcons name={isSubscription ? 'crown' : 'check'} size={50} color="white" />
               </View>
-              <Text variant="headlineSmall" style={styles.title}>Payment Successful!</Text>
+              <Text variant="headlineSmall" style={styles.title}>
+                {isSubscription ? 'Subscription Activated! 🎉' : 'Payment Successful!'}
+              </Text>
               <Text variant="bodyMedium" style={styles.subtitle}>
-                Your order has been created and payment confirmed. You can now monitor live order milestones and fulfillment status.
+                {isSubscription
+                  ? `Welcome to ${planName || 'Prochem Membership'}! Your subscription is active and all marketplace privileges are now unlocked.`
+                  : 'Your order has been created and payment confirmed. You can now monitor live order milestones and fulfillment status.'}
               </Text>
 
-              {isAutoRedirectActive && (
+              {!isSubscription && isAutoRedirectActive && (
                 <View style={styles.countdownPill}>
                   <MaterialCommunityIcons name="clock-outline" size={16} color="#004AAD" />
                   <Text style={styles.countdownText}>
@@ -259,26 +279,45 @@ export default function PaymentSuccessScreen() {
             <View style={styles.receiptPaper}>
               <View style={styles.receiptHeader}>
                 <Text style={styles.receiptTitle}>Prochem</Text>
-                <Text style={styles.receiptSub}>Order Confirmation & Receipt</Text>
+                <Text style={styles.receiptSub}>
+                  {isSubscription ? 'Official Subscription Tax Invoice' : 'Order Confirmation & Receipt'}
+                </Text>
               </View>
               
               <Divider style={styles.dashedDivider} />
 
               <View style={styles.row}>
-                 <Text style={styles.label}>Order Reference</Text>
+                 <Text style={styles.label}>{isSubscription ? 'Payment Reference' : 'Order Reference'}</Text>
                  <Text style={styles.value}>{receiptCode}</Text>
               </View>
-              <View style={styles.row}>
-                 <Text style={styles.label}>Product</Text>
-                 <Text style={[styles.value, {maxWidth: '60%', textAlign: 'right'}]} numberOfLines={1}>{productName || 'Chemical Order'}</Text>
-              </View>
+              
+              {isSubscription ? (
+                <>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Selected Plan</Text>
+                    <Text style={[styles.value, { color: '#004AAD' }]}>{planName || 'Basic Plan'}</Text>
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Access Duration</Text>
+                    <Text style={styles.value}>30 Days (Monthly)</Text>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.row}>
+                   <Text style={styles.label}>Product</Text>
+                   <Text style={[styles.value, {maxWidth: '60%', textAlign: 'right'}]} numberOfLines={1}>{productName || 'Chemical Order'}</Text>
+                </View>
+              )}
+
               <View style={styles.row}>
                  <Text style={styles.label}>Date</Text>
                  <Text style={styles.value}>{date}</Text>
               </View>
               <View style={styles.row}>
-                 <Text style={styles.label}>Payment Status</Text>
-                 <Text style={[styles.value, { color: '#10B981' }]}>Completed</Text>
+                 <Text style={styles.label}>Status</Text>
+                 <Text style={[styles.value, { color: '#10B981' }]}>
+                   {isSubscription ? 'Active & Confirmed' : 'Completed'}
+                 </Text>
               </View>
               
               <Divider style={styles.dashedDivider} />
@@ -290,38 +329,68 @@ export default function PaymentSuccessScreen() {
             </View>
 
             <View style={styles.actionArea}>
-              <Button 
-                mode="contained" 
-                icon="truck-fast" 
-                onPress={handleGoToOrderStatus} 
-                style={styles.statusButton}
-                contentStyle={styles.btnContent}
-                labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
-              >
-                Track Order Status {isAutoRedirectActive ? `(${secondsRemaining}s)` : ''}
-              </Button>
+              {isSubscription ? (
+                <>
+                  <Button 
+                    mode="contained" 
+                    icon="store" 
+                    onPress={handleEnterMarketplace} 
+                    style={styles.statusButton}
+                    contentStyle={styles.btnContent}
+                    labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                  >
+                    Enter Marketplace & Start Trading
+                  </Button>
 
-              <Button 
-                mode="outlined" 
-                icon="file-download" 
-                loading={isGenerating}
-                disabled={isGenerating}
-                onPress={generatePDF} 
-                style={styles.downloadButton}
-                contentStyle={styles.btnContent}
-                labelStyle={{ fontSize: 15, fontWeight: '600', color: '#004AAD' }}
-              >
-                Download PDF Receipt
-              </Button>
+                  <Button 
+                    mode="outlined" 
+                    icon="file-download" 
+                    loading={isGenerating}
+                    disabled={isGenerating}
+                    onPress={generatePDF} 
+                    style={styles.downloadButton}
+                    contentStyle={styles.btnContent}
+                    labelStyle={{ fontSize: 15, fontWeight: '600', color: '#004AAD' }}
+                  >
+                    Download Subscription Receipt
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    mode="contained" 
+                    icon="truck-fast" 
+                    onPress={handleGoToOrderStatus} 
+                    style={styles.statusButton}
+                    contentStyle={styles.btnContent}
+                    labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                  >
+                    Track Order Status {isAutoRedirectActive ? `(${secondsRemaining}s)` : ''}
+                  </Button>
 
-              <Button 
-                mode="text" 
-                onPress={handleGoToOrders} 
-                style={styles.ordersButton}
-                textColor="#64748B"
-              >
-                View All Orders
-              </Button>
+                  <Button 
+                    mode="outlined" 
+                    icon="file-download" 
+                    loading={isGenerating}
+                    disabled={isGenerating}
+                    onPress={generatePDF} 
+                    style={styles.downloadButton}
+                    contentStyle={styles.btnContent}
+                    labelStyle={{ fontSize: 15, fontWeight: '600', color: '#004AAD' }}
+                  >
+                    Download PDF Receipt
+                  </Button>
+
+                  <Button 
+                    mode="text" 
+                    onPress={handleGoToOrders} 
+                    style={styles.ordersButton}
+                    textColor="#64748B"
+                  >
+                    View All Orders
+                  </Button>
+                </>
+              )}
             </View>
 
           </Card.Content>

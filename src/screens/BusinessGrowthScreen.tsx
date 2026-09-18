@@ -28,23 +28,36 @@ const { width } = Dimensions.get('window');
 const WHATSAPP_NUMBER = '917984856652'; 
 
 const PLANS = {
-  standard: {
-    key: 'standard',
-    title: 'Standard Plan',
-    amount: '50,000',
-    amountRaw: 50000,
-    duration: '1 Year',
-    description: 'Perfect for businesses looking to scale their sourcing and sales.',
-    highlights: ['Access to verified buyers & sellers', 'Live market leads', 'Ready-to-dispatch inventory', 'Full Prochem team support'],
+  growth_monthly: {
+    key: 'premium_growth',
+    title: 'Premium Growth Plan',
+    amount: '4,999',
+    amountRaw: 4999,
+    duration: '1 Month',
+    description: 'Unlock exclusive verified leads, 5+ chemical comparisons, and dedicated manager.',
+    highlights: [
+      'Access to verified buyers & sellers in Premium Hub',
+      'Compare chemicals with 5+ verified manufacturers',
+      'Priority live market leads & bulk buyer inquiries',
+      'WhatsApp & Email promotion to verified network',
+      'Dedicated Prochem relationship manager',
+      '100% upfront payment assurance & escrow protection'
+    ],
   },
-  growth: {
-    key: 'growth',
-    title: '3-Year Growth Plan',
-    amount: '1,00,000',
-    amountRaw: 100000,
-    duration: '3 Years',
-    description: 'Lock in the best rates and secure your platform growth long-term.',
-    highlights: ['Everything in Standard', 'Save ₹50,000 vs yearly', 'Priority market leads', 'WhatsApp & Email promotion', 'Dedicated account manager'],
+  growth_annual: {
+    key: 'growth_annual',
+    title: 'Premium Growth (Annual)',
+    amount: '49,999',
+    amountRaw: 49999,
+    duration: '1 Year',
+    description: 'Lock in the best rates with 12 months access and save over ₹10,000.',
+    highlights: [
+      'Everything in Monthly Premium Growth Plan',
+      'Save ₹10,000 compared to monthly billing',
+      'Priority marketplace search placement',
+      'WhatsApp & Email promotion to verified network',
+      'Dedicated Prochem relationship manager',
+    ],
   },
 };
 
@@ -613,9 +626,11 @@ function SalesPitchUI() {
   const insets = useSafeAreaInsets();
   const { user } = useAppStore();
   const [activeTab, setActiveTab] = useState<'buyers' | 'sellers'>('buyers');
-  const [selectedPlan, setSelectedPlan] = useState<keyof typeof PLANS | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<keyof typeof PLANS | null>('growth_monthly');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showTnCModal, setShowTnCModal] = useState(false); 
+
+  const isExistingFreeUser = !user?.subscriptionTier || user?.subscriptionTier === 'FREE' || user?.subscriptionTier === 'BASIC'; 
 
   const buyerFeatures = [
     { title: 'Compare products with 5+ verified companies', isReady: true },
@@ -722,39 +737,58 @@ function SalesPitchUI() {
           </Surface>
         </View>
 
+        {/* Existing Users Grandfathered Status Banner */}
+        {isExistingFreeUser && (
+          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+            <Surface style={{ backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#BBF7D0' }} elevation={0}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <MaterialCommunityIcons name="shield-check" size={24} color="#10B981" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#14532D' }}>
+                    Active Membership: Complimentary Marketplace Access
+                  </Text>
+                  <Text style={{ fontSize: 11, color: '#166534', marginTop: 2, lineHeight: 16 }}>
+                    As an existing partner, your account enjoys complimentary Basic tier marketplace access. You can upgrade to the Premium Growth Plan at ₹4,999/month anytime to unlock high-intent leads and direct chemical manufacturer comparisons.
+                  </Text>
+                </View>
+              </View>
+            </Surface>
+          </View>
+        )}
+
         <View style={styles.pricingSection}>
-          <Text variant="titleLarge" style={styles.pricingHeader}>Choose Your Plan</Text>
+          <Text variant="titleLarge" style={styles.pricingHeader}>Choose Your Growth Tier</Text>
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => setSelectedPlan('standard')}
+            onPress={() => setSelectedPlan('growth_monthly')}
           >
             <Card
               style={[
                 styles.pricingCard,
-                selectedPlan === 'standard' && upgradeStyles.selectedCard,
+                selectedPlan === 'growth_monthly' && upgradeStyles.selectedCard,
               ]}
               mode="outlined"
             >
               <Card.Content style={styles.pricingCardContent}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.planTitle}>Standard Plan</Text>
+                  <Text style={styles.planTitle}>Premium Growth Plan</Text>
                   <View style={[
                     upgradeStyles.radioCircle,
-                    selectedPlan === 'standard' && upgradeStyles.radioCircleSelected,
+                    selectedPlan === 'growth_monthly' && upgradeStyles.radioCircleSelected,
                   ]}>
-                    {selectedPlan === 'standard' && (
+                    {selectedPlan === 'growth_monthly' && (
                       <View style={upgradeStyles.radioInner} />
                     )}
                   </View>
                 </View>
                 <View style={styles.priceRow}>
                   <Text style={styles.priceSymbol}>₹</Text>
-                  <Text style={styles.priceAmount}>50,000</Text>
-                  <Text style={styles.priceDuration}>/ Year</Text>
+                  <Text style={styles.priceAmount}>4,999</Text>
+                  <Text style={styles.priceDuration}>/ Month</Text>
                 </View>
                 <Text style={styles.planDescription}>
-                  Perfect for businesses looking to scale their sourcing and sales.
+                  Full access to verified buyer/seller directory, 5+ chemical comparisons, and priority leads.
                 </Text>
               </Card.Content>
             </Card>
@@ -762,37 +796,37 @@ function SalesPitchUI() {
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => setSelectedPlan('growth')}
+            onPress={() => setSelectedPlan('growth_annual')}
           >
             <Card
               style={[
                 styles.pricingCard,
                 styles.premiumCard,
-                selectedPlan === 'growth' && upgradeStyles.selectedCard,
+                selectedPlan === 'growth_annual' && upgradeStyles.selectedCard,
               ]}
               mode="elevated"
             >
               <View style={styles.bestValueBanner}>
                 <MaterialCommunityIcons name="star" size={14} color="#78350F" style={{ marginRight: 4 }} />
-                <Text style={styles.bestValueText}>BEST VALUE — SAVE ₹50,000</Text>
+                <Text style={styles.bestValueText}>BEST VALUE — SAVE OVER ₹10,000</Text>
               </View>
               <Card.Content style={styles.pricingCardContent}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={[styles.planTitle, { color: '#B45309' }]}>3-Year Growth Plan</Text>
+                  <Text style={[styles.planTitle, { color: '#B45309' }]}>Premium Growth (Annual)</Text>
                   <View style={[
                     upgradeStyles.radioCircle,
-                    selectedPlan === 'growth' && upgradeStyles.radioCircleSelected,
+                    selectedPlan === 'growth_annual' && upgradeStyles.radioCircleSelected,
                   ]}>
-                    {selectedPlan === 'growth' && <View style={upgradeStyles.radioInner} />}
+                    {selectedPlan === 'growth_annual' && <View style={upgradeStyles.radioInner} />}
                   </View>
                 </View>
                 <View style={styles.priceRow}>
                   <Text style={styles.priceSymbol}>₹</Text>
-                  <Text style={styles.priceAmount}>1,00,000</Text>
-                  <Text style={styles.priceDuration}>/ 3 Years</Text>
+                  <Text style={styles.priceAmount}>49,999</Text>
+                  <Text style={styles.priceDuration}>/ Year</Text>
                 </View>
                 <Text style={styles.planDescription}>
-                  Lock in the best rates and secure your platform growth long-term.
+                  12 months uninterrupted premium access with priority marketplace banner placement.
                 </Text>
               </Card.Content>
             </Card>

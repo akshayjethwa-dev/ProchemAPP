@@ -6,31 +6,40 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// 🚀 FIX: Imported Web Auth modules to fix the SDK mismatch
-import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
+import { 
+  PhoneAuthProvider, 
+  signInWithCredential, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword 
+} from 'firebase/auth';
 import { auth } from '../config/firebase';
 
 import { completeRegistrationAfterOTP, processMobileLogin } from '../services/authService';
+import { getPhoneAuthSession, setPhoneAuthSession, clearPhoneAuthSession } from '../services/phoneAuthSession';
+import { sendRealPhoneOTP, parsePhoneAuthError } from '../services/phoneAuthService';
 import { useAppStore } from '../store/appStore'; 
 
 export default function OTPVerificationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<any>();
+  const session = getPhoneAuthSession();
   
-  // Extract route params
-  const mobile = route.params?.mobile || '';
-  const mode = route.params?.mode || 'login'; // 'login' or 'registration'
-  const formData = route.params?.formData;
+  // Extract route params with fallback to in-memory session
+  const mobile = route.params?.mobile || session?.mobile || '';
+  const mode = route.params?.mode || session?.mode || 'login'; // 'login' or 'registration'
+  const formData = route.params?.formData || session?.formData;
   
-  const webConfirmation = route.params?.webConfirmation;
-  const nativeConfirmation = route.params?.nativeConfirmation;
+  const webConfirmation = session?.webConfirmation || route.params?.webConfirmation;
+  const nativeConfirmation = session?.nativeConfirmation || route.params?.nativeConfirmation;
   
   const theme = useTheme();
 
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
-  const [resendTimer, setResendTimer] = useState(30);
+  const [resending, setResending] = useState(false);
+  const [resendTimer, setResendTimer] = useState(60);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -43,37 +52,69 @@ export default function OTPVerificationScreen() {
   const handleVerify = async () => {
     setErrorMsg('');
     if (otp.length !== 6) {
-      setErrorMsg('Please enter a 6-digit OTP');
-      return;
-    }
-
-    if (!webConfirmation && !nativeConfirmation) {
-      Alert.alert('Error', 'Missing verification session. Please request a new OTP.');
+      setErrorMsg('Please enter the 6-digit OTP code received via SMS');
       return;
     }
 
     setLoading(true);
     
     try {
-      let userCredential;
+      let userCredential: any = null;
 
-      // 1. Confirm OTP based on the platform
+      // Real carrier SMS OTP verification
       if (Platform.OS === 'web') {
+        if (!webConfirmation || typeof webConfirmation.confirm !== 'function') {
+          throw new Error('No active verification session found. Please return to the previous screen and request a fresh SMS code.');
+        }
         userCredential = await webConfirmation.confirm(otp);
       } else {
-        // 🚀 FIX: SDK MISMATCH RESOLUTION
-        // Confirm the native verification ID using the Web SDK so Firestore gets the auth token
-        const credential = PhoneAuthProvider.credential(nativeConfirmation.verificationId, otp);
-        userCredential = await signInWithCredential(auth, credential);
+        if (nativeConfirmation && typeof nativeConfirmation.confirm === 'function') {
+          userCredential = await nativeConfirmation.confirm(otp);
+        } else if (nativeConfirmation?.verificationId) {
+          const credential = PhoneAuthProvider.credential(nativeConfirmation.verificationId, otp);
+          userCredential = await signInWithCredential(auth, credential);
+        } else {
+          throw new Error('No active verification session found. Please return to the previous screen and request a fresh SMS code.');
+        }
+      }
+
+      if (!userCredential?.user) {
+        throw new Error('Authentication succeeded but user record could not be retrieved.');
       }
 
       // 2. Process based on Mode
       if (mode === 'registration' && formData) {
-        // FULL REGISTRATION FLOW (Web/Email/Form attached)
-        await completeRegistrationAfterOTP(userCredential.user, formData);
+        // FULL REGISTRATION FLOW
+        const createdUser = await completeRegistrationAfterOTP(userCredential.user, formData);
+
+        const planToPay = formData.selectedPlan || route.params?.selectedPlan || session?.selectedPlan;
+        clearPhoneAuthSession();
+
+        if (planToPay) {
+          // Keep user object updated
+          useAppStore.getState().setUser({
+            ...createdUser,
+            uid: userCredential.user.uid,
+          });
+
+          // Navigate directly to PaymentScreen for checkout
+          navigation.navigate('Payment', {
+            plan: planToPay,
+            user: {
+              ...createdUser,
+              uid: userCredential.user.uid,
+              email: formData.email,
+              companyName: formData.companyName,
+              phoneNumber: formData.phoneNumber,
+            },
+            userId: userCredential.user.uid,
+          });
+          return;
+        }
       } else {
-        // 🚀 NEW: MOBILE LOGIN/REGISTRATION FLOW
+        // MOBILE LOGIN FLOW
         await processMobileLogin(userCredential.user, mobile);
+        clearPhoneAuthSession();
       }
       
       // Reset onboarding state so that RootNavigator handles redirect to OnboardingScreen
@@ -81,26 +122,53 @@ export default function OTPVerificationScreen() {
 
     } catch (error: any) {
       console.error('OTP Verification Error:', error);
-      
       setLoading(false);
       
       const errorCode = error.code || '';
       if (errorCode.includes('invalid-verification-code') || errorCode.includes('invalid-credential')) {
-        setErrorMsg('Invalid OTP. Please try again.');
+        setErrorMsg('Invalid verification code. Please check the SMS on your phone and try again.');
       } else if (errorCode.includes('code-expired') || errorCode.includes('session-expired')) {
-        setErrorMsg('The OTP has expired. Please go back and request a new one.');
+        setErrorMsg('This code has expired. Please tap "Request again" below to receive a new SMS.');
       } else {
-        Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
+        Alert.alert('Verification Failed', error.message || 'Failed to verify OTP. Please try again.');
       }
     } 
   };
 
-  const handleResend = () => {
-    Alert.alert(
-      'Resend OTP', 
-      'To securely send a new OTP, please go back and request a new code.',
-      [{ text: 'Go Back', onPress: () => navigation.goBack() }]
-    );
+  const handleResend = async () => {
+    if (resendTimer > 0 || resending || !mobile) return;
+
+    setResending(true);
+    try {
+      const result = await sendRealPhoneOTP(
+        mobile,
+        'recaptcha-container-resend'
+      );
+
+      if (!result.success) {
+        setResending(false);
+        const friendlyMessage = result.errorMessage || 'Unable to dispatch SMS.';
+        Alert.alert('Unable to Resend SMS', friendlyMessage);
+        return;
+      }
+
+      // Update session with fresh confirmation
+      setPhoneAuthSession({
+        ...session,
+        webConfirmation: Platform.OS === 'web' ? result.confirmationResult : undefined,
+        nativeConfirmation: Platform.OS !== 'web' ? result.confirmationResult : undefined,
+        mobile: result.formattedMobile,
+      });
+
+      setResendTimer(60);
+      setResending(false);
+      Alert.alert('OTP Dispatched', 'A new 6-digit verification code has been dispatched via SMS to your mobile phone.');
+    } catch (err: any) {
+      setResending(false);
+      console.error('Resend OTP Error:', err);
+      const friendlyMessage = parsePhoneAuthError(err);
+      Alert.alert('Unable to Resend SMS', friendlyMessage);
+    }
   };
 
   return (
@@ -112,8 +180,19 @@ export default function OTPVerificationScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.content}>
         <Text variant="displaySmall" style={styles.title}>Enter OTP</Text>
         <Text variant="bodyLarge" style={styles.subtitle}>
-          Sent to <Text style={{fontWeight: 'bold', color: '#111827'}}>{mobile}</Text>
+          A 6-digit verification code was sent via carrier SMS to{' '}
+          <Text style={{ fontWeight: 'bold', color: '#111827' }}>{mobile}</Text>
         </Text>
+
+        <View style={styles.smsSentCard}>
+          <View style={styles.smsSentHeader}>
+            <MaterialCommunityIcons name="cellphone-check" size={20} color="#16A34A" />
+            <Text style={styles.smsSentTitle}>Carrier SMS Dispatched</Text>
+          </View>
+          <Text style={styles.smsSentDesc}>
+            A 6-digit verification code has been sent via SMS to your mobile phone. Please check your SMS inbox and enter the code below.
+          </Text>
+        </View>
 
         <View style={styles.inputContainer}>
           <TextInput
@@ -130,6 +209,7 @@ export default function OTPVerificationScreen() {
             contentStyle={styles.inputText}
             error={!!errorMsg}
             disabled={loading}
+            autoFocus
           />
           {errorMsg ? (
             <HelperText type="error" visible={!!errorMsg} style={{ textAlign: 'center', marginTop: 8 }}>
@@ -146,16 +226,20 @@ export default function OTPVerificationScreen() {
           style={styles.verifyBtn}
           contentStyle={{ height: 50 }}
         >
-          Verify OTP
+          Verify OTP & Continue
         </Button>
 
         <TouchableOpacity 
           onPress={handleResend} 
-          disabled={resendTimer > 0 || loading}
+          disabled={resendTimer > 0 || loading || resending}
           style={styles.resendContainer}
         >
           <Text style={{ color: resendTimer > 0 ? '#9CA3AF' : theme.colors.primary, fontWeight: 'bold' }}>
-            {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : "Didn't receive code? Request again"}
+            {resendTimer > 0 
+              ? `Resend OTP in ${resendTimer}s` 
+              : resending 
+                ? 'Sending new SMS code...' 
+                : "Didn't receive SMS? Request again"}
           </Text>
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -168,10 +252,35 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 10 },
   content: { flex: 1, padding: 24, justifyContent: 'center' },
   title: { fontWeight: 'bold', color: '#111827', marginBottom: 8 },
-  subtitle: { color: '#6B7280', marginBottom: 40 },
-  inputContainer: { marginBottom: 30 },
+  subtitle: { color: '#6B7280', marginBottom: 24, fontSize: 15, lineHeight: 22 },
+  smsSentCard: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 24,
+  },
+  smsSentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  smsSentTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  smsSentDesc: {
+    fontSize: 13,
+    color: '#166534',
+    lineHeight: 18,
+  },
+  inputContainer: { marginBottom: 24 },
   input: { backgroundColor: '#F9FAFB', fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
   inputText: { textAlign: 'center', letterSpacing: 4, fontSize: 24 },
-  verifyBtn: { borderRadius: 12, marginBottom: 20 },
+  verifyBtn: { borderRadius: 12, marginBottom: 20, backgroundColor: '#004AAD' },
   resendContainer: { alignItems: 'center', padding: 10 },
 });
+

@@ -33,6 +33,7 @@ interface RegisterData {
   gstVerified?: boolean;
   verificationStatus?: string;
   whatsappOptIn?: boolean;
+  selectedPlan?: any;
 }
 
 export const checkEmailExists = async (email: string): Promise<boolean> => {
@@ -138,7 +139,9 @@ export const completeRegistrationAfterOTP = async (
       hasPassword: true,
       isGSTVerified: formData.gstVerified || false,
       
-      subscriptionTier: 'FREE',
+      subscriptionTier: formData.selectedPlan ? 'PENDING_PAYMENT' : 'FREE',
+      subscriptionPlan: formData.selectedPlan?.id,
+      pendingPlan: formData.selectedPlan,
       subscriptionExpiry: null,
       paymentHistory: [],
       
@@ -147,6 +150,7 @@ export const completeRegistrationAfterOTP = async (
     };
 
     await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+    return userData;
 
     try {
       await addDoc(collection(db, 'notifications'), {

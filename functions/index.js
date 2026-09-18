@@ -757,10 +757,19 @@ exports.createJuspaySession = functions
   .https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
 
-    const { amount, type = "product", referenceId, customerDetails } = data || {};
+    const { amount, type = "product", referenceId, customerDetails, planTier } = data || {};
     if (!amount || !referenceId) {
       throw new functions.https.HttpsError("invalid-argument", "Amount and referenceId are required.");
     }
+
+    const calculatedPlanTier = planTier || (
+      referenceId === "premium_growth" ||
+      referenceId === "growth" ||
+      referenceId === "growth_monthly" ||
+      referenceId === "growth_annual"
+        ? "GROWTH_PACKAGE"
+        : "BASIC"
+    );
 
     const merchantId = process.env.JUSPAY_MERCHANT_ID;
     const clientId = process.env.JUSPAY_CLIENT_ID;
@@ -806,6 +815,7 @@ exports.createJuspaySession = functions
         userId: context.auth.uid,
         type,
         referenceId,
+        planTier: calculatedPlanTier,
         amount: Number(amount),
         status: "PENDING",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -911,10 +921,20 @@ exports.juspayWebhook = functions
 
         const sessionData = sessionSnap.data() || {};
         if (sessionData.type === "subscription") {
+          const determinedTier = sessionData.planTier || (
+            sessionData.referenceId === "premium_growth" ||
+            sessionData.referenceId === "growth" ||
+            sessionData.referenceId === "growth_monthly" ||
+            sessionData.referenceId === "growth_annual"
+              ? "GROWTH_PACKAGE"
+              : "BASIC"
+          );
+
           await admin.firestore().collection("users").doc(sessionData.userId).update({
-            subscriptionTier: "GROWTH_PACKAGE",
+            subscriptionTier: determinedTier,
             subscriptionPlan: sessionData.referenceId,
             subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            pendingPlan: admin.firestore.FieldValue.delete(),
           });
         }
 

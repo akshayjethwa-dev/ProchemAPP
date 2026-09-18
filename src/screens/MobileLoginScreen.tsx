@@ -6,16 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-
-// 👇 1. Import Native Firebase conditionally
-let nativeAuth: any;
-if (Platform.OS !== 'web') {
-  nativeAuth = require('@react-native-firebase/auth').default;
-}
-
-// 👇 2. Import Web Firebase
-import { auth as webAuth } from '../config/firebase';
-import { RecaptchaVerifier, signInWithPhoneNumber as webSignInWithPhoneNumber } from 'firebase/auth';
+import { setPhoneAuthSession } from '../services/phoneAuthSession';
+import { sendRealPhoneOTP, parsePhoneAuthError, formatPhoneNumber } from '../services/phoneAuthService';
 
 export default function MobileLoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -23,51 +15,51 @@ export default function MobileLoginScreen() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Ref for Web Recaptcha
-  const recaptchaVerifierRef = useRef<any>(null);
 
   const handleSendOTP = async () => {
     setError('');
-    if (!phone || phone.length < 10) {
+    const cleanPhone = phone.trim().replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
       setError('Please enter a valid 10-digit mobile number.');
       return;
     }
 
     setLoading(true);
-    const fullPhoneNumber = `+91${phone}`;
+    const fullPhoneNumber = formatPhoneNumber(cleanPhone);
 
     try {
-      if (Platform.OS === 'web') {
-        // --- WEB FLOW ---
-        if (!recaptchaVerifierRef.current) {
-          recaptchaVerifierRef.current = new RecaptchaVerifier(webAuth, 'recaptcha-container', {
-            size: 'invisible',
-          });
-        }
-        const confirmationResult = await webSignInWithPhoneNumber(webAuth, fullPhoneNumber, recaptchaVerifierRef.current);
-        
-        navigation.navigate('OTPVerification' as any, { 
-          mobile: phone, 
-          webConfirmation: confirmationResult, 
-          mode: 'login' 
-        });
+      const result = await sendRealPhoneOTP(
+        fullPhoneNumber,
+        'recaptcha-container'
+      );
 
-      } else {
-        // --- NATIVE APP FLOW (Android/iOS) ---
-        const confirmation = await nativeAuth().signInWithPhoneNumber(fullPhoneNumber);
-        
-        navigation.navigate('OTPVerification' as any, { 
-          mobile: phone, 
-          nativeConfirmation: confirmation, 
-          mode: 'login' 
-        });
+      if (!result.success) {
+        setLoading(false);
+        const err = result.errorMessage || 'Failed to dispatch SMS verification code.';
+        setError(err);
+        Alert.alert('SMS Delivery Notice', err);
+        return;
       }
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to send OTP. Please try again.');
-    } finally {
+
+      setPhoneAuthSession({
+        webConfirmation: Platform.OS === 'web' ? result.confirmationResult : undefined,
+        nativeConfirmation: Platform.OS !== 'web' ? result.confirmationResult : undefined,
+        mobile: result.formattedMobile,
+        mode: 'login',
+      });
+
       setLoading(false);
+
+      navigation.navigate('OTPVerification', { 
+        mobile: result.formattedMobile, 
+        mode: 'login',
+      });
+    } catch (err: any) {
+      setLoading(false);
+      console.error('MobileLogin error:', err);
+      const msg = err?.message || 'Failed to process mobile number.';
+      setError(msg);
+      Alert.alert('SMS Delivery Notice', msg);
     }
   };
 

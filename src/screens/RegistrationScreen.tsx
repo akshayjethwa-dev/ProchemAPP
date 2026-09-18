@@ -41,7 +41,8 @@ const { width } = Dimensions.get('window');
 type RootStackParamList = {
   Login: undefined;
   Registration: { role?: string } | undefined;
-  OTPVerification: { mobile: string; mode: string; formData: any; webConfirmation?: any; nativeConfirmation?: any };
+  PlanSelection: { formData: any; role?: string };
+  OTPVerification: { mobile: string; mode: string; formData: any; webConfirmation?: any; nativeConfirmation?: any; selectedPlan?: any };
   LegalPages: undefined; 
   AboutProchem: undefined; 
 };
@@ -178,57 +179,14 @@ export default function RegistrationScreen() {
         whatsappOptIn,
       };
 
-      if (Platform.OS === 'web') {
-        if (!webAuth || !webRecaptchaVerifier.current) {
-          showAlert("Configuration Error", "Firebase Auth or ReCAPTCHA is not initialized.");
-          setLoading(false);
-          return;
-        }
-
-        // ✅ Simply use the existing, pre-warmed Recaptcha instance
-        const confirmationResult = await webSignInWithPhoneNumber(webAuth, fullMobile, webRecaptchaVerifier.current);
-        
-        navigation.navigate('OTPVerification', {
-          mobile: fullMobile,
-          webConfirmation: confirmationResult,
-          mode: 'registration',
-          formData,
-        });
-
-      } else {
-        const confirmation = await nativeAuth().signInWithPhoneNumber(fullMobile);
-        
-        navigation.navigate('OTPVerification', {
-          mobile: fullMobile,
-          nativeConfirmation: confirmation,
-          mode: 'registration',
-          formData,
-        });
-      }
-
+      setLoading(false);
+      navigation.navigate('PlanSelection', {
+        formData,
+        role: role || 'buyer',
+      });
     } catch (error: any) {
-      console.error('OTP Send Error:', error);
-      
-      // ✅ If validation fails, reset recaptcha widget gracefully so they can click the button again
-      if (Platform.OS === 'web' && webRecaptchaVerifier.current) {
-         try { 
-           webRecaptchaVerifier.current.clear(); 
-           // Re-initialize for the next attempt
-           webRecaptchaVerifier.current = new RecaptchaVerifier(webAuth, 'recaptcha-container', { 
-             size: 'invisible' 
-           });
-         } catch(e) {}
-      }
-
-      if (error.code === 'auth/invalid-app-credential') {
-        showAlert('Domain Error', 'Your current IP or Domain is not whitelisted in Firebase Console. Please add it to "Authorized Domains".');
-      } else if (error.code === 'auth/invalid-phone-number') {
-        showAlert('Invalid Number', 'Please check your country code and mobile number format.');
-      } else if (error.code === 'auth/captcha-check-failed') {
-        showAlert('Verification Failed', 'ReCAPTCHA token expired or is malformed. Please try again.');
-      } else {
-        showAlert('Failed to Send OTP', `Error: ${error.message || error.code || 'Unknown error'}`);
-      }
+      console.error('Registration validation error:', error);
+      showAlert('Error', error.message || 'Validation failed. Please review your details.');
     } finally {
       setLoading(false);
     }
@@ -516,7 +474,7 @@ export default function RegistrationScreen() {
               contentStyle={styles.btnContent}
               labelStyle={styles.btnLabel}
             >
-              Verify Mobile & Register
+              Continue to Select Plan →
             </Button>
 
             <View style={styles.footer}>

@@ -18,7 +18,17 @@ export interface TieredPrice {
   pricePerUnit: number;
 }
 
-export type SubscriptionTier = 'FREE' | 'GROWTH_PACKAGE';
+export type SubscriptionTier = 'FREE' | 'BASIC' | 'GROWTH_PACKAGE' | 'PENDING_PAYMENT';
+
+export interface PlanDetails {
+  id: 'basic' | 'premium_growth';
+  title: string;
+  price: number;
+  tier: SubscriptionTier;
+  duration: string;
+  description: string;
+  highlights: string[];
+}
 
 // Add these new fields into your existing User interface
 export interface User {
@@ -52,6 +62,8 @@ export interface User {
   createdAt?: any;
   updatedAt?: any;
   subscriptionTier?: SubscriptionTier; 
+  subscriptionPlan?: string;
+  pendingPlan?: PlanDetails;
   subscriptionExpiry?: string | Date | null; 
   paymentHistory?: string[]; 
 

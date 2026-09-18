@@ -19,7 +19,10 @@ import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MobileLoginScreen from '../screens/MobileLoginScreen';
 import RegistrationScreen from '../screens/RegistrationScreen';
+import PlanSelectionScreen from '../screens/PlanSelectionScreen';
 import OTPVerificationScreen from '../screens/OTPVerificationScreen';
+import PaymentScreen from '../screens/PaymentScreen';
+import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
 import LegalPagesScreen from '../screens/LegalPagesScreen';
 import AboutProchemScreen from '../screens/AboutProchemScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
@@ -133,9 +136,24 @@ export const RootNavigator = () => {
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="MobileLogin" component={MobileLoginScreen} />
               <Stack.Screen name="Registration" component={RegistrationScreen} />
+              <Stack.Screen name="PlanSelection" component={PlanSelectionScreen} />
               <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+              <Stack.Screen name="Payment" component={PaymentScreen} />
+              <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
               <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
               <Stack.Screen name="AboutProchem" component={AboutProchemScreen} /> 
+            </Stack.Group>
+          ) : user.subscriptionTier === 'PENDING_PAYMENT' ? (
+            <Stack.Group screenOptions={{ animation: 'fade' }}>
+              <Stack.Screen
+                name="Payment"
+                component={PaymentScreen}
+                initialParams={{ plan: user.pendingPlan, userId: user.uid, user }}
+              />
+              <Stack.Screen name="PlanSelection" component={PlanSelectionScreen} />
+              <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
+              <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
+              <Stack.Screen name="AboutProchem" component={AboutProchemScreen} />
             </Stack.Group>
           ) : !hasSeenOnboarding ? (
             <Stack.Group screenOptions={{ animation: 'fade' }}>
@@ -161,6 +179,8 @@ export const RootNavigator = () => {
               <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Identity Verification' }} />
               <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Edit Profile' }} />
               
+              <Stack.Screen name="Payment" component={PaymentScreen} />
+              <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
               <Stack.Screen name="OrderTracking" component={OrderTracking} options={{ headerShown: true, title: 'Order Details' }} />
               <Stack.Screen name="ProductDetail" component={ProductDetail} />
               <Stack.Screen name="Negotiation" component={NegotiationScreen} />
