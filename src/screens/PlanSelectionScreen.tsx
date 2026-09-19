@@ -1,5 +1,5 @@
 // src/screens/PlanSelectionScreen.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   ScrollView,
@@ -9,7 +9,6 @@ import {
   Platform,
   Alert,
   StatusBar,
-  ActivityIndicator,
 } from 'react-native';
 import { Text, Surface, Button, useTheme, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +18,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SUBSCRIPTION_PLANS } from '../config/plans';
 import { PlanDetails } from '../types';
 import { setPhoneAuthSession } from '../services/phoneAuthSession';
-import { sendRealPhoneOTP, parsePhoneAuthError, formatPhoneNumber } from '../services/phoneAuthService';
+import { sendRealPhoneOTP, formatPhoneNumber } from '../services/phoneAuthService';
 
 const { width } = Dimensions.get('window');
 
@@ -30,7 +29,7 @@ export default function PlanSelectionScreen() {
   const route = useRoute<any>();
   const theme = useTheme();
 
-  const { formData, role } = route.params || {};
+  const { formData } = route.params || {};
 
   const [selectedPlanKey, setSelectedPlanKey] = useState<'basic' | 'premium_growth'>('basic');
   const [loading, setLoading] = useState(false);
@@ -56,11 +55,8 @@ export default function PlanSelectionScreen() {
     };
 
     try {
-      // 🚀 Send SMS OTP to user's phone, with smooth development fallback if Firebase domain is restricted
-      const result = await sendRealPhoneOTP(
-        fullMobile,
-        'recaptcha-container-plan'
-      );
+      // ✅ Updated: No longer requires passing a container ID string
+      const result = await sendRealPhoneOTP(fullMobile);
 
       if (!result.success) {
         setLoading(false);
@@ -69,7 +65,6 @@ export default function PlanSelectionScreen() {
         return;
       }
 
-      // Save session in centralized store for serializable navigation
       setPhoneAuthSession({
         webConfirmation: Platform.OS === 'web' ? result.confirmationResult : undefined,
         nativeConfirmation: Platform.OS !== 'web' ? result.confirmationResult : undefined,
@@ -81,7 +76,6 @@ export default function PlanSelectionScreen() {
 
       setLoading(false);
 
-      // Move directly to OTP verification
       navigation.navigate('OTPVerification', {
         mobile: result.formattedMobile,
         mode: 'registration',
@@ -98,9 +92,9 @@ export default function PlanSelectionScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
-      {Platform.OS === 'web' && <View nativeID="recaptcha-container-plan" />}
+      
+      {/* ✅ Removed the nativeID View that was causing React/Firebase DOM collisions */}
 
-      {/* Top Header */}
       <View style={styles.header}>
         <IconButton
           icon="arrow-left"
@@ -115,7 +109,6 @@ export default function PlanSelectionScreen() {
         <View style={{ width: 48 }} />
       </View>
 
-      {/* Progress Indicator */}
       <View style={styles.progressRow}>
         <View style={[styles.stepDot, styles.stepCompleted]}>
           <MaterialCommunityIcons name="check" size={14} color="white" />
@@ -143,9 +136,6 @@ export default function PlanSelectionScreen() {
           </Text>
         </View>
 
-        {/* ===================================== */}
-        {/* BASIC PLAN CARD (₹1,999 / month) */}
-        {/* ===================================== */}
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => setSelectedPlanKey('basic')}
@@ -198,9 +188,6 @@ export default function PlanSelectionScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* ===================================== */}
-        {/* PREMIUM GROWTH PLAN CARD (₹4,999 / month) */}
-        {/* ===================================== */}
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => setSelectedPlanKey('premium_growth')}
@@ -210,7 +197,6 @@ export default function PlanSelectionScreen() {
             selectedPlanKey === 'premium_growth' && styles.premiumCardSelected,
           ]}
         >
-          {/* Top banner */}
           <View style={styles.popularBanner}>
             <MaterialCommunityIcons name="crown" size={16} color="#F59E0B" />
             <Text style={styles.popularBannerText}>MOST POPULAR • HIGH GROWTH</Text>
@@ -272,7 +258,6 @@ export default function PlanSelectionScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Bottom Sticky Action Bar */}
       <Surface style={styles.bottomBar} elevation={4}>
         <View style={styles.bottomInfo}>
           <Text style={styles.bottomPlanName}>

@@ -8,27 +8,25 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { 
-  PhoneAuthProvider, 
-  signInWithCredential, 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword 
-} from 'firebase/auth';
-import { auth } from '../config/firebase';
-
 import { completeRegistrationAfterOTP, processMobileLogin } from '../services/authService';
 import { getPhoneAuthSession, setPhoneAuthSession, clearPhoneAuthSession } from '../services/phoneAuthSession';
 import { sendRealPhoneOTP, parsePhoneAuthError } from '../services/phoneAuthService';
 import { useAppStore } from '../store/appStore'; 
+
+let nativeAuth: any = null;
+try {
+  if (Platform.OS !== 'web') {
+    nativeAuth = require('@react-native-firebase/auth').default;
+  }
+} catch (e) {}
 
 export default function OTPVerificationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<any>();
   const session = getPhoneAuthSession();
   
-  // Extract route params with fallback to in-memory session
   const mobile = route.params?.mobile || session?.mobile || '';
-  const mode = route.params?.mode || session?.mode || 'login'; // 'login' or 'registration'
+  const mode = route.params?.mode || session?.mode || 'login';
   const formData = route.params?.formData || session?.formData;
   
   const webConfirmation = session?.webConfirmation || route.params?.webConfirmation;
@@ -61,20 +59,22 @@ export default function OTPVerificationScreen() {
     try {
       let userCredential: any = null;
 
-      // Real carrier SMS OTP verification
       if (Platform.OS === 'web') {
         if (!webConfirmation || typeof webConfirmation.confirm !== 'function') {
-          throw new Error('No active verification session found. Please return to the previous screen and request a fresh SMS code.');
+          throw new Error('No active web session found. Please request a fresh SMS code.');
         }
         userCredential = await webConfirmation.confirm(otp);
       } else {
+        if (!nativeAuth) throw new Error('Native Auth module missing.');
+        
         if (nativeConfirmation && typeof nativeConfirmation.confirm === 'function') {
           userCredential = await nativeConfirmation.confirm(otp);
         } else if (nativeConfirmation?.verificationId) {
-          const credential = PhoneAuthProvider.credential(nativeConfirmation.verificationId, otp);
-          userCredential = await signInWithCredential(auth, credential);
+          // Properly use Native Auth credential builder instead of mixing with Web SDK
+          const credential = nativeAuth.PhoneAuthProvider.credential(nativeConfirmation.verificationId, otp);
+          userCredential = await nativeAuth().signInWithCredential(credential);
         } else {
-          throw new Error('No active verification session found. Please return to the previous screen and request a fresh SMS code.');
+          throw new Error('No active native session found. Please request a fresh SMS code.');
         }
       }
 
@@ -82,22 +82,17 @@ export default function OTPVerificationScreen() {
         throw new Error('Authentication succeeded but user record could not be retrieved.');
       }
 
-      // 2. Process based on Mode
       if (mode === 'registration' && formData) {
-        // FULL REGISTRATION FLOW
         const createdUser = await completeRegistrationAfterOTP(userCredential.user, formData);
-
         const planToPay = formData.selectedPlan || route.params?.selectedPlan || session?.selectedPlan;
         clearPhoneAuthSession();
 
         if (planToPay) {
-          // Keep user object updated
           useAppStore.getState().setUser({
             ...createdUser,
             uid: userCredential.user.uid,
           });
 
-          // Navigate directly to PaymentScreen for checkout
           navigation.navigate('Payment', {
             plan: planToPay,
             user: {
@@ -112,12 +107,10 @@ export default function OTPVerificationScreen() {
           return;
         }
       } else {
-        // MOBILE LOGIN FLOW
         await processMobileLogin(userCredential.user, mobile);
         clearPhoneAuthSession();
       }
       
-      // Reset onboarding state so that RootNavigator handles redirect to OnboardingScreen
       useAppStore.getState().resetOnboarding();
 
     } catch (error: any) {
@@ -126,9 +119,9 @@ export default function OTPVerificationScreen() {
       
       const errorCode = error.code || '';
       if (errorCode.includes('invalid-verification-code') || errorCode.includes('invalid-credential')) {
-        setErrorMsg('Invalid verification code. Please check the SMS on your phone and try again.');
+        setErrorMsg('Invalid verification code. Please check the SMS and try again.');
       } else if (errorCode.includes('code-expired') || errorCode.includes('session-expired')) {
-        setErrorMsg('This code has expired. Please tap "Request again" below to receive a new SMS.');
+        setErrorMsg('This code has expired. Please tap "Request again" below.');
       } else {
         Alert.alert('Verification Failed', error.message || 'Failed to verify OTP. Please try again.');
       }
@@ -140,19 +133,14 @@ export default function OTPVerificationScreen() {
 
     setResending(true);
     try {
-      const result = await sendRealPhoneOTP(
-        mobile,
-        'recaptcha-container-resend'
-      );
+      const result = await sendRealPhoneOTP(mobile);
 
       if (!result.success) {
         setResending(false);
-        const friendlyMessage = result.errorMessage || 'Unable to dispatch SMS.';
-        Alert.alert('Unable to Resend SMS', friendlyMessage);
+        Alert.alert('Unable to Resend SMS', result.errorMessage || 'Unable to dispatch SMS.');
         return;
       }
 
-      // Update session with fresh confirmation
       setPhoneAuthSession({
         ...session,
         webConfirmation: Platform.OS === 'web' ? result.confirmationResult : undefined,
@@ -162,12 +150,10 @@ export default function OTPVerificationScreen() {
 
       setResendTimer(60);
       setResending(false);
-      Alert.alert('OTP Dispatched', 'A new 6-digit verification code has been dispatched via SMS to your mobile phone.');
+      Alert.alert('OTP Dispatched', 'A new 6-digit verification code has been dispatched via SMS.');
     } catch (err: any) {
       setResending(false);
-      console.error('Resend OTP Error:', err);
-      const friendlyMessage = parsePhoneAuthError(err);
-      Alert.alert('Unable to Resend SMS', friendlyMessage);
+      Alert.alert('Unable to Resend SMS', parsePhoneAuthError(err));
     }
   };
 
@@ -283,4 +269,3 @@ const styles = StyleSheet.create({
   verifyBtn: { borderRadius: 12, marginBottom: 20, backgroundColor: '#004AAD' },
   resendContainer: { alignItems: 'center', padding: 10 },
 });
-

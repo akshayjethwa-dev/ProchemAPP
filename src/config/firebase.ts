@@ -12,21 +12,25 @@ import { getStorage, FirebaseStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Warn early if env config is missing
-if (!process.env.EXPO_PUBLIC_FIREBASE_API_KEY) {
-  console.error(
-    'CRITICAL ERROR: Firebase API Key is missing. Check EXPO_PUBLIC_FIREBASE_* env variables.'
-  );
-}
-
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyC0cRo4vmdwsbNkdiIKwStxGsxJhuhRpYo',
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'prochemapp-dev.firebaseapp.com',
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'prochemapp-dev',
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'prochemapp-dev.firebasestorage.app',
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '193158013078',
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:193158013078:web:af1b9968ab61a561a662b7',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
+
+// 🛠 Debugging: Check if .env is actually loading correctly
+console.log('🔥 FIREBASE CONFIG LOADED:', {
+  apiKey: firebaseConfig.apiKey ? `Loaded (Starts with ${firebaseConfig.apiKey.substring(0, 8)}...)` : 'MISSING',
+  authDomain: firebaseConfig.authDomain || 'MISSING',
+  projectId: firebaseConfig.projectId || 'MISSING',
+});
+
+if (!firebaseConfig.apiKey) {
+  console.error('CRITICAL ERROR: Firebase API Key is missing. Check your .env file and restart Expo with "npx expo start -c".');
+}
 
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
@@ -35,7 +39,6 @@ if (!getApps().length) {
   if (firebaseConfig.apiKey) {
     app = initializeApp(firebaseConfig);
 
-    // ✅ Production-Ready Auth Initialization
     if (Platform.OS === 'web') {
       auth = getAuth(app);
     } else {
@@ -43,7 +46,6 @@ if (!getApps().length) {
         persistence: getReactNativePersistence(AsyncStorage),
       });
     }
-
   } else {
     console.warn('Skipping Firebase initialization due to missing config.');
   }

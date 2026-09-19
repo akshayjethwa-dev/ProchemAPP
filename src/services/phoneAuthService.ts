@@ -1,5 +1,5 @@
 // File: src/services/phoneAuthService.ts
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { auth as webAuth } from '../config/firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber as webSignInWithPhoneNumber } from 'firebase/auth';
 
@@ -8,35 +8,17 @@ try {
   if (Platform.OS !== 'web') {
     nativeAuth = require('@react-native-firebase/auth').default;
   }
-} catch (e) {
-  // Native Firebase not installed in web environment
-}
+} catch (e) {}
 
 let globalWebVerifier: RecaptchaVerifier | null = null;
 
-/**
- * Format a phone number to standard E.164 (+91XXXXXXXXXX)
- */
 export const formatPhoneNumber = (phone: string): string => {
   const cleaned = (phone || '').trim().replace(/[\s-]/g, '');
   if (!cleaned) return '';
-
-  if (cleaned.startsWith('+')) {
-    return cleaned;
-  }
-
-  // If already starts with 91 and has 12 digits, prepend +
+  if (cleaned.startsWith('+')) return cleaned;
   const digitsOnly = cleaned.replace(/\D/g, '');
-  if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
-    return `+${digitsOnly}`;
-  }
-
-  // If 10 digits, prepend +91
-  if (digitsOnly.length === 10) {
-    return `+91${digitsOnly}`;
-  }
-
-  // Fallback
+  if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) return `+${digitsOnly}`;
+  if (digitsOnly.length === 10) return `+91${digitsOnly}`;
   return `+91${digitsOnly.replace(/^0+/, '')}`;
 };
 
@@ -48,18 +30,16 @@ export interface PhoneOTPSendResult {
   errorMessage?: string;
 }
 
-/**
- * Get or create an active RecaptchaVerifier on Web.
- */
-export const getFreshRecaptchaVerifier = async (
-  containerId = 'recaptcha-container',
-  size: 'invisible' | 'normal' = 'invisible'
-): Promise<RecaptchaVerifier> => {
+export const getFreshRecaptchaVerifier = async (): Promise<RecaptchaVerifier> => {
   if (Platform.OS !== 'web' || !webAuth || typeof document === 'undefined') {
     throw new Error('reCAPTCHA is only supported in browser environments.');
   }
 
+  if (globalWebVerifier) return globalWebVerifier;
+
+  const containerId = 'global-firebase-recaptcha';
   let container = document.getElementById(containerId);
+  
   if (!container) {
     container = document.createElement('div');
     container.id = containerId;
@@ -68,93 +48,49 @@ export const getFreshRecaptchaVerifier = async (
     container.style.right = '12px';
     container.style.zIndex = '999999';
     document.body.appendChild(container);
-  } else {
-    try {
-      container.innerHTML = '';
-    } catch (e) {}
-  }
-
-  if (globalWebVerifier) {
-    try {
-      globalWebVerifier.clear();
-    } catch (e) {}
-    globalWebVerifier = null;
   }
 
   const verifier = new RecaptchaVerifier(webAuth, containerId, {
-    size,
-    callback: () => {
-      console.log('✅ reCAPTCHA verified successfully for real SMS dispatch.');
-    },
+    size: 'invisible',
+    callback: () => console.log('✅ reCAPTCHA verified successfully.'),
     'expired-callback': () => {
-      console.warn('⚠️ reCAPTCHA response expired.');
+      console.warn('⚠️ reCAPTCHA expired.');
+      if (globalWebVerifier) {
+        globalWebVerifier.clear();
+        globalWebVerifier = null;
+      }
     },
   });
 
   try {
     await verifier.render();
+    globalWebVerifier = verifier; 
   } catch (renderErr) {
-    console.warn('reCAPTCHA render notice:', renderErr);
+    throw renderErr;
   }
 
-  globalWebVerifier = verifier;
   return verifier;
 };
 
-/**
- * Parse Firebase errors into actionable human messages
- */
 export const parsePhoneAuthError = (error: any): string => {
   const code = error?.code || '';
-  const message = error?.message || '';
-
   const currentHost = (typeof window !== 'undefined' && window.location?.hostname) 
-    ? window.location.hostname 
+    ? `${window.location.hostname}${window.location.port ? `:${window.location.port}` : ''}` 
     : 'localhost';
 
-  if (code === 'auth/invalid-app-credential') {
-    return (
-      `Firebase rejected the SMS verification request (auth/invalid-app-credential).\n\n` +
-      `Here is why and how to fix it in Firebase Console (prochemapp-dev):\n\n` +
-      `1. AUTHORIZED DOMAINS:\n` +
-      `Your current browser origin is "${currentHost}".\n` +
-      `Go to Firebase Console -> Authentication -> Settings -> Authorized Domains, and add "${currentHost}". (If running locally on your PC, also add "127.0.0.1").\n\n` +
-      `2. SMS REGION POLICY:\n` +
-      `Go to Authentication -> Settings -> SMS Region Policy. Make sure India (+91) is enabled and allowed to receive SMS.\n\n` +
-      `3. PHONE PROVIDER:\n` +
-      `Go to Authentication -> Sign-in method -> Phone and verify it is toggled to Enabled.`
-    );
+  if (code.includes('invalid-app-credential') || code.includes('app-not-authorized')) {
+    return `Firebase security blocked the request.\n\nYou must add "${currentHost}" to Authorized Domains in your Firebase Console (Authentication -> Settings -> Authorized Domains).`;
   }
 
-  if (code === 'auth/quota-exceeded') {
-    return 'The SMS quota for your Firebase project has been reached (Firebase Spark plan allows 10 SMS/day). Upgrade to Blaze or check project quotas in Firebase Console.';
-  }
+  if (code.includes('quota-exceeded')) return 'SMS quota exhausted for today (Firebase Spark plan limit reached).';
+  if (code.includes('too-many-requests')) return 'Too many SMS requests sent. Please wait a few moments.';
+  if (code.includes('captcha-check-failed')) return 'reCAPTCHA verification failed. Check your network.';
 
-  if (code === 'auth/too-many-requests') {
-    return 'Too many SMS requests sent to this number. Please wait a few moments before trying again.';
-  }
-
-  if (code === 'auth/invalid-phone-number') {
-    return 'The phone number format is invalid. Please enter a 10-digit Indian mobile number.';
-  }
-
-  if (code === 'auth/operation-not-allowed') {
-    return 'Phone authentication is not enabled in your Firebase project. Please enable it in Firebase Console -> Authentication -> Sign-in method -> Phone.';
-  }
-
-  if (code === 'auth/captcha-check-failed') {
-    return 'reCAPTCHA verification failed. Please check your network connection and try again.';
-  }
-
-  return message || 'Failed to dispatch verification code via SMS. Please try again.';
+  return error?.message || 'Failed to dispatch verification code via SMS.';
 };
 
-/**
- * Send real carrier SMS OTP using Firebase Auth.
- */
 export const sendRealPhoneOTP = async (
-  phoneNumber: string,
-  containerId = 'recaptcha-container'
+  phoneNumber: string
 ): Promise<PhoneOTPSendResult> => {
   const formattedMobile = formatPhoneNumber(phoneNumber);
 
@@ -165,37 +101,32 @@ export const sendRealPhoneOTP = async (
   try {
     let confirmationResult: any = null;
 
-    if (Platform.OS === 'web') {
-      if (!webAuth) {
-        throw new Error('Firebase Auth is not configured in this application.');
-      }
-
-      console.log(`📡 Dispatched real carrier SMS request to ${formattedMobile}...`);
-      const verifier = await getFreshRecaptchaVerifier(containerId);
+    if (Platform.OS === 'web' || !nativeAuth) {
+      if (!webAuth) throw new Error('Firebase Auth is not configured.');
+      
+      console.log(`📡 Dispatched Web SMS request to ${formattedMobile}...`);
+      const verifier = await getFreshRecaptchaVerifier();
       confirmationResult = await webSignInWithPhoneNumber(webAuth, formattedMobile, verifier);
-      console.log(`✅ Carrier SMS OTP dispatched successfully by Firebase to ${formattedMobile}`);
+      console.log(`✅ Web SMS OTP dispatched successfully via Firebase.`);
     } else {
-      if (!nativeAuth) {
-        throw new Error('Native Firebase Auth is not available.');
-      }
-      console.log(`📡 Dispatched native carrier SMS request to ${formattedMobile}...`);
-      confirmationResult = await nativeAuth().signInWithPhoneNumber(formattedMobile);
-      console.log(`✅ Native carrier SMS OTP dispatched successfully to ${formattedMobile}`);
+      console.log(`📡 Dispatched Native SMS request to ${formattedMobile}...`);
+      confirmationResult = await nativeAuth().signInWithPhoneNumber(formattedMobile, true);
     }
 
-    return {
-      success: true,
-      confirmationResult,
-      formattedMobile,
-    };
+    return { success: true, confirmationResult, formattedMobile };
+
   } catch (error: any) {
     console.error('Carrier SMS dispatch error:', error?.message || error);
-    const friendlyMessage = parsePhoneAuthError(error);
+    
+    if (globalWebVerifier) {
+      try { globalWebVerifier.clear(); } catch(e) {}
+      globalWebVerifier = null;
+    }
 
     return {
       success: false,
       formattedMobile,
-      errorMessage: friendlyMessage,
+      errorMessage: parsePhoneAuthError(error),
       error,
     };
   }
