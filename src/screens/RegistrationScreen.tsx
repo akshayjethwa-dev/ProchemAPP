@@ -32,10 +32,6 @@ if (Platform.OS !== 'web') {
   nativeAuth = require('@react-native-firebase/auth').default;
 }
 
-// 👇 2. Import Web Firebase
-import { auth as webAuth } from '../config/firebase';
-import { RecaptchaVerifier, signInWithPhoneNumber as webSignInWithPhoneNumber } from 'firebase/auth';
-
 const { width } = Dimensions.get('window');
 
 type RootStackParamList = {
@@ -53,9 +49,6 @@ export default function RegistrationScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute();
   const theme = useTheme();
-
-  // Web Recaptcha (Firebase JS SDK)
-  const webRecaptchaVerifier = useRef<any>(null);
 
   const { role } = (route.params as { role?: string }) || { role: 'buyer' };
 
@@ -90,28 +83,6 @@ export default function RegistrationScreen() {
   const hasNumber = /\d/.test(password);
   const hasSpecial = /[^A-Za-z0-9]/.test(password);
   const isPasswordValid = hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial;
-
-  // ✅ Initialize ReCAPTCHA ONCE on mount
-  useEffect(() => {
-    if (Platform.OS === 'web' && webAuth) {
-      if (!webRecaptchaVerifier.current) {
-        try {
-          webRecaptchaVerifier.current = new RecaptchaVerifier(webAuth, 'recaptcha-container', { 
-            size: 'invisible' 
-          });
-        } catch (e) {
-          console.error("Recaptcha Init Error:", e);
-        }
-      }
-    }
-
-    // Cleanup on unmount
-    return () => {
-      if (webRecaptchaVerifier.current) {
-        try { webRecaptchaVerifier.current.clear(); } catch (e) {}
-      }
-    };
-  }, []);
 
   const showAlert = (title: string, message: string, onOk?: () => void) => {
     if (Platform.OS === 'web') {
@@ -200,9 +171,6 @@ export default function RegistrationScreen() {
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
       
-      {/* Container MUST always exist in DOM for Recaptcha to bind to */}
-      {Platform.OS === 'web' && <View nativeID="recaptcha-container" />}
-
       {/* ... [KEEP THE REST OF YOUR UI EXACTLY THE SAME AS BEFORE] ... */}
       
       <KeyboardAvoidingView

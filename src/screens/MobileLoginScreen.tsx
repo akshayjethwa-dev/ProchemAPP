@@ -28,10 +28,7 @@ export default function MobileLoginScreen() {
     const fullPhoneNumber = formatPhoneNumber(cleanPhone);
 
     try {
-      const result = await sendRealPhoneOTP(
-        fullPhoneNumber,
-        'recaptcha-container'
-      );
+      const result = await sendRealPhoneOTP(fullPhoneNumber);
 
       if (!result.success) {
         setLoading(false);
@@ -105,9 +102,6 @@ export default function MobileLoginScreen() {
               {error}
             </HelperText>
           ) : null}
-
-          {/* Web Recaptcha Container (Invisible but required for DOM on Web) */}
-          {Platform.OS === 'web' && <div id="recaptcha-container"></div>}
 
           <Button
             mode="contained"
