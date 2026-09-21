@@ -5,7 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { RootStackParamList } from './types';
@@ -64,7 +64,16 @@ export const RootNavigator = () => {
             const userDoc = await getDoc(doc(db, 'users', u.uid));
             if (userDoc.exists()) {
               const userData = userDoc.data();
-              setUser({ uid: u.uid, email: u.email || '', ...userData } as any);
+              let cleanUserData = { ...userData };
+              // Ensure basic plan users are strictly assigned to BASIC tier and not GROWTH_PACKAGE
+              if (
+                (cleanUserData.subscriptionPlan === 'basic' || cleanUserData.pendingPlan?.id === 'basic') &&
+                cleanUserData.subscriptionTier === 'GROWTH_PACKAGE'
+              ) {
+                cleanUserData.subscriptionTier = 'BASIC';
+                updateDoc(doc(db, 'users', u.uid), { subscriptionTier: 'BASIC' }).catch(() => {});
+              }
+              setUser({ uid: u.uid, email: u.email || '', ...cleanUserData } as any);
               userFound = true;
             } else {
               console.log(`Document not found, waiting 1s... (Retries left: ${retries})`);

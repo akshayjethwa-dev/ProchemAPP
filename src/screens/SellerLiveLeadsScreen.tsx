@@ -9,8 +9,6 @@ import { useAppStore } from '../store/appStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BroadcastLead, RFQ } from '../types';
 
-import { GSTRequiredModal } from '../components/GSTRequiredModal';
-
 export default function SellerLiveLeadsScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
@@ -28,8 +26,6 @@ export default function SellerLiveLeadsScreen() {
   const [quantity, setQuantity] = useState('');
   const [dispatchDays, setDispatchDays] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [showGSTModal, setShowGSTModal] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -67,10 +63,6 @@ export default function SellerLiveLeadsScreen() {
   }, [rawLeads, activeRfqs, user?.uid]);
 
   const handleQuotePress = (lead: BroadcastLead) => {
-    if (user?.registrationType === 'mobile' && !user?.gstNumber) {
-      setShowGSTModal(true);
-      return;
-    }
     setSelectedLead(lead);
   };
 
@@ -111,17 +103,6 @@ export default function SellerLiveLeadsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <GSTRequiredModal 
-        visible={showGSTModal} 
-        title="GST Details Required"
-        message="To submit live market quotations, you need to complete your business profile with GST details."
-        onDismiss={() => setShowGSTModal(false)}
-        onAction={() => {
-          setShowGSTModal(false);
-          navigation.navigate('EditProfile');
-        }}
-      />
-
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <View>

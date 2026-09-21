@@ -8,9 +8,6 @@ import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product, TieredPrice } from '../types'; 
 
-// Import the GST Modal
-import { GSTRequiredModal } from '../components/GSTRequiredModal';
-
 export default function ProductDetail() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -41,9 +38,6 @@ export default function ProductDetail() {
 
   // Accordion state
   const [expandedSection, setExpandedSection] = useState<string | null>('specs'); // Keep specs open by default
-
-  // State for the GST Modal
-  const [showGSTModal, setShowGSTModal] = useState(false);
 
   useEffect(() => {
     setQty(String(minQty));
@@ -76,10 +70,6 @@ export default function ProductDetail() {
   const handleNegotiatePress = () => {
     if (!user) {
       return Alert.alert('Error', 'Please log in to request a quote.');
-    }
-    if (user.registrationType === 'mobile' && !user.gstNumber) {
-      setShowGSTModal(true);
-      return;
     }
     setShowRfqModal(true);
   };
@@ -200,16 +190,6 @@ export default function ProductDetail() {
 
   return (
     <View style={styles.container}>
-      
-      {/* The GST Modal Component */}
-      <GSTRequiredModal 
-        visible={showGSTModal} 
-        onDismiss={() => setShowGSTModal(false)}
-        onAction={() => {
-          setShowGSTModal(false);
-          navigation.navigate('EditProfile');
-        }}
-      />
 
       {/* RFQ MODAL */}
       <Modal transparent visible={showRfqModal} animationType="slide">

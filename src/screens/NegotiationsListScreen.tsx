@@ -9,8 +9,6 @@ import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { RFQ } from '../types';
 
-import { GSTRequiredModal } from '../components/GSTRequiredModal';
-
 interface UnifiedListItem {
   id: string; // rfqId or conversationId
   type: 'rfq' | 'custom_req';
@@ -39,7 +37,6 @@ export default function NegotiationsListScreen() {
   const [rfqsList, setRfqsList] = useState<UnifiedListItem[]>([]);
   const [reqChatsList, setReqChatsList] = useState<UnifiedListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showGSTModal, setShowGSTModal] = useState(false);
 
   useEffect(() => {
     if (!user && !isAdminView) return;
@@ -137,10 +134,6 @@ export default function NegotiationsListScreen() {
   };
 
   const handleNegotiationTap = (item: UnifiedListItem) => {
-    if (user?.registrationType === 'mobile' && !user?.gstNumber) {
-      setShowGSTModal(true);
-      return;
-    }
     if (item.type === 'rfq') {
       navigation.navigate('NegotiationRoom', { rfqId: item.id });
     } else {
@@ -203,8 +196,6 @@ export default function NegotiationsListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <GSTRequiredModal visible={showGSTModal} onDismiss={() => setShowGSTModal(false)} onAction={() => { setShowGSTModal(false); navigation.navigate('EditProfile'); }} />
-
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <Text variant="titleLarge" style={{fontWeight: 'bold'}}>

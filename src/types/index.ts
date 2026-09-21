@@ -47,6 +47,8 @@ export interface User {
   businessName?: string;
   gstNumber?: string;
   address?: string;
+  city?: string;
+  state?: string;
   addresses?: Address[];
   phoneNumber?: string;
   phoneVerified?: boolean; 
@@ -63,6 +65,7 @@ export interface User {
   updatedAt?: any;
   subscriptionTier?: SubscriptionTier; 
   subscriptionPlan?: string;
+  subscriptionStatus?: 'active' | 'inactive' | 'pending' | string;
   pendingPlan?: PlanDetails;
   subscriptionExpiry?: string | Date | null; 
   paymentHistory?: string[]; 

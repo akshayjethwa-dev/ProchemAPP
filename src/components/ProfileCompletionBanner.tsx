@@ -15,8 +15,8 @@ export const ProfileCompletionBanner: React.FC<Props> = ({ user, onComplete }) =
 
   useEffect(() => {
     const checkVisibility = async () => {
-      // 1. Only show for mobile-registered users
-      if (!user || user.registrationType !== 'mobile') {
+      // 1. Only show for mobile-registered users who are not yet subscribed
+      if (!user || user.registrationType !== 'mobile' || user.subscriptionTier === 'BASIC' || user.subscriptionTier === 'GROWTH_PACKAGE') {
         setIsVisible(false);
         return;
       }

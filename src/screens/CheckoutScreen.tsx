@@ -64,6 +64,16 @@ export default function CheckoutScreen() {
       setSelectedAddress({ 
         id: 'legacy', label: 'Default', street: user.address, city: '', state: '', zipCode: '', country: 'India' 
       });
+    } else if (user) {
+      setSelectedAddress({
+        id: 'primary',
+        label: user.companyName || 'Business Location',
+        street: 'Commercial Delivery Address',
+        city: user.city || 'Industrial Hub',
+        state: 'Gujarat',
+        zipCode: '380001',
+        country: 'India'
+      });
     }
 
     fetchSellerDetails();

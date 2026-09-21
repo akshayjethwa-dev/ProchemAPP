@@ -107,8 +107,33 @@ export default function OTPVerificationScreen() {
           return;
         }
       } else {
-        await processMobileLogin(userCredential.user, mobile);
+        const planToPay = route.params?.selectedPlan || session?.selectedPlan;
+        const mobileUser = await processMobileLogin(userCredential.user, mobile, planToPay);
         clearPhoneAuthSession();
+
+        if (planToPay) {
+          const hasActiveSubscription = mobileUser.subscriptionStatus === 'active' && 
+            (mobileUser.subscriptionTier === 'BASIC' || mobileUser.subscriptionTier === 'GROWTH_PACKAGE');
+
+          useAppStore.getState().setUser({
+            ...mobileUser,
+            uid: userCredential.user.uid,
+          });
+
+          if (!hasActiveSubscription) {
+            navigation.navigate('Payment', {
+              plan: planToPay,
+              user: {
+                ...mobileUser,
+                uid: userCredential.user.uid,
+                phoneNumber: mobile,
+                companyName: mobileUser.companyName || 'Prochem Member',
+              },
+              userId: userCredential.user.uid,
+            });
+            return;
+          }
+        }
       }
       
       useAppStore.getState().resetOnboarding();

@@ -21,7 +21,7 @@ import {
   addDoc
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { User, UserRole } from '../types';
+import { User, UserRole, PlanDetails, SubscriptionTier } from '../types';
 
 interface RegisterData {
   email: string;
@@ -59,32 +59,57 @@ export const updateUserProfile = async (uid: string, data: Partial<User>): Promi
   }
 };
 
-// 🚀 NEW: Helper for processing pure mobile logins/registrations
-export const processMobileLogin = async (firebaseUser: any, phoneNumber: string): Promise<any> => {
+// 🚀 NEW: Helper for processing pure mobile logins/registrations with plan selection
+export const processMobileLogin = async (
+  firebaseUser: any, 
+  phoneNumber: string,
+  selectedPlan?: PlanDetails
+): Promise<any> => {
   try {
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
 
+    const targetTier: SubscriptionTier = (selectedPlan?.id === 'premium_growth' || selectedPlan?.price === 4999)
+      ? 'GROWTH_PACKAGE'
+      : 'BASIC';
+
     if (userDocSnap.exists()) {
-      // User exists, just return the data
-      return { ...firebaseUser, ...userDocSnap.data() };
+      const existingData = userDocSnap.data() as Partial<User>;
+      const hasPaidTier = existingData.subscriptionTier === 'BASIC' || existingData.subscriptionTier === 'GROWTH_PACKAGE';
+
+      if (!hasPaidTier && selectedPlan) {
+        const updatePayload: Partial<User> = {
+          subscriptionPlan: selectedPlan.id,
+          subscriptionTier: targetTier,
+          pendingPlan: selectedPlan,
+          updatedAt: new Date().toISOString(),
+        };
+        await updateDoc(userDocRef, updatePayload as any);
+        return { ...firebaseUser, ...existingData, ...updatePayload };
+      }
+
+      return { ...firebaseUser, ...existingData };
     } else {
-      // NEW USER via Mobile-only flow
+      // NEW USER via Mobile-only flow with selected plan
       const newUserData: Partial<User> = {
         uid: firebaseUser.uid,
         email: '', 
         userType: 'buyer', // Default fallback
         phoneNumber: phoneNumber,
         phone: phoneNumber,
-        verified: false,
-        kycStatus: 'pending',
+        companyName: `Prochem Member (${phoneNumber.slice(-4)})`,
+        verified: true,
+        kycStatus: 'verified',
         createdAt: new Date().toISOString(),
         
         registrationType: 'mobile',
         hasPassword: false,
         isGSTVerified: false,
         
-        subscriptionTier: 'FREE',
+        subscriptionPlan: selectedPlan?.id || 'basic',
+        subscriptionTier: targetTier,
+        subscriptionStatus: 'active',
+        pendingPlan: selectedPlan,
         whatsappOptIn: true, 
         phoneVerified: true, 
       };
@@ -95,7 +120,7 @@ export const processMobileLogin = async (firebaseUser: any, phoneNumber: string)
   } catch (error: any) {
     throw new Error(error.message || 'Failed to process mobile login.');
   }
-}
+};
 
 // Complete full registration after phone is verified
 export const completeRegistrationAfterOTP = async (

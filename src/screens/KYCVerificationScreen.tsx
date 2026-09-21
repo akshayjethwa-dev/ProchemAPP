@@ -86,9 +86,9 @@ export default function KYCVerificationScreen() {
             <MaterialCommunityIcons name="shield-check" size={60} color="#2563EB" />
           </View>
           
-          <Text style={styles.title}>Complete your KYC</Text>
+          <Text style={styles.title}>Business Verification</Text>
           <Text style={styles.subtitle}>
-            To keep our marketplace secure, we require businesses to verify their GST number before placing orders, negotiating, or adding products.
+            Add your GSTIN to receive the Verified Partner badge on your chemical listings, invoices, and profile.
           </Text>
 
           {!verifiedBusiness ? (

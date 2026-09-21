@@ -722,8 +722,15 @@ exports.cashfreeWebhook = functions
                   createdAt: admin.firestore.FieldValue.serverTimestamp()
               });
 
+              const calculatedTier = (
+                referenceId === "premium_growth" ||
+                referenceId === "growth" ||
+                referenceId === "growth_monthly" ||
+                referenceId === "growth_annual"
+              ) ? "GROWTH_PACKAGE" : "BASIC";
+
               await admin.firestore().collection("users").doc(customerId).update({
-                  subscriptionTier: "GROWTH_PACKAGE", 
+                  subscriptionTier: calculatedTier, 
                   subscriptionPlan: referenceId, 
                   subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
               });
@@ -991,8 +998,17 @@ exports.juspayReturn = functions
       if (status === "CHARGED") {
         await sessionRef.update({ status: "CHARGED", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
         if (sessionData.type === "subscription") {
+          const determinedTier = sessionData.planTier || (
+            sessionData.referenceId === "premium_growth" ||
+            sessionData.referenceId === "growth" ||
+            sessionData.referenceId === "growth_monthly" ||
+            sessionData.referenceId === "growth_annual"
+              ? "GROWTH_PACKAGE"
+              : "BASIC"
+          );
+
           await admin.firestore().collection("users").doc(sessionData.userId).update({
-            subscriptionTier: "GROWTH_PACKAGE",
+            subscriptionTier: determinedTier,
             subscriptionPlan: sessionData.referenceId,
             subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });

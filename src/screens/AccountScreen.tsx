@@ -223,19 +223,51 @@ export default function AccountScreen() {
           <List.Icon icon="chevron-right" color="#CBD5E1" />
         </TouchableOpacity>
 
-        {/* 🚀 ADDED: Dedicated Action Required Row for Incomplete Profiles */}
-        {isMobileReg && !completionData.isComplete && (
-          <SettingsGroup title="ACTION REQUIRED">
-            <List.Item 
-              title="Complete Your Profile" 
-              description="Add missing details to unlock full access"
-              titleStyle={{color: '#D97706', fontWeight: 'bold'}}
-              left={props => <List.Icon {...props} icon="account-alert" color="#D97706" />} 
-              right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
-              onPress={() => navigation.navigate('EditProfile')} 
-            />
-          </SettingsGroup>
-        )}
+        {/* MEMBERSHIP & SUBSCRIPTION */}
+        <SettingsGroup title="MEMBERSHIP & PLAN">
+          <List.Item 
+            title={
+              user?.subscriptionTier === 'GROWTH_PACKAGE' 
+                ? 'Premium Growth Plan 👑' 
+                : user?.subscriptionTier === 'BASIC' || user?.subscriptionPlan === 'basic'
+                ? 'Basic Marketplace Plan'
+                : 'Complimentary Access'
+            }
+            description={
+              user?.subscriptionTier === 'GROWTH_PACKAGE'
+                ? 'Active (All premium features unlocked)'
+                : user?.subscriptionTier === 'BASIC' || user?.subscriptionPlan === 'basic'
+                ? 'Active (₹1,999/mo) • Standard marketplace trading'
+                : 'Free tier access'
+            }
+            left={props => (
+              <List.Icon 
+                {...props} 
+                icon={user?.subscriptionTier === 'GROWTH_PACKAGE' ? 'crown' : 'shield-check'} 
+                color={user?.subscriptionTier === 'GROWTH_PACKAGE' ? '#EAB308' : '#0284C7'} 
+              />
+            )}
+            right={props => (
+              user?.subscriptionTier !== 'GROWTH_PACKAGE' ? (
+                <View style={{ justifyContent: 'center' }}>
+                  <Button 
+                    mode="contained" 
+                    compact 
+                    buttonColor="#F59E0B" 
+                    textColor="#ffffff"
+                    style={{ borderRadius: 6 }}
+                    onPress={() => navigation.navigate('BusinessGrowth')}
+                  >
+                    Upgrade ₹4,999
+                  </Button>
+                </View>
+              ) : (
+                <Badge style={{ backgroundColor: '#10B981', alignSelf: 'center', marginRight: 8 }}>ACTIVE</Badge>
+              )
+            )}
+            onPress={() => navigation.navigate('BusinessGrowth')}
+          />
+        </SettingsGroup>
 
         {/* WORKSPACE SWITCHER */}
         <SettingsGroup>

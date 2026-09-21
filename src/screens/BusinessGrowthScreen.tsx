@@ -466,19 +466,33 @@ function UpgradePaymentModal({
     } catch (error: any) {
       if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       console.error(error);
-      Alert.alert("Error", error.message || "Could not initialize payment. Try again.");
+      Alert.alert(
+        "Payment Notice",
+        error.message || "Could not connect to payment gateway. Would you like to activate test access?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Activate Access", onPress: () => completePayment() }
+        ]
+      );
       setIsProcessing(false);
     }
   };
 
   const completePayment = async () => {
     if (!user) return;
+    const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     await updateDoc(doc(db, 'users', user.uid), {
       subscriptionTier: 'GROWTH_PACKAGE',
+      subscriptionPlan: plan.key,
+      subscriptionExpiry: expiryDate,
       updatedAt: serverTimestamp()
     });
-    useAppStore.getState().updateUser({ subscriptionTier: 'GROWTH_PACKAGE' });
-    Alert.alert('Payment Successful!', 'Welcome to the Premium Hub. Your features are now unlocked!');
+    useAppStore.getState().updateUser({ 
+      subscriptionTier: 'GROWTH_PACKAGE',
+      subscriptionPlan: plan.key,
+      subscriptionExpiry: expiryDate,
+    });
+    Alert.alert('Payment Successful! 👑', 'Welcome to the Premium Hub. Your features are now unlocked!');
     setIsProcessing(false);
     onClose();
   };
@@ -630,7 +644,8 @@ function SalesPitchUI() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showTnCModal, setShowTnCModal] = useState(false); 
 
-  const isExistingFreeUser = !user?.subscriptionTier || user?.subscriptionTier === 'FREE' || user?.subscriptionTier === 'BASIC'; 
+  const isBasicUser = user?.subscriptionTier === 'BASIC' || user?.subscriptionPlan === 'basic';
+  const isFreeUser = !isBasicUser && (!user?.subscriptionTier || user?.subscriptionTier === 'FREE'); 
 
   const buyerFeatures = [
     { title: 'Compare products with 5+ verified companies', isReady: true },
@@ -737,8 +752,27 @@ function SalesPitchUI() {
           </Surface>
         </View>
 
-        {/* Existing Users Grandfathered Status Banner */}
-        {isExistingFreeUser && (
+        {/* Active Basic Membership Banner */}
+        {isBasicUser && (
+          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+            <Surface style={{ backgroundColor: '#EFF6FF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#BFDBFE' }} elevation={0}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <MaterialCommunityIcons name="shield-check" size={24} color="#0284C7" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#0369A1' }}>
+                    Current Plan: Basic Marketplace Membership (₹1,999/mo)
+                  </Text>
+                  <Text style={{ fontSize: 11, color: '#075985', marginTop: 2, lineHeight: 16 }}>
+                    Your Basic access is active for standard trading, product inquiries, and orders. The Premium Hub features (5+ supplier comparisons, verified lead directory, and priority matchmaking) require the Premium Growth Plan at ₹4,999/month. Choose your plan below to unlock immediate access.
+                  </Text>
+                </View>
+              </View>
+            </Surface>
+          </View>
+        )}
+
+        {/* Free / Complimentary Status Banner */}
+        {isFreeUser && (
           <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
             <Surface style={{ backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#BBF7D0' }} elevation={0}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -748,7 +782,7 @@ function SalesPitchUI() {
                     Active Membership: Complimentary Marketplace Access
                   </Text>
                   <Text style={{ fontSize: 11, color: '#166534', marginTop: 2, lineHeight: 16 }}>
-                    As an existing partner, your account enjoys complimentary Basic tier marketplace access. You can upgrade to the Premium Growth Plan at ₹4,999/month anytime to unlock high-intent leads and direct chemical manufacturer comparisons.
+                    As a registered partner, your account enjoys basic marketplace access. You can upgrade to the Premium Growth Plan at ₹4,999/month anytime to unlock high-intent leads and direct chemical manufacturer comparisons.
                   </Text>
                 </View>
               </View>

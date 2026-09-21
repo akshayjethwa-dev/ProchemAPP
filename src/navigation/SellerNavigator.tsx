@@ -18,6 +18,7 @@ import InvoiceViewerScreen from '../screens/InvoiceViewerScreen';
 import NegotiationsListScreen from '../screens/NegotiationsListScreen';
 import NegotiationRoomScreen from '../screens/NegotiationRoomScreen';
 import SellerLiveLeadsScreen from '../screens/SellerLiveLeadsScreen';
+import BusinessGrowthScreen from '../screens/BusinessGrowthScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -90,6 +91,7 @@ export default function SellerNavigator() {
       <Stack.Screen name="InvoiceViewer" component={InvoiceViewerScreen} options={{ headerShown: false }} />
       <Stack.Screen name="NegotiationRoom" component={NegotiationRoomScreen} options={{ headerShown: false }} />
       <Stack.Screen name="SellerLiveLeads" component={SellerLiveLeadsScreen} options={{ headerShown: true, title: 'Live Market' }} />
+      <Stack.Screen name="BusinessGrowth" component={BusinessGrowthScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

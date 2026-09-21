@@ -53,7 +53,7 @@ export default function PaymentScreen() {
   const handleGrantAccess = async (paymentRef: string) => {
     try {
       const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      const targetTier: SubscriptionTier = plan.tier || (plan.id === 'basic' ? 'BASIC' : 'GROWTH_PACKAGE');
+      const targetTier: SubscriptionTier = (plan.id === 'basic' || plan.price === 1999) ? 'BASIC' : 'GROWTH_PACKAGE';
 
       if (effectiveUserId) {
         const userRef = doc(db, 'users', effectiveUserId);
@@ -89,11 +89,12 @@ export default function PaymentScreen() {
       });
     } catch (error: any) {
       console.error('Failed to grant subscription access:', error);
+      const fallbackTier: SubscriptionTier = (plan.id === 'basic' || plan.price === 1999) ? 'BASIC' : 'GROWTH_PACKAGE';
       Alert.alert('Activation Note', 'Payment recorded. Updating your account permissions...');
       navigation.replace('PaymentSuccess', {
         isSubscription: true,
         planName: plan.title,
-        planTier: plan.tier,
+        planTier: fallbackTier,
         totalAmount,
         date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
         paymentReference: paymentRef,
@@ -105,6 +106,7 @@ export default function PaymentScreen() {
   const handleInitiateJuspay = async () => {
     setLoading(true);
     const orderRef = `JP_SUB_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const effectiveTier: SubscriptionTier = (plan.id === 'basic' || plan.price === 1999) ? 'BASIC' : 'GROWTH_PACKAGE';
 
     try {
       // Attempt backend session via Cloud Function
@@ -120,6 +122,7 @@ export default function PaymentScreen() {
         amount: totalAmount,
         type: 'subscription',
         referenceId: plan.id,
+        planTier: effectiveTier,
         customerDetails: {
           name: paramUser?.companyName || currentUser?.companyName || 'Prochem Member',
           email: paramUser?.email || currentUser?.email || 'member@prochem.in',
