@@ -11,6 +11,8 @@ import { logoutUser, deleteUserAccount } from '../services/authService';
 
 // 🚀 ADDED: Import profile completion utility
 import { getProfileCompletion } from '../utils/profileCompletion';
+import { listenToPayLaterApplication } from '../services/payLaterService';
+import { PayLaterApplication } from '../types';
 
 export default function AccountScreen() {
   const navigation = useNavigation<any>();
@@ -28,6 +30,10 @@ export default function AccountScreen() {
   const [waPrefs, setWaPrefs] = useState({
     general: true, marketAlerts: true, negotiations: true, digest: true
   });
+
+  const [payLaterApp, setPayLaterApp] = useState<PayLaterApplication | null>(
+    user?.payLaterApplication || null
+  );
 
   // 🚀 ADDED: Calculate completion data
   const isMobileReg = user?.registrationType === 'mobile';
@@ -50,6 +56,16 @@ export default function AccountScreen() {
       });
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = listenToPayLaterApplication(user.uid, (app) => {
+      setPayLaterApp(app);
+    });
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [user?.uid]);
 
   const confirmSwitch = () => {
     setShowSwitchModal(false);
@@ -277,6 +293,47 @@ export default function AccountScreen() {
             left={props => <List.Icon {...props} icon={viewMode === 'buyer' ? "store-cog" : "shopping"} color={viewMode === 'buyer' ? '#E65100' : '#0D47A1'} />}
             right={props => <List.Icon {...props} icon="swap-horizontal" color="#CBD5E1" />}
             onPress={() => setShowSwitchModal(true)}
+          />
+        </SettingsGroup>
+
+        {/* FINANCIAL SERVICES / PAYLATER CREDIT */}
+        <SettingsGroup title="FINANCIAL SERVICES">
+          <List.Item 
+            title="Get PayLater Credit" 
+            description={
+              payLaterApp?.status === 'under_review' 
+                ? "Application in Process ⏳ • Verification underway"
+                : payLaterApp?.status === 'approved' 
+                ? `Credit Approved ✓ • ₹${(payLaterApp.approvedLimit || 1000000).toLocaleString('en-IN')} limit`
+                : "Upload documents to know your credit limit"
+            }
+            titleStyle={{ color: '#0F172A', fontWeight: 'bold' }}
+            left={props => (
+              <List.Icon 
+                {...props} 
+                icon="credit-card-clock-outline" 
+                color={payLaterApp?.status === 'under_review' ? '#D97706' : payLaterApp?.status === 'approved' ? '#059669' : '#2563EB'} 
+              />
+            )} 
+            right={props => (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {payLaterApp?.status === 'under_review' ? (
+                  <Badge style={{ backgroundColor: '#F59E0B', color: '#FFFFFF', marginRight: 8, fontWeight: 'bold' }}>
+                    IN PROCESS
+                  </Badge>
+                ) : payLaterApp?.status === 'approved' ? (
+                  <Badge style={{ backgroundColor: '#10B981', color: '#FFFFFF', marginRight: 8, fontWeight: 'bold' }}>
+                    APPROVED
+                  </Badge>
+                ) : (
+                  <Badge style={{ backgroundColor: '#2563EB', color: '#FFFFFF', marginRight: 8, fontWeight: 'bold' }}>
+                    NEW
+                  </Badge>
+                )}
+                <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />
+              </View>
+            )} 
+            onPress={() => navigation.navigate('PayLaterCredit')} 
           />
         </SettingsGroup>
 

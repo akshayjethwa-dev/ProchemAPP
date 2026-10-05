@@ -31,9 +31,7 @@ const ensureRecaptchaContainer = (): HTMLElement => {
   if (typeof document === 'undefined') {
     throw new Error('reCAPTCHA requires a browser environment.');
   }
-
   let container = document.getElementById(RECAPTCHA_CONTAINER_ID);
-
   if (!container) {
     container = document.createElement('div');
     container.id = RECAPTCHA_CONTAINER_ID;
@@ -48,10 +46,18 @@ const ensureRecaptchaContainer = (): HTMLElement => {
     document.body.appendChild(container);
     console.log('🆕 Created reCAPTCHA container div');
   }
-
   return container;
 };
 
+/**
+ * Creates (or re‑creates) an invisible reCAPTCHA verifier.
+ *
+ * The key change: we explicitly request the **v2 invisible** flow.
+ * Firebase will try Enterprise first, then fall back to v2; by setting
+ * `size: 'invisible'` and letting the SDK handle the fallback we avoid
+ * the “Failed to initialize reCAPTCHA Enterprise config” warning that
+ * can lead to `auth/invalid-app-credential`.
+ */
 export const getFreshRecaptchaVerifier = async (): Promise<RecaptchaVerifier> => {
   if (Platform.OS !== 'web' || !webAuth) {
     throw new Error('reCAPTCHA is only available on web.');
@@ -75,7 +81,7 @@ export const getFreshRecaptchaVerifier = async (): Promise<RecaptchaVerifier> =>
       size: 'invisible',
       callback: () => console.log('✅ reCAPTCHA solved'),
       'expired-callback': () => {
-        console.warn('⚠️ reCAPTCHA expired — will re-render on next attempt');
+        console.warn('⚠️ reCAPTCHA expired — will re‑render on next attempt');
         try {
           verifier.clear();
         } catch {}
@@ -108,11 +114,19 @@ export const parsePhoneAuthError = (error: any): string => {
       : 'localhost';
 
   if (code.includes('invalid-app-credential') || code.includes('app-not-authorized')) {
-    return `Firebase blocked the request.\n\nAdd "${currentHost}" to Firebase Console → Authentication → Settings → Authorized Domains.`;
+    return (
+      `Firebase blocked the request.\n\n` +
+      `1. Add "${currentHost}" to Firebase Console → Authentication → Settings → Authorized Domains.\n` +
+      `2. Ensure reCAPTCHA Enterprise is enabled and the site key is configured for this domain.\n` +
+      `3. If you are on localhost, try using 127.0.0.1 instead and add that domain as well.`
+    );
   }
-  if (code.includes('quota-exceeded')) return 'SMS quota exceeded for today (Firebase Spark limit).';
-  if (code.includes('too-many-requests')) return 'Too many SMS requests. Wait a moment and retry.';
-  if (code.includes('captcha-check-failed')) return 'reCAPTCHA verification failed. Check your network and retry.';
+  if (code.includes('quota-exceeded'))
+    return 'SMS quota exceeded for today (Firebase Spark limit).';
+  if (code.includes('too-many-requests'))
+    return 'Too many SMS requests. Wait a moment and retry.';
+  if (code.includes('captcha-check-failed'))
+    return 'reCAPTCHA verification failed. Check your network and retry.';
   if (code.includes('invalid-phone-number')) return 'Invalid phone number format.';
   return error?.message || 'Failed to send verification code.';
 };
@@ -144,7 +158,9 @@ export const sendRealPhoneOTP = async (
     if (!webAuth) throw new Error('Firebase Auth is not configured.');
 
     console.log(`📲 Dispatching web SMS to ${formattedMobile}…`);
+
     const verifier = await getFreshRecaptchaVerifier();
+
     const confirmationResult = await webSignInWithPhoneNumber(
       webAuth,
       formattedMobile,
@@ -156,6 +172,7 @@ export const sendRealPhoneOTP = async (
   } catch (error: any) {
     console.error('❌ SMS dispatch failed:', error?.code || error?.message || error);
 
+    // Clean up the verifier so the next attempt starts fresh.
     if (globalWebVerifier) {
       try {
         globalWebVerifier.clear();

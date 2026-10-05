@@ -34,6 +34,7 @@ import EditProfileScreen from '../screens/EditProfileScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 import KYCVerificationScreen from '../screens/KYCVerificationScreen';
+import PayLaterCreditScreen from '../screens/PayLaterCreditScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -187,6 +188,7 @@ export const RootNavigator = () => {
               {/* ✅ ENABLE HEADER POLICY FOR FORMS/PROFILE/KYC HERE */}
               <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Identity Verification' }} />
               <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Edit Profile' }} />
+              <Stack.Screen name="PayLaterCredit" component={PayLaterCreditScreen} options={{ animation: 'slide_from_bottom', headerShown: false }} />
               
               <Stack.Screen name="Payment" component={PaymentScreen} />
               <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />

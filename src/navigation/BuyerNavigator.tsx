@@ -28,6 +28,7 @@ import BuyerRequirementsScreen from '../screens/BuyerRequirementsScreen';
 import CartScreen from '../screens/CartScreen'; 
 import BusinessGrowthScreen from '../screens/BusinessGrowthScreen';
 import CommerceHubScreen from '../screens/CommerceHubScreen';
+import PayLaterCreditScreen from '../screens/PayLaterCreditScreen';
 
 export type BuyerStackParamList = {
   BuyerTabs: undefined;
@@ -45,6 +46,8 @@ export type BuyerStackParamList = {
   Compare: undefined;
   BuyerRequirements: undefined;
   CommerceHub: undefined;
+  BusinessGrowth: undefined;
+  PayLaterCredit: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -137,6 +140,8 @@ export default function BuyerNavigator() {
       <Stack.Screen name="Compare" component={CompareScreen} options={{ headerShown: true, title: 'Compare Products' }} />
       <Stack.Screen name="BuyerRequirements" component={BuyerRequirementsScreen} options={{ headerShown: true, title: 'My Sourcing Requests' }} />
       <Stack.Screen name="CommerceHub" component={CommerceHubScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="BusinessGrowth" component={BusinessGrowthScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="PayLaterCredit" component={PayLaterCreditScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

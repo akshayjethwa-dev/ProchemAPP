@@ -73,6 +73,11 @@ export interface User {
   premiumNegotiationCredits?: number; 
   // ✅ REMOVED: liveQuoteCredits field entirely
 
+  payLaterStatus?: 'under_review' | 'approved' | 'rejected' | 'none';
+  payLaterApprovedLimit?: number;
+  payLaterApplicationId?: string;
+  payLaterApplication?: PayLaterApplication;
+
   whatsappOptIn?: boolean;
   whatsappPreferences?: {
     general?: boolean;
@@ -80,6 +85,47 @@ export interface User {
     negotiations?: boolean;
     digest?: boolean;
   };
+}
+
+export interface DocumentAttachment {
+  name: string;
+  size?: number;
+  uri?: string;
+  url?: string;
+  mimeType?: string;
+  uploadedAt: string;
+}
+
+export interface PayLaterApplication {
+  id?: string;
+  userId: string;
+  userEmail?: string;
+  userPhone?: string;
+  companyName: string;
+  gstNumber?: string;
+  contactPerson?: string;
+  status: 'under_review' | 'approved' | 'rejected';
+  submittedAt: string;
+  updatedAt?: string;
+
+  // Documents
+  auditedFinancialsDoc?: DocumentAttachment;
+  itrCopiesDoc?: DocumentAttachment;
+  gstLastYearDoc?: DocumentAttachment;
+  ageingScheduleDoc?: DocumentAttachment;
+  ledgerDoc?: DocumentAttachment;
+
+  // Relationship and Limit Details
+  counterpartyType?: 'buyer' | 'seller' | 'both';
+  counterpartyName: string;
+  relationshipYears: string;
+  limitsRequired: string;
+  
+  // Underwriting outcome
+  approvedLimit?: number;
+  approvedRate?: string;
+  creditPeriodDays?: number;
+  adminRemarks?: string;
 }
 
 export interface UserProfile {

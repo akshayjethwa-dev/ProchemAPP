@@ -47,6 +47,7 @@ export type RootStackParamList = {
   AdminApp: undefined;
   TransporterApp: undefined;
   AboutProchem: undefined;
+  PayLaterCredit: undefined;
 
   // Navigation Stacks
   BuyerApp: undefined;  
