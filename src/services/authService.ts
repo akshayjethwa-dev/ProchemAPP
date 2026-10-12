@@ -69,15 +69,16 @@ export const processMobileLogin = async (
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
 
+    const hasPaidPlan = !!(selectedPlan && selectedPlan.price > 0);
     const targetTier: SubscriptionTier = (selectedPlan?.id === 'premium_growth' || selectedPlan?.price === 4999)
       ? 'GROWTH_PACKAGE'
-      : 'BASIC';
+      : (hasPaidPlan ? 'BASIC' : 'FREE');
 
     if (userDocSnap.exists()) {
       const existingData = userDocSnap.data() as Partial<User>;
       const hasPaidTier = existingData.subscriptionTier === 'BASIC' || existingData.subscriptionTier === 'GROWTH_PACKAGE';
 
-      if (!hasPaidTier && selectedPlan) {
+      if (!hasPaidTier && hasPaidPlan) {
         const updatePayload: Partial<User> = {
           subscriptionPlan: selectedPlan.id,
           subscriptionTier: targetTier,
@@ -88,9 +89,22 @@ export const processMobileLogin = async (
         return { ...firebaseUser, ...existingData, ...updatePayload };
       }
 
+      // If user had PENDING_PAYMENT, grant free access
+      if (existingData.subscriptionTier === 'PENDING_PAYMENT' && !hasPaidPlan) {
+        const updatePayload: Partial<User> = {
+          subscriptionPlan: 'free',
+          subscriptionTier: 'FREE',
+          subscriptionStatus: 'active',
+          pendingPlan: null,
+          updatedAt: new Date().toISOString(),
+        };
+        await updateDoc(userDocRef, updatePayload as any);
+        return { ...firebaseUser, ...existingData, ...updatePayload };
+      }
+
       return { ...firebaseUser, ...existingData };
     } else {
-      // NEW USER via Mobile-only flow with selected plan
+      // NEW USER via Mobile-only flow with free plan by default
       const newUserData: Partial<User> = {
         uid: firebaseUser.uid,
         email: '', 
@@ -106,10 +120,10 @@ export const processMobileLogin = async (
         hasPassword: false,
         isGSTVerified: false,
         
-        subscriptionPlan: selectedPlan?.id || 'basic',
+        subscriptionPlan: hasPaidPlan ? selectedPlan?.id : 'free',
         subscriptionTier: targetTier,
         subscriptionStatus: 'active',
-        pendingPlan: selectedPlan,
+        pendingPlan: hasPaidPlan ? selectedPlan : null,
         whatsappOptIn: true, 
         phoneVerified: true, 
       };
@@ -164,9 +178,9 @@ export const completeRegistrationAfterOTP = async (
       hasPassword: true,
       isGSTVerified: formData.gstVerified || false,
       
-      subscriptionTier: formData.selectedPlan ? 'PENDING_PAYMENT' : 'FREE',
-      subscriptionPlan: formData.selectedPlan?.id,
-      pendingPlan: formData.selectedPlan,
+      subscriptionTier: (formData.selectedPlan && formData.selectedPlan.price > 0) ? 'PENDING_PAYMENT' : 'FREE',
+      subscriptionPlan: (formData.selectedPlan && formData.selectedPlan.price > 0) ? formData.selectedPlan?.id : 'free',
+      pendingPlan: (formData.selectedPlan && formData.selectedPlan.price > 0) ? formData.selectedPlan : null,
       subscriptionExpiry: null,
       paymentHistory: [],
       

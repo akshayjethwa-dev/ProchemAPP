@@ -74,6 +74,18 @@ export const RootNavigator = () => {
                 cleanUserData.subscriptionTier = 'BASIC';
                 updateDoc(doc(db, 'users', u.uid), { subscriptionTier: 'BASIC' }).catch(() => {});
               }
+
+              // Auto-grant FREE tier access if user was stuck in PENDING_PAYMENT
+              if (cleanUserData.subscriptionTier === 'PENDING_PAYMENT') {
+                cleanUserData.subscriptionTier = 'FREE';
+                cleanUserData.subscriptionPlan = 'free';
+                cleanUserData.subscriptionStatus = 'active';
+                updateDoc(doc(db, 'users', u.uid), { 
+                  subscriptionTier: 'FREE', 
+                  subscriptionPlan: 'free', 
+                  subscriptionStatus: 'active' 
+                }).catch(() => {});
+              }
               setUser({ uid: u.uid, email: u.email || '', ...cleanUserData } as any);
               userFound = true;
             } else {

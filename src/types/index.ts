@@ -66,7 +66,7 @@ export interface User {
   subscriptionTier?: SubscriptionTier; 
   subscriptionPlan?: string;
   subscriptionStatus?: 'active' | 'inactive' | 'pending' | string;
-  pendingPlan?: PlanDetails;
+  pendingPlan?: PlanDetails | null;
   subscriptionExpiry?: string | Date | null; 
   paymentHistory?: string[]; 
 
@@ -375,6 +375,7 @@ export interface BroadcastLead {
   originalOrderId?: string; 
   productName: string;
   rfqId?: string;
+  sourceType?: 'RFQ' | 'CUSTOM' | string;
   buyerId?: string;
   excludedSellerId?: string;
   excludedSellerIds?: string[];
@@ -383,6 +384,8 @@ export interface BroadcastLead {
   quantityRequired: string;
   unit: string;
   deliveryRegion: string; 
+  targetPrice?: number | string;
+  timeline?: string;
   status: 'OPEN' | 'CLOSED';
   createdAt: any;
 }

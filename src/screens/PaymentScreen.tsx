@@ -1,615 +1,278 @@
-// src/screens/PaymentScreen.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   TouchableOpacity,
-  Platform,
-  Alert,
-  StatusBar,
-  Linking,
-  ActivityIndicator,
+  View,
 } from 'react-native';
-import { Text, Surface, Button, useTheme, IconButton } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { Button, Checkbox, IconButton, Surface, Text, useTheme } from 'react-native-paper';
 import { getApp } from 'firebase/app';
-import { db } from '../config/firebase';
-import { useAppStore } from '../store/appStore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlanDetails, SubscriptionTier } from '../types';
 import { SUBSCRIPTION_PLANS } from '../config/plans';
+import { useAppStore } from '../store/appStore';
 
 type NavigationProp = NativeStackNavigationProp<any>;
-
 export default function PaymentScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<any>();
   const theme = useTheme();
-
   const currentUser = useAppStore((state) => state.user);
   const updateUser = useAppStore((state) => state.updateUser);
-
-  // Extract route parameters
   const { plan: paramPlan, userId: paramUserId, user: paramUser } = route.params || {};
-
-  // Resolve plan
   const plan: PlanDetails = paramPlan || SUBSCRIPTION_PLANS.basic;
   const effectiveUserId = paramUserId || paramUser?.uid || currentUser?.uid;
 
-  const [selectedMethod, setSelectedMethod] = useState<'UPI' | 'CARD' | 'NB'>('UPI');
   const [loading, setLoading] = useState(false);
-  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Financial calculations (18% GST)
+  useEffect(() => () => {
+    if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+  }, []);
+
   const basePrice = plan.price;
   const gstAmount = Math.round(basePrice * 0.18);
   const totalAmount = basePrice + gstAmount;
 
-  const handleGrantAccess = async (paymentRef: string) => {
-    try {
-      const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      const targetTier: SubscriptionTier = (plan.id === 'basic' || plan.price === 1999) ? 'BASIC' : 'GROWTH_PACKAGE';
-
-      if (effectiveUserId) {
-        const userRef = doc(db, 'users', effectiveUserId);
-        await updateDoc(userRef, {
-          subscriptionTier: targetTier,
-          subscriptionPlan: plan.id,
-          subscriptionExpiry: expiryDate,
-          paymentHistory: arrayUnion(paymentRef),
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      // Update in-memory Zustand store
-      updateUser({
-        subscriptionTier: targetTier,
-        subscriptionPlan: plan.id,
-        subscriptionExpiry: expiryDate,
-        paymentHistory: [...(currentUser?.paymentHistory || []), paymentRef],
-      });
-
-      // Complete onboarding to clear initial gates
-      useAppStore.getState().completeOnboarding();
-
-      // Navigate to PaymentSuccess
-      navigation.replace('PaymentSuccess', {
-        isSubscription: true,
-        planName: plan.title,
-        planTier: targetTier,
-        totalAmount,
-        date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-        paymentReference: paymentRef,
-        buyerName: paramUser?.companyName || currentUser?.companyName || 'Prochem Member',
-      });
-    } catch (error: any) {
-      console.error('Failed to grant subscription access:', error);
-      const fallbackTier: SubscriptionTier = (plan.id === 'basic' || plan.price === 1999) ? 'BASIC' : 'GROWTH_PACKAGE';
-      Alert.alert('Activation Note', 'Payment recorded. Updating your account permissions...');
-      navigation.replace('PaymentSuccess', {
-        isSubscription: true,
-        planName: plan.title,
-        planTier: fallbackTier,
-        totalAmount,
-        date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-        paymentReference: paymentRef,
-        buyerName: paramUser?.companyName || currentUser?.companyName || 'Prochem Member',
-      });
-    }
+  const finishVerifiedPayment = (orderId: string, tier: SubscriptionTier, expiry: string) => {
+    updateUser({
+      subscriptionTier: tier,
+      subscriptionPlan: plan.id,
+      subscriptionExpiry: expiry,
+      paymentHistory: [...(currentUser?.paymentHistory || []), orderId],
+    });
+    useAppStore.getState().completeOnboarding();
+    navigation.replace('PaymentSuccess', {
+      isSubscription: true,
+      planName: plan.title,
+      planTier: tier,
+      totalAmount,
+      date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      paymentReference: orderId,
+      buyerName: paramUser?.companyName || currentUser?.companyName || 'Prochem Member',
+    });
   };
 
   const handleInitiateJuspay = async () => {
+    if (!acceptedTerms) {
+      const message = 'Please review and accept the Terms and Privacy Policy to continue.';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Terms required', message);
+      return;
+    }
+
+    if (!currentUser?.uid || currentUser.uid !== effectiveUserId) {
+      const message = 'Sign in as the account owner before making this payment.';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Sign-in required', message);
+      return;
+    }
+
+    const paymentWindow = Platform.OS === 'web' ? window.open('', '_blank', 'width=480,height=800') : null;
+    if (Platform.OS === 'web' && !paymentWindow) {
+      window.alert('Please allow pop-ups to open Juspay checkout.');
+      return;
+    }
+
     setLoading(true);
-    const orderRef = `JP_SUB_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const effectiveTier: SubscriptionTier = (plan.id === 'basic' || plan.price === 1999) ? 'BASIC' : 'GROWTH_PACKAGE';
-
     try {
-      // Attempt backend session via Cloud Function
-      let functionsInstance;
-      try {
-        functionsInstance = getFunctions(getApp(), 'asia-south1');
-      } catch {
-        functionsInstance = getFunctions();
-      }
-
-      const createSessionFn = httpsCallable(functionsInstance, 'createJuspaySession');
-      const response: any = await createSessionFn({
+      const functions = getFunctions(getApp(), 'asia-south1');
+      const createSession = httpsCallable(functions, 'createJuspaySession');
+      const response: any = await createSession({
         amount: totalAmount,
         type: 'subscription',
         referenceId: plan.id,
-        planTier: effectiveTier,
+        platform: Platform.OS === 'web' ? 'web' : 'mobile',
         customerDetails: {
-          name: paramUser?.companyName || currentUser?.companyName || 'Prochem Member',
-          email: paramUser?.email || currentUser?.email || 'member@prochem.in',
-          phone: paramUser?.phoneNumber || currentUser?.phoneNumber || '9999999999',
+          name: paramUser?.companyName || currentUser.companyName || 'Prochem Member',
+          email: paramUser?.email || currentUser.email || 'member@prochem.in',
+          phone: paramUser?.phoneNumber || currentUser.phoneNumber || '9999999999',
         },
       });
 
-      const data = response?.data;
-      if (data?.payment_url) {
-        if (Platform.OS === 'web') {
-          const popup = window.open(data.payment_url, '_blank');
-          if (!popup) {
-            window.location.href = data.payment_url;
+      const orderId = response.data?.order_id;
+      const checkoutUrl = response.data?.payment_url;
+      if (!orderId || !checkoutUrl) throw new Error('Juspay did not return a valid checkout session.');
+
+      if (Platform.OS === 'web') paymentWindow!.location.href = checkoutUrl;
+      else setPaymentUrl(checkoutUrl);
+
+      let attempts = 0;
+      const pollStatus = async () => {
+        attempts += 1;
+        try {
+          const statusResponse: any = await httpsCallable(functions, 'getJuspayOrderStatus')({ orderId });
+          const status = String(statusResponse.data?.status || '').toUpperCase();
+          if (status === 'CHARGED') {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setPaymentUrl(null);
+            if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+            const session = statusResponse.data?.session;
+            if (!session?.planTier || !session?.subscriptionExpiry) {
+              throw new Error('Payment was charged but subscription details are not available yet.');
+            }
+            setLoading(false);
+            finishVerifiedPayment(orderId, session.planTier, session.subscriptionExpiry);
+          } else if (['FAILED', 'DECLINED', 'CANCELLED'].includes(status) || attempts >= 120) {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setPaymentUrl(null);
+            setLoading(false);
+            const message = attempts >= 120 && !['FAILED', 'DECLINED', 'CANCELLED'].includes(status)
+              ? 'Payment is still pending. Please check its status before trying again.'
+              : `Payment status: ${status}`;
+            if (Platform.OS === 'web') window.alert(message);
+            else Alert.alert('Payment not completed', message);
           }
-        } else {
-          await Linking.openURL(data.payment_url);
+        } catch (error: any) {
+          console.error('Juspay payment status check failed:', error);
+          if (error?.code === 'functions/permission-denied') {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setPaymentUrl(null);
+            setLoading(false);
+            if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+          }
         }
+      };
 
-        // Poll or allow user to confirm
-        Alert.alert(
-          'Juspay HyperCheckout',
-          'Please complete the payment in the secure gateway window.',
-          [
-            {
-              text: 'I have completed payment',
-              onPress: () => handleGrantAccess(data.orderId || orderRef),
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel',
-            },
-          ]
-        );
-        return;
-      }
-
-      // If backend returns mock or direct response
-      await handleGrantAccess(orderRef);
+      void pollStatus();
+      paymentPollRef.current = setInterval(pollStatus, 2500);
     } catch (error: any) {
-      console.warn('Juspay live API notice (using secure fallback):', error.message);
-      // Seamless simulation in preview/test mode
-      await handleGrantAccess(orderRef);
-    } finally {
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+      console.error('Juspay session creation failed:', error);
+      const message = error.message || 'Could not initialize Juspay payment. No subscription was activated.';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Payment setup failed', message);
       setLoading(false);
     }
   };
 
+  const methods: { key: PaymentMethod; icon: string; title: string; description: string }[] = [
+    { key: 'UPI', icon: 'cellphone-check', title: 'UPI', description: 'Google Pay, PhonePe, Paytm, BHIM' },
+    { key: 'CARD', icon: 'credit-card-outline', title: 'Credit / Debit Cards', description: 'Visa, Mastercard, RuPay' },
+    { key: 'NB', icon: 'bank-outline', title: 'Net Banking', description: 'Corporate and personal bank accounts' },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
-
-      {/* Header */}
       <View style={styles.header}>
-        <IconButton
-          icon="arrow-left"
-          size={24}
-          onPress={() => navigation.goBack()}
-          disabled={loading}
-        />
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Prochem Secure Checkout</Text>
-          <View style={styles.secureBadge}>
-            <MaterialCommunityIcons name="lock" size={12} color="#10B981" />
-            <Text style={styles.secureBadgeText}>Juspay 256-Bit SSL</Text>
-          </View>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} disabled={loading} />
+        <View style={styles.headerText}>
+          <Text style={styles.headerTitle}>Secure Checkout</Text>
+          <Text style={styles.headerSubtitle}>Juspay HyperCheckout</Text>
         </View>
-        <View style={{ width: 48 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Plan Summary Card */}
-        <Surface style={styles.summaryCard} elevation={2}>
-          <View style={styles.planHeaderRow}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Surface style={styles.planCard} elevation={1}>
+          <View style={styles.planHeading}>
+            <View style={styles.planIcon}>
+              <MaterialCommunityIcons name={plan.id === 'premium_growth' ? 'crown' : 'check-decagram'} size={22} color={theme.colors.primary} />
+            </View>
             <View style={{ flex: 1 }}>
-              <View style={styles.tierPill}>
-                <MaterialCommunityIcons
-                  name={plan.id === 'premium_growth' ? 'crown' : 'check-decagram'}
-                  size={14}
-                  color={plan.id === 'premium_growth' ? '#B45309' : '#004AAD'}
-                />
-                <Text
-                  style={[
-                    styles.tierPillText,
-                    plan.id === 'premium_growth' && { color: '#B45309' },
-                  ]}
-                >
-                  {plan.id === 'premium_growth' ? 'PREMIUM GROWTH' : 'BASIC MEMBERSHIP'}
-                </Text>
-              </View>
-              <Text style={styles.planTitle}>{plan.title}</Text>
-              <Text style={styles.planDuration}>Billed monthly • Active for 30 days</Text>
-            </View>
-            <View style={styles.priceContainer}>
-              <Text style={styles.summaryPrice}>₹{plan.price.toLocaleString('en-IN')}</Text>
-              <Text style={styles.summaryDuration}>/ mo</Text>
+              <Text variant="titleLarge" style={styles.planTitle}>{plan.title}</Text>
+              <Text style={styles.planDescription}>{plan.duration}</Text>
             </View>
           </View>
-
-          <View style={styles.divider} />
-
-          {/* Included Privileges */}
-          <Text style={styles.includedTitle}>Included Privileges:</Text>
-          <View style={styles.highlightsList}>
-            {plan.highlights.slice(0, 4).map((highlight, index) => (
-              <View key={index} style={styles.highlightRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#10B981" />
-                <Text style={styles.highlightText}>{highlight}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Price Breakdown */}
-          <View style={styles.breakdownRow}>
-            <Text style={styles.breakdownLabel}>Base Membership Fee</Text>
-            <Text style={styles.breakdownValue}>₹{basePrice.toLocaleString('en-IN')}</Text>
-          </View>
-          <View style={styles.breakdownRow}>
-            <Text style={styles.breakdownLabel}>Goods & Services Tax (GST 18%)</Text>
-            <Text style={styles.breakdownValue}>₹{gstAmount.toLocaleString('en-IN')}</Text>
-          </View>
-
-          <View style={[styles.breakdownRow, styles.totalRow]}>
-            <View>
-              <Text style={styles.totalLabel}>Total Payable</Text>
-              <Text style={styles.totalSub}>Tax Invoice generated upon payment</Text>
+          {plan.highlights.slice(0, 4).map((highlight, index) => (
+            <View key={`${highlight}-${index}`} style={styles.highlight}>
+              <MaterialCommunityIcons name="check-circle" size={17} color="#15803D" />
+              <Text style={styles.highlightText}>{highlight}</Text>
             </View>
+          ))}
+          <View style={styles.separator} />
+          <View style={styles.amountRow}><Text>Membership fee</Text><Text>₹{basePrice.toLocaleString('en-IN')}</Text></View>
+          <View style={styles.amountRow}><Text>GST (18%)</Text><Text>₹{gstAmount.toLocaleString('en-IN')}</Text></View>
+          <View style={[styles.amountRow, styles.totalRow]}>
+            <Text style={styles.totalLabel}>Total payable</Text>
             <Text style={styles.totalAmount}>₹{totalAmount.toLocaleString('en-IN')}</Text>
           </View>
         </Surface>
 
-        {/* Payment Methods Section */}
-        <Text style={styles.sectionHeader}>Select Payment Option</Text>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => setSelectedMethod('UPI')}
-          style={[
-            styles.methodCard,
-            selectedMethod === 'UPI' && styles.methodCardSelected,
-          ]}
-        >
-          <View style={styles.methodIconBox}>
-            <MaterialCommunityIcons name="cellphone-check" size={24} color="#004AAD" />
+        <Text variant="titleMedium" style={styles.sectionTitle}>Payment methods</Text>
+        <Text style={styles.paymentMethodsIntro}>Available methods are shown securely in Juspay checkout.</Text>
+        {methods.map((method) => (
+          <View key={method.key} style={styles.methodCard}>
+            <MaterialCommunityIcons name={method.icon as any} size={24} color={theme.colors.primary} />
+            <View style={styles.methodCopy}>
+              <Text style={styles.methodTitle}>{method.title}</Text>
+              <Text style={styles.methodDescription}>{method.description}</Text>
+            </View>
           </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.methodTitle}>UPI (Instant & Zero Fee)</Text>
-            <Text style={styles.methodSub}>Google Pay, PhonePe, Paytm, BHIM</Text>
-          </View>
-          <View style={[styles.radio, selectedMethod === 'UPI' && styles.radioSelected]}>
-            {selectedMethod === 'UPI' && <View style={styles.radioDot} />}
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => setSelectedMethod('CARD')}
-          style={[
-            styles.methodCard,
-            selectedMethod === 'CARD' && styles.methodCardSelected,
-          ]}
-        >
-          <View style={styles.methodIconBox}>
-            <MaterialCommunityIcons name="credit-card-outline" size={24} color="#004AAD" />
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.methodTitle}>Credit / Debit Cards</Text>
-            <Text style={styles.methodSub}>Visa, MasterCard, RuPay, Corporate Cards</Text>
-          </View>
-          <View style={[styles.radio, selectedMethod === 'CARD' && styles.radioSelected]}>
-            {selectedMethod === 'CARD' && <View style={styles.radioDot} />}
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => setSelectedMethod('NB')}
-          style={[
-            styles.methodCard,
-            selectedMethod === 'NB' && styles.methodCardSelected,
-          ]}
-        >
-          <View style={styles.methodIconBox}>
-            <MaterialCommunityIcons name="bank-outline" size={24} color="#004AAD" />
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.methodTitle}>Corporate & Net Banking</Text>
-            <Text style={styles.methodSub}>SBI, HDFC, ICICI, Axis & 50+ Banks</Text>
-          </View>
-          <View style={[styles.radio, selectedMethod === 'NB' && styles.radioSelected]}>
-            {selectedMethod === 'NB' && <View style={styles.radioDot} />}
-          </View>
-        </TouchableOpacity>
-
-        {/* Security / RBI Compliance Footnote */}
-        <View style={styles.securityBox}>
-          <MaterialCommunityIcons name="shield-check" size={20} color="#64748B" />
-          <Text style={styles.securityText}>
-            PCI-DSS Level 1 Compliant • RBI Mandated 2-Factor Authentication • Powered by Juspay HyperCheckout
+        ))}
+        <View style={styles.securityNote}>
+          <MaterialCommunityIcons name="shield-check" size={20} color="#475569" />
+          <Text style={styles.securityText}>Prochem activates your plan only after the payment is verified with Juspay.</Text>
+        </View>
+        <View style={styles.termsRow}>
+          <Checkbox status={acceptedTerms ? 'checked' : 'unchecked'} onPress={() => setAcceptedTerms((accepted) => !accepted)} />
+          <Text style={styles.termsText}>
+            I have read and agree to Prochem's{' '}
+            <Text style={styles.termsLink} onPress={() => navigation.navigate('LegalPages')}>Terms and Conditions and Privacy Policy</Text>.
           </Text>
         </View>
-
-        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Bottom Floating Bar */}
-      <Surface style={styles.bottomBar} elevation={4}>
-        <View style={styles.bottomPriceBox}>
-          <Text style={styles.bottomLabel}>Amount Due</Text>
+      <Surface style={styles.bottomBar} elevation={3}>
+        <View>
+          <Text style={styles.bottomLabel}>Amount due</Text>
           <Text style={styles.bottomAmount}>₹{totalAmount.toLocaleString('en-IN')}</Text>
         </View>
-
-        <Button
-          mode="contained"
-          onPress={handleInitiateJuspay}
-          loading={loading}
-          disabled={loading}
-          style={styles.payButton}
-          contentStyle={styles.payButtonContent}
-          labelStyle={styles.payButtonLabel}
-          icon="shield-lock"
-        >
-          {loading ? 'Connecting...' : `Pay ₹${totalAmount.toLocaleString('en-IN')}`}
+        <Button mode="contained" onPress={handleInitiateJuspay} loading={loading} disabled={loading || !acceptedTerms} icon="shield-lock">
+          {loading ? 'Verifying payment...' : 'Pay securely'}
         </Button>
       </Surface>
+
+      <Modal visible={!!paymentUrl} animationType="slide" onRequestClose={() => {}}>
+        {paymentUrl && <WebView source={{ uri: paymentUrl }} />}
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  secureBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  secureBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#10B981',
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  summaryCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  planHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  tierPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginBottom: 6,
-  },
-  tierPillText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#004AAD',
-    letterSpacing: 0.5,
-  },
-  planTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  planDuration: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  priceContainer: {
-    alignItems: 'flex-end',
-  },
-  summaryPrice: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#004AAD',
-  },
-  summaryDuration: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#F1F5F9',
-    marginVertical: 14,
-  },
-  includedTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#475569',
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  highlightsList: {
-    gap: 6,
-  },
-  highlightRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  highlightText: {
-    fontSize: 13,
-    color: '#334155',
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  breakdownLabel: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  breakdownValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  totalRow: {
-    marginTop: 6,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    alignItems: 'center',
-  },
-  totalLabel: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  totalSub: {
-    fontSize: 11,
-    color: '#94A3B8',
-  },
-  totalAmount: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#0F172A',
-  },
-  sectionHeader: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 12,
-  },
-  methodCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-  },
-  methodCardSelected: {
-    borderColor: '#004AAD',
-    backgroundColor: '#F8FAFF',
-  },
-  methodIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  methodTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  methodSub: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioSelected: {
-    borderColor: '#004AAD',
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#004AAD',
-  },
-  securityBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 8,
-  },
-  securityText: {
-    fontSize: 11,
-    color: '#64748B',
-    flex: 1,
-    lineHeight: 16,
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'white',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  bottomPriceBox: {
-    flex: 1,
-  },
-  bottomLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-  bottomAmount: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#004AAD',
-  },
-  payButton: {
-    backgroundColor: '#004AAD',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-  },
-  payButtonContent: {
-    height: 48,
-  },
-  payButtonLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  headerText: { flex: 1 },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+  headerSubtitle: { marginTop: 2, fontSize: 11, fontWeight: '600', color: '#15803D' },
+  content: { padding: 16, paddingBottom: 120 },
+  planCard: { padding: 18, borderRadius: 12, backgroundColor: 'white' },
+  planHeading: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  planIcon: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  planTitle: { fontWeight: '800', color: '#0F172A' },
+  planDescription: { marginTop: 3, color: '#64748B' },
+  highlight: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 10, gap: 8 },
+  highlightText: { flex: 1, color: '#334155', fontSize: 13, lineHeight: 18 },
+  separator: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 16 },
+  amountRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, color: '#475569' },
+  totalRow: { borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 14, marginTop: 14 },
+  totalLabel: { fontWeight: '700', color: '#0F172A' },
+  totalAmount: { fontSize: 18, fontWeight: '800', color: '#004AAD' },
+  sectionTitle: { marginTop: 24, marginBottom: 10, fontWeight: '700', color: '#0F172A' },
+  paymentMethodsIntro: { marginBottom: 10, color: '#64748B', fontSize: 12 },
+  methodCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, padding: 14, marginBottom: 8 },
+  methodCopy: { flex: 1, marginLeft: 12 },
+  methodTitle: { fontWeight: '700', color: '#0F172A' },
+  methodDescription: { marginTop: 3, fontSize: 12, color: '#64748B' },
+  securityNote: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, padding: 14, borderRadius: 8, backgroundColor: '#F1F5F9' },
+  securityText: { flex: 1, fontSize: 12, color: '#475569', lineHeight: 17 },
+  termsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 12 },
+  termsText: { flex: 1, fontSize: 12, color: '#475569', lineHeight: 18 },
+  termsLink: { color: '#004AAD', fontWeight: '700', textDecorationLine: 'underline' },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingBottom: 20, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  bottomLabel: { fontSize: 11, color: '#64748B' },
+  bottomAmount: { marginTop: 2, fontSize: 17, fontWeight: '800', color: '#0F172A' },
 });

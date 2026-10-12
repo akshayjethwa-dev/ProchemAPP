@@ -77,33 +77,54 @@ export default function NegotiationsListScreen() {
       for (const docSnap of snapshot.docs) {
         const cData = docSnap.data();
         // If it's a custom requirement chat
-        if (cData.requirementId && cData.quoteId) {
+        if (cData.requirementId) {
+          let productName = cData.productName || 'Custom Requirement';
+          let buyerName = 'Buyer';
+          let sellerDisplayName = 'Verified Supplier';
+          let quotePrice = cData.targetPrice || 'Open';
+          let targetQty = cData.targetQuantity || 'N/A';
+          let unit = cData.unit || 'units';
+
           try {
             const reqSnap = await getDoc(doc(db, 'customRequirements', cData.requirementId));
-            const quoteSnap = await getDoc(doc(db, 'supplierQuotes', cData.quoteId));
-            
-            if (reqSnap.exists() && quoteSnap.exists()) {
+            if (reqSnap.exists()) {
               const req = reqSnap.data();
-              const quote = quoteSnap.data();
-              chats.push({
-                id: docSnap.id, 
-                type: 'custom_req',
-                productName: req.productName,
-                buyerName: req.buyerName || 'Buyer',
-                sellerName: quote.supplierName || 'Supplier',
-                updatedAt: cData.updatedAt || req.createdAt,
-                status: cData.status === 'open' ? 'NEGOTIATING' : (cData.status === 'won' ? 'CONVERTED' : 'CLOSED'),
-                targetQuantity: req.quantity,
-                targetPrice: quote.pricePerUnit, // Using quote price as the target indicator
-                unit: req.unit,
-                requirementId: cData.requirementId,
-                quoteId: cData.quoteId,
-                conversationId: docSnap.id
-              });
+              productName = req.productName || productName;
+              buyerName = req.buyerName || buyerName;
+              quotePrice = req.targetPrice || req.quotedPrice || quotePrice;
+              targetQty = req.quantity || targetQty;
+              unit = req.unit || unit;
             }
           } catch (err) {
-            console.error("Error fetching req chat details", err);
+            // safely ignore if permission restricted
           }
+
+          if (cData.quoteId) {
+            try {
+              const quoteSnap = await getDoc(doc(db, 'supplierQuotes', cData.quoteId));
+              if (quoteSnap.exists()) {
+                const quote = quoteSnap.data();
+                quotePrice = quote.pricePerUnit;
+                sellerDisplayName = quote.supplierName || 'Verified Supplier';
+              }
+            } catch (e) {}
+          }
+
+          chats.push({
+            id: docSnap.id, 
+            type: 'custom_req',
+            productName,
+            buyerName,
+            sellerName: sellerDisplayName,
+            updatedAt: cData.updatedAt || Date.now(),
+            status: cData.status === 'open' ? 'NEGOTIATING' : (cData.status === 'won' ? 'CONVERTED' : 'CLOSED'),
+            targetQuantity: targetQty,
+            targetPrice: quotePrice,
+            unit,
+            requirementId: cData.requirementId,
+            quoteId: cData.quoteId || undefined,
+            conversationId: docSnap.id
+          });
         }
       }
       setReqChatsList(chats);

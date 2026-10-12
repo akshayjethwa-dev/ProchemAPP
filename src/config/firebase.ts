@@ -21,13 +21,6 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-// 🛠 Debugging: Check if .env is actually loading correctly
-console.log('🔥 FIREBASE CONFIG LOADED:', {
-  apiKey: firebaseConfig.apiKey ? `Loaded (Starts with ${firebaseConfig.apiKey.substring(0, 8)}...)` : 'MISSING',
-  authDomain: firebaseConfig.authDomain || 'MISSING',
-  projectId: firebaseConfig.projectId || 'MISSING',
-});
-
 if (!firebaseConfig.apiKey) {
   console.error('CRITICAL ERROR: Firebase API Key is missing. Check your .env file and restart Expo with "npx expo start -c".');
 }

@@ -7,6 +7,7 @@ import { collection, addDoc, doc, setDoc, query, where, getDocs } from 'firebase
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { Product, TieredPrice } from '../types'; 
+import { createConversation } from '../services/conversationService';
 
 export default function ProductDetail() {
   const navigation = useNavigation<any>();
@@ -30,7 +31,7 @@ export default function ProductDetail() {
   const [rfqLoading, setRfqLoading] = useState(false);
   const [rfqForm, setRfqForm] = useState({ targetQty: '', targetPrice: '', pincode: '', notes: '' });
 
-  const [rfqSuccess, setRfqSuccess] = useState({ visible: false, rfqId: '' });
+  const [rfqSuccess, setRfqSuccess] = useState({ visible: false, rfqId: '', conversationId: '' });
   
   const [compareVisible, setCompareVisible] = useState(false);
   const [favoriteVisible, setFavoriteVisible] = useState(false);
@@ -126,16 +127,22 @@ export default function ProductDetail() {
         updatedAt: new Date().toISOString(),
       });
 
-      await addDoc(collection(db, 'messages'), {
-        rfqId: newRfqId,
-        text: `System: Buyer requested ${rfqForm.targetQty}${unit} at ₹${rfqForm.targetPrice}/${unit}. Delivery to ${rfqForm.pincode}. Notes: ${rfqForm.notes || 'None'}`,
-        senderId: user.uid,
-        timestamp: Date.now(),
-        isBuyer: true,
-        isOffer: true,
-        proposedPrice: parseFloat(rfqForm.targetPrice),
-        proposedQty: parseInt(rfqForm.targetQty)
-      });
+      // Create linked conversation desk
+      let convId = '';
+      try {
+        convId = await createConversation({
+          rfqId: newRfqId,
+          buyerUserId: user.uid,
+          sellerUserId: product.sellerId || 'unknown',
+          productName: product.name,
+          quantity: parseInt(rfqForm.targetQty),
+          targetPrice: parseFloat(rfqForm.targetPrice),
+          unit: unit,
+          initialMessage: `RFQ Inquiry: Buyer requested ${rfqForm.targetQty} ${unit} at target ₹${rfqForm.targetPrice}/${unit}. Delivery Pincode: ${rfqForm.pincode}.${rfqForm.notes ? ` Notes: ${rfqForm.notes}` : ''}`
+        });
+      } catch (cErr) {
+        console.warn('Could not auto-create conversation for RFQ:', cErr);
+      }
 
       try {
         await addDoc(collection(db, 'broadcastLeads'), {
@@ -143,6 +150,7 @@ export default function ProductDetail() {
           sourceType: 'RFQ', 
           productId: product.id,
           productName: product.name,
+          buyerId: user.uid,
           quantityRequired: parseInt(rfqForm.targetQty),
           unit: unit,
           deliveryRegion: rfqForm.pincode,
@@ -159,8 +167,8 @@ export default function ProductDetail() {
       setShowRfqModal(false);
 
       setTimeout(() => {
-        setRfqSuccess({ visible: true, rfqId: newRfqId });
-      }, 500);
+        setRfqSuccess({ visible: true, rfqId: newRfqId, conversationId: convId });
+      }, 400);
       
     } catch (e: any) {
       console.error("RFQ Error:", e);
@@ -203,9 +211,18 @@ export default function ProductDetail() {
               <Text style={{color: '#666', marginBottom: 15, fontSize: 13}}>Propose your desired quantity and target price directly to the supplier.</Text>
               <TextInput label={`Target Quantity (${unit}) *`} keyboardType="numeric" value={rfqForm.targetQty} onChangeText={t => setRfqForm({...rfqForm, targetQty: t})} mode="outlined" style={styles.rfqInput} />
               <TextInput label="Target Price per Unit (₹) *" keyboardType="numeric" value={rfqForm.targetPrice} onChangeText={t => setRfqForm({...rfqForm, targetPrice: t})} mode="outlined" style={styles.rfqInput} left={<TextInput.Affix text="₹ " />} />
+              
+              {parseFloat(rfqForm.targetPrice) > 0 && parseInt(rfqForm.targetQty) > 0 && (
+                <View style={{ backgroundColor: '#F0FDF4', padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#BBF7D0' }}>
+                  <Text style={{ fontSize: 11, color: '#166534', fontWeight: '600' }}>
+                    Est. Total (incl. 18% GST): ₹{Math.round(parseFloat(rfqForm.targetPrice) * parseInt(rfqForm.targetQty) * 1.18).toLocaleString('en-IN')}
+                  </Text>
+                </View>
+              )}
+
               <TextInput label="Delivery Pincode *" keyboardType="numeric" value={rfqForm.pincode} onChangeText={t => setRfqForm({...rfqForm, pincode: t})} mode="outlined" style={styles.rfqInput} maxLength={6} />
-              <TextInput label="Additional Notes (Optional)" multiline numberOfLines={3} value={rfqForm.notes} onChangeText={t => setRfqForm({...rfqForm, notes: t})} mode="outlined" style={styles.rfqInput} placeholder="e.g. Need immediate dispatch" />
-              <Button mode="contained" onPress={submitRFQ} loading={rfqLoading} style={{marginTop: 10, backgroundColor: theme.colors.primary}} contentStyle={{height: 50}}>Submit RFQ to Seller</Button>
+              <TextInput label="Additional Notes (Optional)" multiline numberOfLines={3} value={rfqForm.notes} onChangeText={t => setRfqForm({...rfqForm, notes: t})} mode="outlined" style={styles.rfqInput} placeholder="e.g. Need immediate dispatch, ISO tank required" />
+              <Button mode="contained" onPress={submitRFQ} loading={rfqLoading} style={{marginTop: 10, backgroundColor: '#059669'}} contentStyle={{height: 50}}>Submit RFQ to Seller</Button>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -220,14 +237,26 @@ export default function ProductDetail() {
             <Text style={{textAlign: 'center', color: '#475569', marginBottom: 20, lineHeight: 22}}>Your request has been securely sent to the supplier. They will review it and reply shortly.</Text>
             <View style={{backgroundColor: '#F8FAFC', padding: 15, borderRadius: 12, width: '100%', marginBottom: 25, borderWidth: 1, borderColor: '#E2E8F0'}}>
               <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
-                 <Avatar.Icon size={24} icon="information-outline" style={{backgroundColor: 'transparent', margin: 0, padding: 0}} color={theme.colors.primary} />
-                 <Text style={{fontWeight: 'bold', color: theme.colors.primary, marginLeft: 4}}>Where to find this later?</Text>
+                 <Avatar.Icon size={24} icon="information-outline" style={{backgroundColor: 'transparent', margin: 0, padding: 0}} color="#059669" />
+                 <Text style={{fontWeight: 'bold', color: '#0F172A', marginLeft: 4}}>Where to find this later?</Text>
               </View>
               <Text style={{color: '#64748B', fontSize: 13}}>You can track responses and continue negotiations by going to:</Text>
               <Text style={{fontWeight: 'bold', color: '#1E293B', marginTop: 8, fontSize: 14}}>Account Tab  →  My Quotes & Negotiations</Text>
             </View>
-            <Button mode="contained" style={{width: '100%', marginBottom: 12, backgroundColor: theme.colors.primary}} contentStyle={{height: 48}} onPress={() => { setRfqSuccess({ visible: false, rfqId: '' }); navigation.navigate('NegotiationRoom', { rfqId: rfqSuccess.rfqId }); }}>Go to Chat Room Now</Button>
-            <Button mode="outlined" style={{width: '100%', borderColor: '#CBD5E1'}} textColor="#64748B" contentStyle={{height: 48}} onPress={() => setRfqSuccess({ visible: false, rfqId: '' })}>Got it, continue browsing</Button>
+            <Button 
+              mode="contained" 
+              style={{width: '100%', marginBottom: 12, backgroundColor: '#059669'}} 
+              contentStyle={{height: 48}} 
+              onPress={() => { 
+                const destRfqId = rfqSuccess.rfqId;
+                const destConvId = rfqSuccess.conversationId;
+                setRfqSuccess({ visible: false, rfqId: '', conversationId: '' }); 
+                navigation.navigate('NegotiationRoom', { rfqId: destRfqId, conversationId: destConvId }); 
+              }}
+            >
+              Open Trading Desk Now
+            </Button>
+            <Button mode="outlined" style={{width: '100%', borderColor: '#CBD5E1'}} textColor="#64748B" contentStyle={{height: 48}} onPress={() => setRfqSuccess({ visible: false, rfqId: '', conversationId: '' })}>Got it, continue browsing</Button>
           </View>
         </View>
       </Modal>

@@ -1,18 +1,16 @@
 // src/screens/SellerDashboard.tsx
 import React, { useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity, Share, Alert, Linking } from 'react-native';
-import { Text, Card, ActivityIndicator, Button, useTheme, Avatar, IconButton, Divider } from 'react-native-paper';
+import { Text, ActivityIndicator, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, getDocs, onSnapshot, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
-import { logoutUser } from '../services/authService';
 import { BroadcastLead } from '../types';
 import { ProfileCompletionBanner } from '../components/ProfileCompletionBanner';
 
 export default function SellerDashboard() {
-  const theme = useTheme();
   const navigation = useNavigation<any>();
   const { user } = useAppStore();
   
@@ -31,7 +29,6 @@ export default function SellerDashboard() {
     const unsubscribeLeads = onSnapshot(leadsQuery, (snapshot) => {
       const allLeads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BroadcastLead));
       
-      // 🚀 FIXED: Filter out leads that belong to the current user
       const filteredLeads = allLeads.filter(lead => {
         if (lead.buyerId === user.uid) return false;
         if (lead.excludedSellerId === user.uid) return false;
@@ -73,25 +70,53 @@ export default function SellerDashboard() {
 
   const handleInviteSupplier = async () => {
     try {
-      const result = await Share.share({ message: `Grow your chemical business on Prochem! Access live market requirements. Register: https://play.google.com/store/apps/details?id=com.prochem.app` });
+      const result = await Share.share({ 
+        message: `Join Prochem Supplier Exchange! Access live bulk chemical inquiries across India: https://prochem.app/supplier-invite/${user?.uid}` 
+      });
       if (result.action === Share.sharedAction && user?.uid) {
-        Alert.alert("Thank You! 🙏", "Thanks for helping grow the Prochem network!");
+        Alert.alert("Thank You! 🙏", "Thanks for expanding the Prochem chemical supply network!");
       }
-    } catch (error: any) { console.error(error.message); }
+    } catch (error: any) { 
+      console.error(error.message); 
+    }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>;
+  const initialChar = user?.companyName?.[0]?.toUpperCase() || user?.name?.[0]?.toUpperCase() || 'S';
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="small" color="#0F172A" />
+        <Text style={styles.loadingText}>Initializing Supplier Command Desk...</Text>
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Executive Supplier Header */}
       <View style={styles.header}>
-        <View style={{flex: 1}}>
-          <Text style={styles.greeting}>Welcome back,</Text>
-          <Text style={styles.companyName} numberOfLines={1}>{user?.companyName || 'Seller'}</Text>
+        <View style={{ flex: 1 }}>
+          <View style={styles.deskTagRow}>
+            <Text style={styles.deskTag}>SUPPLIER COMMAND DESK</Text>
+            <View style={styles.verifiedBadge}>
+              <Text style={styles.verifiedText}>✓ VERIFIED PLANT</Text>
+            </View>
+          </View>
+          <Text style={styles.companyName} numberOfLines={1}>
+            {user?.companyName || 'Chemical Manufacturer'}
+          </Text>
         </View>
-        <View style={{flexDirection:'row', alignItems:'center'}}>
-            <IconButton icon="bell" iconColor="#64748B" size={24} onPress={() => navigation.navigate('Notifications')} />
-            <Avatar.Text size={40} label={user?.companyName?.[0] || "S"} style={{backgroundColor: theme.colors.primary}} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.notifBtn} 
+            onPress={() => navigation.navigate('Notifications')}
+          >
+            <IconButton icon="bell-outline" size={20} iconColor="#FFFFFF" style={{ margin: 0 }} />
+          </TouchableOpacity>
+          <View style={styles.avatarBox}>
+            <Text style={styles.avatarChar}>{initialChar}</Text>
+          </View>
         </View>
       </View>
 
@@ -103,139 +128,506 @@ export default function SellerDashboard() {
           />
         )}
         
-        {/* COMPACT KPI PILLS */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kpiScroll}>
-          <Card style={styles.kpiPill} onPress={() => navigation.navigate('Orders')}>
-            <Text style={styles.kpiLabel}>New Orders</Text>
-            <Text style={[styles.kpiValue, {color: pendingOrdersCount > 0 ? '#D97706' : '#1E293B'}]}>{pendingOrdersCount}</Text>
-          </Card>
-          <Card style={styles.kpiPill} onPress={() => navigation.navigate('SellerLiveLeads')}>
-            <Text style={styles.kpiLabel}>Live Reqs</Text>
-            <Text style={[styles.kpiValue, {color: '#0284C7'}]}>{recentLeads.length}</Text>
-          </Card>
-          <Card style={styles.kpiPill} onPress={() => navigation.navigate('MyListings')}>
-            <Text style={styles.kpiLabel}>Active Listings</Text>
-            <Text style={[styles.kpiValue, {color: '#16A34A'}]}>{stats.totalProducts}</Text>
-          </Card>
-        </ScrollView>
+        {/* KPI METRIC CARDS (2x2 Grid) */}
+        <View style={styles.kpiGrid}>
+          <TouchableOpacity 
+            style={[styles.kpiCard, pendingOrdersCount > 0 && styles.kpiCardHighlight]} 
+            onPress={() => navigation.navigate('Orders')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.kpiLabel}>PENDING ORDERS</Text>
+            <Text style={[styles.kpiValue, { color: pendingOrdersCount > 0 ? '#D97706' : '#0F172A' }]}>
+              {pendingOrdersCount}
+            </Text>
+            <Text style={styles.kpiSub}>Awaiting CoA & dispatch</Text>
+          </TouchableOpacity>
 
-        {/* LIVE REQUIREMENTS ACTION LIST */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionHeaderTitle}>LIVE MARKET REQUIREMENTS</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('SellerLiveLeads')} style={{paddingVertical: 4}}>
-            <Text style={styles.viewAllText}>View All</Text>
+          <TouchableOpacity 
+            style={styles.kpiCard} 
+            onPress={() => navigation.navigate('SellerLiveLeads')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.kpiLabel}>LIVE BUYER RFQS</Text>
+            <Text style={[styles.kpiValue, { color: '#059669' }]}>
+              {recentLeads.length}
+            </Text>
+            <Text style={styles.kpiSub}>Ready for commercial bids</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.kpiCard} 
+            onPress={() => navigation.navigate('ManageChemicals')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.kpiLabel}>ACTIVE LISTINGS</Text>
+            <Text style={[styles.kpiValue, { color: '#0F172A' }]}>
+              {stats.totalProducts}
+            </Text>
+            <Text style={styles.kpiSub}>Products on exchange</Text>
+          </TouchableOpacity>
+
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>TOTAL DISBURSED</Text>
+            <Text style={[styles.kpiValue, { color: '#0F172A' }]}>
+              ₹{Number(stats.totalRevenue).toLocaleString('en-IN')}
+            </Text>
+            <Text style={styles.kpiSub}>Escrow settled settlements</Text>
+          </View>
+        </View>
+
+        {/* CORE SUPPLIER ACTIONS */}
+        <View style={styles.quickActionRow}>
+          <TouchableOpacity 
+            style={styles.primaryActionBtn} 
+            onPress={() => navigation.navigate('AddChemical')}
+            activeOpacity={0.88}
+          >
+            <IconButton icon="plus" size={20} iconColor="#FFFFFF" style={{ margin: 0 }} />
+            <Text style={styles.primaryActionText}>List New Chemical</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.secondaryActionBtn} 
+            onPress={() => navigation.navigate('ManageChemicals')}
+            activeOpacity={0.88}
+          >
+            <IconButton icon="format-list-bulleted" size={18} iconColor="#0F172A" style={{ margin: 0 }} />
+            <Text style={styles.secondaryActionText}>Manage Catalog</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.groupBlock}>
+        {/* LIVE INQUIRIES FEED */}
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionMainTitle}>Live Chemical Requirements</Text>
+            <Text style={styles.sectionSubTitle}>Direct sourcing broadcasts from verified buyers</Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('SellerLiveLeads')} style={{ paddingVertical: 4 }}>
+            <Text style={styles.viewAllText}>View All ({recentLeads.length}) →</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.leadsContainer}>
           {recentLeads.length === 0 ? (
-            <View style={{padding: 20, alignItems: 'center'}}><Text style={{color: '#64748B'}}>No live requirements right now.</Text></View>
+            <View style={styles.emptyLeadsBox}>
+              <IconButton icon="radar" size={32} iconColor="#94A3B8" />
+              <Text style={styles.emptyLeadsTitle}>No open buyer requirements right now</Text>
+              <Text style={styles.emptyLeadsSub}>
+                New purchasing tenders from verified buyers will appear here in real-time.
+              </Text>
+            </View>
           ) : (
-            recentLeads.slice(0, 3).map((lead, index) => (
-              <View key={lead.id}>
-                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('SellerLiveLeads')}>
-                  <View style={[styles.iconBox, {backgroundColor: '#E0F2FE'}]}><Text>🎯</Text></View>
-                  <View style={{flex: 1, marginLeft: 12}}>
-                    <Text style={styles.actionTitle} numberOfLines={1}>{lead.productName}</Text>
-                    <Text style={styles.actionSub}>Req: {lead.quantityRequired} {lead.unit} | To: {lead.deliveryRegion}</Text>
+            recentLeads.slice(0, 3).map((lead) => (
+              <TouchableOpacity 
+                key={lead.id} 
+                style={styles.leadCard} 
+                onPress={() => navigation.navigate('SellerLiveLeads')}
+                activeOpacity={0.88}
+              >
+                <View style={styles.leadCardTop}>
+                  <View style={styles.leadPill}>
+                    <Text style={styles.leadPillText}>OPEN INQUIRY</Text>
                   </View>
-                  <IconButton icon="chevron-right" size={20} iconColor="#CBD5E1" style={{margin: 0}} />
-                </TouchableOpacity>
-                {index < 2 && index < recentLeads.length - 1 && <Divider style={{marginLeft: 56}} />}
-              </View>
+                  <Text style={styles.leadLocation}>📍 Destination: {lead.deliveryRegion || 'Pan-India'}</Text>
+                </View>
+
+                <Text style={styles.leadProductTitle} numberOfLines={1}>
+                  {lead.productName}
+                </Text>
+
+                <View style={styles.leadMetaRow}>
+                  <Text style={styles.leadMetaText}>
+                    Required: <Text style={{ fontWeight: '700', color: '#0F172A' }}>{lead.quantityRequired} {lead.unit}</Text>
+                  </Text>
+                  {lead.targetPrice && Number(lead.targetPrice) > 0 ? (
+                    <Text style={styles.leadMetaText}>
+                      Target: <Text style={{ fontWeight: '700', color: '#059669' }}>₹{lead.targetPrice}/{lead.unit}</Text>
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.leadCardFooter}>
+                  <Text style={styles.leadTimestamp}>
+                    Broadcast {new Date(lead.createdAt).toLocaleDateString()}
+                  </Text>
+                  <Text style={styles.leadQuoteLink}>Bid Commercial Offer →</Text>
+                </View>
+              </TouchableOpacity>
             ))
           )}
         </View>
 
-        {/* QUICK ACTIONS */}
-        <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
-        <View style={styles.groupBlock}>
-          <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Orders')}>
-            <View style={[styles.iconBox, {backgroundColor: '#FEF3C7'}]}><Text>📦</Text></View>
-            <View style={{flex: 1, marginLeft: 12}}><Text style={styles.actionTitle}>Pending Orders</Text><Text style={styles.actionSub}>Review & accept new requests</Text></View>
-            <IconButton icon="chevron-right" size={20} iconColor="#CBD5E1" style={{margin: 0}} />
-          </TouchableOpacity>
-          <Divider style={{marginLeft: 56}} />
-          <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('AddChemical')}>
-            <View style={[styles.iconBox, {backgroundColor: '#DCFCE7'}]}><Text>➕</Text></View>
-            <View style={{flex: 1, marginLeft: 12}}><Text style={styles.actionTitle}>Add Chemical</Text><Text style={styles.actionSub}>Post new stock to catalog</Text></View>
-            <IconButton icon="chevron-right" size={20} iconColor="#CBD5E1" style={{margin: 0}} />
-          </TouchableOpacity>
-        </View>
-
-        {/* PERFORMANCE ROW */}
-        <Text style={styles.sectionTitle}>PERFORMANCE</Text>
-        <Card style={[styles.groupBlock, {padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}]}>
-           <View>
-             <Text style={{color: '#64748B', fontSize: 11, fontWeight: 'bold'}}>TOTAL REVENUE</Text>
-             <Text style={{fontSize: 22, fontWeight: 'bold', color: '#1E293B', marginTop: 4}}>₹{stats.totalRevenue.toLocaleString()}</Text>
-           </View>
-           <View style={{backgroundColor: '#F1F5F9', padding: 8, borderRadius: 8}}>
-             <Text style={{fontSize: 12, color: '#475569'}}>{stats.activeOrders} Active Orders</Text>
-           </View>
-        </Card>
-
-        {/* WHATSAPP LINK BANNER */}
-        <TouchableOpacity style={styles.waBanner} activeOpacity={0.9} onPress={() => Linking.openURL('https://wa.me/917984856652text=Hi%20Prochem!%20Please%20link%20my%20supplier%20account.')}>
-          <View style={{flexDirection: 'row', alignItems: 'center'}}>
-            <Text style={{fontSize: 24, marginRight: 15}}>💬</Text>
-            <View style={{flex: 1}}>
-              <Text style={styles.waBannerTitle}>Link WhatsApp</Text>
-              <Text style={styles.waBannerText}>Get buyer leads directly to your phone.</Text>
-            </View>
-            <Text style={{color: '#15803D', fontSize: 24}}>›</Text>
+        {/* WHATSAPP LEAD RELAY BANNER */}
+        <TouchableOpacity 
+          style={styles.waRelayCard} 
+          activeOpacity={0.9} 
+          onPress={() => Linking.openURL('https://wa.me/918460852903?text=Hello,%20I%20want%20to%20receive%20Prochem%20seller%20leads%20on%20WhatsApp.')}
+        >
+          <View style={styles.waIconBox}>
+            <IconButton icon="whatsapp" size={24} iconColor="#FFFFFF" style={{ margin: 0 }} />
           </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.waCardTitle}>Instant WhatsApp Tender Relay</Text>
+            <Text style={styles.waCardSub}>Get buyer inquiries delivered directly to your commercial team's phone.</Text>
+          </View>
+          <IconButton icon="chevron-right" size={20} iconColor="#15803D" />
         </TouchableOpacity>
 
-        {/* INVITE BANNER */}
-        <View style={styles.inviteBanner}>
+        {/* NETWORK SHARE */}
+        <View style={styles.shareBanner}>
           <View style={{ flex: 1, paddingRight: 10 }}>
-            <Text style={styles.inviteTitle}>Grow the Network</Text>
-            <Text style={styles.inviteText}>Invite other suppliers to join the marketplace.</Text>
+            <Text style={styles.shareTitle}>Expand Supplier Network</Text>
+            <Text style={styles.shareText}>Invite chemical plants and authorized distributors to join the trading desk.</Text>
           </View>
-          <TouchableOpacity style={styles.inviteBtn} onPress={handleInviteSupplier}>
-            <Text style={styles.inviteBtnText}>Share</Text>
+          <TouchableOpacity style={styles.shareBtn} onPress={handleInviteSupplier} activeOpacity={0.85}>
+            <Text style={styles.shareBtnText}>Invite</Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F5F9' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: 'white' },
-  greeting: { fontSize: 13, color: '#64748B' },
-  companyName: { fontSize: 20, fontWeight: 'bold', color: '#1E293B' },
-  content: { paddingBottom: 40 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F8FAFC' 
+  },
+  center: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 16, 
+    paddingVertical: 14, 
+    backgroundColor: '#0F172A',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B',
+  },
+  deskTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  deskTag: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#059669',
+    letterSpacing: 0.6,
+  },
+  verifiedBadge: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  verifiedText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#34D399',
+  },
+  companyName: { 
+    fontSize: 18, 
+    fontWeight: '800', 
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notifBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarChar: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  content: { 
+    paddingBottom: 60,
+    paddingTop: 14,
+  },
   
-  kpiScroll: { padding: 16, paddingRight: 0 },
-  kpiPill: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginRight: 12, minWidth: 110, elevation: 1 },
-  kpiLabel: { fontSize: 11, color: '#64748B', fontWeight: 'bold', marginBottom: 4 },
-  kpiValue: { fontSize: 20, fontWeight: 'bold' },
+  /* KPI Grid */
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  kpiCard: { 
+    width: '48%',
+    backgroundColor: '#FFFFFF', 
+    padding: 14, 
+    borderRadius: 12, 
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  kpiCardHighlight: {
+    borderColor: '#FDE68A',
+    backgroundColor: '#FFFDF5',
+  },
+  kpiLabel: { 
+    fontSize: 9, 
+    color: '#64748B', 
+    fontWeight: '800', 
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  kpiValue: { 
+    fontSize: 20, 
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
+    marginBottom: 2,
+  },
+  kpiSub: {
+    fontSize: 10,
+    color: '#94A3B8',
+  },
 
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginHorizontal: 16, marginTop: 16, marginBottom: 8 },
-  sectionHeaderTitle: { fontSize: 11, fontWeight: 'bold', color: '#64748B', letterSpacing: 1 },
-  viewAllText: { fontSize: 12, fontWeight: 'bold', color: '#004AAD' },
+  /* Core Actions */
+  quickActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  primaryActionBtn: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#0F172A',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  primaryActionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  secondaryActionBtn: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  secondaryActionText: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 
-  sectionTitle: { fontSize: 11, fontWeight: 'bold', color: '#64748B', marginLeft: 16, marginBottom: 8, marginTop: 16, letterSpacing: 1 },
-  groupBlock: { backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', marginHorizontal: 16, elevation: 1 },
-  
-  actionItem: { flexDirection: 'row', alignItems: 'center', padding: 12 },
-  iconBox: { width: 40, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  actionTitle: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
-  actionSub: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  /* Sections */
+  sectionHeaderRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'flex-end', 
+    marginHorizontal: 16, 
+    marginBottom: 10,
+  },
+  sectionMainTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.2,
+  },
+  sectionSubTitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  viewAllText: { 
+    fontSize: 12, 
+    fontWeight: '700', 
+    color: '#059669',
+  },
 
-  waBanner: { backgroundColor: '#DCFCE7', borderRadius: 12, padding: 16, marginHorizontal: 16, marginTop: 24, borderWidth: 1, borderColor: '#86EFAC' },
-  waBannerTitle: { color: '#166534', fontWeight: 'bold', fontSize: 15, marginBottom: 2 },
-  waBannerText: { color: '#15803D', fontSize: 12 },
+  /* Lead Cards */
+  leadsContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    gap: 10,
+  },
+  leadCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+  },
+  leadCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  leadPill: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  leadPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#1D4ED8',
+    letterSpacing: 0.4,
+  },
+  leadLocation: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  leadProductTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  leadMetaRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 10,
+  },
+  leadMetaText: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  leadCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 8,
+  },
+  leadTimestamp: {
+    fontSize: 10,
+    color: '#94A3B8',
+  },
+  leadQuoteLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  emptyLeadsBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyLeadsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  emptyLeadsSub: {
+    fontSize: 11,
+    color: '#64748B',
+    textAlign: 'center',
+  },
 
-  inviteBanner: { flexDirection: 'row', backgroundColor: '#F3E8FF', padding: 16, borderRadius: 12, marginHorizontal: 16, marginTop: 16, alignItems: 'center', borderWidth: 1, borderColor: '#D8B4FE' },
-  inviteTitle: { color: '#7E22CE', fontWeight: 'bold', fontSize: 15, marginBottom: 2 },
-  inviteText: { color: '#6B21A8', fontSize: 12 },
-  creditsText: { color: '#9333EA', fontSize: 11, marginTop: 4 },
-  inviteBtn: { backgroundColor: '#9333EA', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  inviteBtnText: { color: 'white', fontWeight: 'bold', fontSize: 13 }
+  /* WhatsApp Relay Card */
+  waRelayCard: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4', 
+    borderRadius: 12, 
+    padding: 14, 
+    marginHorizontal: 16, 
+    marginBottom: 14, 
+    borderWidth: 1, 
+    borderColor: '#BBF7D0',
+  },
+  waIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#25D366',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waCardTitle: { 
+    color: '#166534', 
+    fontWeight: '700', 
+    fontSize: 13, 
+    marginBottom: 2,
+  },
+  waCardSub: { 
+    color: '#15803D', 
+    fontSize: 11,
+    lineHeight: 15,
+  },
+
+  /* Share Banner */
+  shareBanner: { 
+    flexDirection: 'row', 
+    backgroundColor: '#FFFFFF', 
+    padding: 14, 
+    borderRadius: 12, 
+    marginHorizontal: 16, 
+    alignItems: 'center', 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0',
+  },
+  shareTitle: { 
+    color: '#0F172A', 
+    fontWeight: '700', 
+    fontSize: 13, 
+    marginBottom: 2,
+  },
+  shareText: { 
+    color: '#64748B', 
+    fontSize: 11,
+  },
+  shareBtn: { 
+    backgroundColor: '#0F172A', 
+    paddingHorizontal: 14, 
+    paddingVertical: 8, 
+    borderRadius: 6,
+  },
+  shareBtnText: { 
+    color: 'white', 
+    fontWeight: '700', 
+    fontSize: 12,
+  }
 });

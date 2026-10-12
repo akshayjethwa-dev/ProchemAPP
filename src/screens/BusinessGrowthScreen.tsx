@@ -28,36 +28,23 @@ const { width } = Dimensions.get('window');
 const WHATSAPP_NUMBER = '917984856652'; 
 
 const PLANS = {
-  growth_monthly: {
-    key: 'premium_growth',
-    title: 'Premium Growth Plan',
-    amount: '4,999',
-    amountRaw: 4999,
-    duration: '1 Month',
-    description: 'Unlock exclusive verified leads, 5+ chemical comparisons, and dedicated manager.',
-    highlights: [
-      'Access to verified buyers & sellers in Premium Hub',
-      'Compare chemicals with 5+ verified manufacturers',
-      'Priority live market leads & bulk buyer inquiries',
-      'WhatsApp & Email promotion to verified network',
-      'Dedicated Prochem relationship manager',
-      '100% upfront payment assurance & escrow protection'
-    ],
-  },
-  growth_annual: {
-    key: 'growth_annual',
-    title: 'Premium Growth (Annual)',
-    amount: '49,999',
-    amountRaw: 49999,
+  standard: {
+    key: 'standard',
+    title: 'Standard Plan',
+    amount: '50',
+    amountRaw: 50,
     duration: '1 Year',
-    description: 'Lock in the best rates with 12 months access and save over ₹10,000.',
-    highlights: [
-      'Everything in Monthly Premium Growth Plan',
-      'Save ₹10,000 compared to monthly billing',
-      'Priority marketplace search placement',
-      'WhatsApp & Email promotion to verified network',
-      'Dedicated Prochem relationship manager',
-    ],
+    description: 'Perfect for businesses looking to scale their sourcing and sales.',
+    highlights: ['Access to verified buyers & sellers', 'Live market leads', 'Ready-to-dispatch inventory', 'Full Prochem team support'],
+  },
+  growth: {
+    key: 'growth',
+    title: '3-Year Growth Plan',
+    amount: '1,00,000',
+    amountRaw: 100000,
+    duration: '3 Years',
+    description: 'Lock in the best rates and secure your platform growth long-term.',
+    highlights: ['Everything in Standard', 'Save ₹50,000 vs yearly', 'Priority market leads', 'WhatsApp & Email promotion', 'Dedicated account manager'],
   },
 };
 
@@ -422,12 +409,6 @@ function UpgradePaymentModal({
         paymentWindow!.location.href = paymentUrl;
 
         const checkPayment = async () => {
-          if (paymentWindow!.closed) {
-            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-            setJuspayOrderId(null);
-            setIsProcessing(false);
-            return;
-          }
           try {
             const statusResponse: any = await httpsCallable(
               getFunctions(getApp(), 'asia-south1'),
@@ -438,11 +419,20 @@ function UpgradePaymentModal({
               if (paymentPollRef.current) clearInterval(paymentPollRef.current);
               setJuspayOrderId(null);
               if (status === 'CHARGED') {
-                await completePayment();
+                const session = statusResponse.data?.session;
+                if (!session?.planTier || !session?.subscriptionExpiry) {
+                  throw new Error('Payment is charged, but subscription details are not available yet.');
+                }
+                await completePayment(session.planTier, session.subscriptionExpiry);
               } else {
                 setIsProcessing(false);
                 Alert.alert('Payment not completed', `Juspay status: ${status}`);
               }
+            }
+            if (paymentWindow!.closed && status !== 'CHARGED' && !['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
+              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+              setJuspayOrderId(null);
+              setIsProcessing(false);
             }
           } catch (error) {
             console.error('Juspay status polling failed:', error);
@@ -466,33 +456,19 @@ function UpgradePaymentModal({
     } catch (error: any) {
       if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       console.error(error);
-      Alert.alert(
-        "Payment Notice",
-        error.message || "Could not connect to payment gateway. Would you like to activate test access?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Activate Access", onPress: () => completePayment() }
-        ]
-      );
+      Alert.alert("Error", error.message || "Could not initialize payment. Try again.");
       setIsProcessing(false);
     }
   };
 
-  const completePayment = async () => {
+  const completePayment = async (tier: string, expiry: string) => {
     if (!user) return;
-    const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    await updateDoc(doc(db, 'users', user.uid), {
-      subscriptionTier: 'GROWTH_PACKAGE',
-      subscriptionPlan: plan.key,
-      subscriptionExpiry: expiryDate,
-      updatedAt: serverTimestamp()
+    useAppStore.getState().updateUser({
+      subscriptionTier: tier as 'GROWTH_PACKAGE',
+      subscriptionPlan: plan?.key,
+      subscriptionExpiry: expiry,
     });
-    useAppStore.getState().updateUser({ 
-      subscriptionTier: 'GROWTH_PACKAGE',
-      subscriptionPlan: plan.key,
-      subscriptionExpiry: expiryDate,
-    });
-    Alert.alert('Payment Successful! 👑', 'Welcome to the Premium Hub. Your features are now unlocked!');
+    Alert.alert('Payment Successful!', 'Welcome to the Premium Hub. Your features are now unlocked!');
     setIsProcessing(false);
     onClose();
   };
@@ -511,7 +487,11 @@ function UpgradePaymentModal({
         return;
       }
 
-      await completePayment();
+      const session = response.data?.session;
+      if (!session?.planTier || !session?.subscriptionExpiry) {
+        throw new Error('Payment is charged, but subscription details are not available yet.');
+      }
+      await completePayment(session.planTier, session.subscriptionExpiry);
     } catch (error: any) {
       setIsProcessing(false);
       Alert.alert('Payment verification failed', error.message || 'Please check your payment status shortly.');
@@ -640,12 +620,9 @@ function SalesPitchUI() {
   const insets = useSafeAreaInsets();
   const { user } = useAppStore();
   const [activeTab, setActiveTab] = useState<'buyers' | 'sellers'>('buyers');
-  const [selectedPlan, setSelectedPlan] = useState<keyof typeof PLANS | null>('growth_monthly');
+  const [selectedPlan, setSelectedPlan] = useState<keyof typeof PLANS | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showTnCModal, setShowTnCModal] = useState(false); 
-
-  const isBasicUser = user?.subscriptionTier === 'BASIC' || user?.subscriptionPlan === 'basic';
-  const isFreeUser = !isBasicUser && (!user?.subscriptionTier || user?.subscriptionTier === 'FREE'); 
 
   const buyerFeatures = [
     { title: 'Compare products with 5+ verified companies', isReady: true },
@@ -752,77 +729,39 @@ function SalesPitchUI() {
           </Surface>
         </View>
 
-        {/* Active Basic Membership Banner */}
-        {isBasicUser && (
-          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
-            <Surface style={{ backgroundColor: '#EFF6FF', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#BFDBFE' }} elevation={0}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <MaterialCommunityIcons name="shield-check" size={24} color="#0284C7" />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#0369A1' }}>
-                    Current Plan: Basic Marketplace Membership (₹1,999/mo)
-                  </Text>
-                  <Text style={{ fontSize: 11, color: '#075985', marginTop: 2, lineHeight: 16 }}>
-                    Your Basic access is active for standard trading, product inquiries, and orders. The Premium Hub features (5+ supplier comparisons, verified lead directory, and priority matchmaking) require the Premium Growth Plan at ₹4,999/month. Choose your plan below to unlock immediate access.
-                  </Text>
-                </View>
-              </View>
-            </Surface>
-          </View>
-        )}
-
-        {/* Free / Complimentary Status Banner */}
-        {isFreeUser && (
-          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
-            <Surface style={{ backgroundColor: '#F0FDF4', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#BBF7D0' }} elevation={0}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <MaterialCommunityIcons name="shield-check" size={24} color="#10B981" />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#14532D' }}>
-                    Active Membership: Complimentary Marketplace Access
-                  </Text>
-                  <Text style={{ fontSize: 11, color: '#166534', marginTop: 2, lineHeight: 16 }}>
-                    As a registered partner, your account enjoys basic marketplace access. You can upgrade to the Premium Growth Plan at ₹4,999/month anytime to unlock high-intent leads and direct chemical manufacturer comparisons.
-                  </Text>
-                </View>
-              </View>
-            </Surface>
-          </View>
-        )}
-
         <View style={styles.pricingSection}>
-          <Text variant="titleLarge" style={styles.pricingHeader}>Choose Your Growth Tier</Text>
+          <Text variant="titleLarge" style={styles.pricingHeader}>Choose Your Plan</Text>
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => setSelectedPlan('growth_monthly')}
+            onPress={() => setSelectedPlan('standard')}
           >
             <Card
               style={[
                 styles.pricingCard,
-                selectedPlan === 'growth_monthly' && upgradeStyles.selectedCard,
+                selectedPlan === 'standard' && upgradeStyles.selectedCard,
               ]}
               mode="outlined"
             >
               <Card.Content style={styles.pricingCardContent}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.planTitle}>Premium Growth Plan</Text>
+                  <Text style={styles.planTitle}>Standard Plan</Text>
                   <View style={[
                     upgradeStyles.radioCircle,
-                    selectedPlan === 'growth_monthly' && upgradeStyles.radioCircleSelected,
+                    selectedPlan === 'standard' && upgradeStyles.radioCircleSelected,
                   ]}>
-                    {selectedPlan === 'growth_monthly' && (
+                    {selectedPlan === 'standard' && (
                       <View style={upgradeStyles.radioInner} />
                     )}
                   </View>
                 </View>
                 <View style={styles.priceRow}>
                   <Text style={styles.priceSymbol}>₹</Text>
-                  <Text style={styles.priceAmount}>4,999</Text>
-                  <Text style={styles.priceDuration}>/ Month</Text>
+                  <Text style={styles.priceAmount}>50,000</Text>
+                  <Text style={styles.priceDuration}>/ Year</Text>
                 </View>
                 <Text style={styles.planDescription}>
-                  Full access to verified buyer/seller directory, 5+ chemical comparisons, and priority leads.
+                  Perfect for businesses looking to scale their sourcing and sales.
                 </Text>
               </Card.Content>
             </Card>
@@ -830,37 +769,37 @@ function SalesPitchUI() {
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => setSelectedPlan('growth_annual')}
+            onPress={() => setSelectedPlan('growth')}
           >
             <Card
               style={[
                 styles.pricingCard,
                 styles.premiumCard,
-                selectedPlan === 'growth_annual' && upgradeStyles.selectedCard,
+                selectedPlan === 'growth' && upgradeStyles.selectedCard,
               ]}
               mode="elevated"
             >
               <View style={styles.bestValueBanner}>
                 <MaterialCommunityIcons name="star" size={14} color="#78350F" style={{ marginRight: 4 }} />
-                <Text style={styles.bestValueText}>BEST VALUE — SAVE OVER ₹10,000</Text>
+                <Text style={styles.bestValueText}>BEST VALUE — SAVE ₹50,000</Text>
               </View>
               <Card.Content style={styles.pricingCardContent}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={[styles.planTitle, { color: '#B45309' }]}>Premium Growth (Annual)</Text>
+                  <Text style={[styles.planTitle, { color: '#B45309' }]}>3-Year Growth Plan</Text>
                   <View style={[
                     upgradeStyles.radioCircle,
-                    selectedPlan === 'growth_annual' && upgradeStyles.radioCircleSelected,
+                    selectedPlan === 'growth' && upgradeStyles.radioCircleSelected,
                   ]}>
-                    {selectedPlan === 'growth_annual' && <View style={upgradeStyles.radioInner} />}
+                    {selectedPlan === 'growth' && <View style={upgradeStyles.radioInner} />}
                   </View>
                 </View>
                 <View style={styles.priceRow}>
                   <Text style={styles.priceSymbol}>₹</Text>
-                  <Text style={styles.priceAmount}>49,999</Text>
-                  <Text style={styles.priceDuration}>/ Year</Text>
+                  <Text style={styles.priceAmount}>1,00,000</Text>
+                  <Text style={styles.priceDuration}>/ 3 Years</Text>
                 </View>
                 <Text style={styles.planDescription}>
-                  12 months uninterrupted premium access with priority marketplace banner placement.
+                  Lock in the best rates and secure your platform growth long-term.
                 </Text>
               </Card.Content>
             </Card>

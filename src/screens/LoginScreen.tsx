@@ -8,33 +8,27 @@ import {
   Platform, 
   Alert,
   ScrollView,
-  Dimensions,
-  Image,
   StatusBar
 } from 'react-native';
-import { Text, TextInput, Button, useTheme, HelperText } from 'react-native-paper';
+import { Text, TextInput, Button, HelperText, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-const { width } = Dimensions.get('window');
-
-// ✅ Updated navigation types with MobileLogin
 type RootStackParamList = {
   Login: undefined;
   Registration: undefined;
+  RoleSelection: undefined;
   OTPVerification: { mobile: string };
-  MobileLogin: undefined; // ✅ New route
+  MobileLogin: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function LoginScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const theme = useTheme();
 
   // Input States
   const [email, setEmail] = useState('');
@@ -63,16 +57,16 @@ export default function LoginScreen() {
       await sendPasswordResetEmail(auth, email);
       Alert.alert(
         'Email Sent 📧',
-        `We have sent a password reset link to ${email}. Please check your Inbox and Spam folder.`
+        `We have sent a password reset link to ${email}. Please check your inbox and spam folder.`
       );
       setLoginError('');
     } catch (error: any) {
       console.error("Reset Error:", error);
       if (error.code === 'auth/user-not-found') {
         setLoginError('This email is not registered.');
-        Alert.alert('Error', 'Account not found. Please register.');
+        Alert.alert('Account Not Found', 'This email is not registered. Please create a new account.');
       } else {
-        Alert.alert('Error', error.message || 'Failed to send reset email.');
+        Alert.alert('Reset Failed', error.message || 'Failed to send reset email.');
       }
     } finally {
       setResetLoading(false);
@@ -81,21 +75,21 @@ export default function LoginScreen() {
 
   const handleEmailLogin = async () => {
     setLoginError('');
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       setLoginError('Please enter both email and password.');
       return;
     }
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (error: any) {
       console.log('Login Error Code:', error.code);
       if (error.code === 'auth/user-not-found') {
-        setLoginError('Account not found. Please register first.');
+        setLoginError('Account not found with this email.');
         Alert.alert(
           'Account Not Found',
-          'This email is not registered. Do you want to create an account?',
+          'This email is not registered. Would you like to create a new account?',
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Register', onPress: () => navigation.navigate('Registration') }
@@ -103,19 +97,19 @@ export default function LoginScreen() {
         );
       }
       else if (error.code === 'auth/wrong-password') {
-        setLoginError('Incorrect password. Please try again.');
+        setLoginError('Incorrect password. Please verify and try again.');
       }
       else if (error.code === 'auth/invalid-credential') {
-        setLoginError('Invalid email or password.');
+        setLoginError('Invalid email or password combination.');
       }
       else if (error.code === 'auth/invalid-email') {
         setLoginError('Please enter a valid email address.');
       }
       else if (error.code === 'auth/too-many-requests') {
-        setLoginError('Too many failed attempts. Try again later.');
+        setLoginError('Too many failed attempts. Please try again in a few minutes.');
       }
       else {
-        setLoginError('Login failed. Please check your connection.');
+        setLoginError('Login failed. Please check your internet connection.');
       }
     } finally {
       setLoading(false);
@@ -124,10 +118,10 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
+      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
       <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
@@ -135,53 +129,65 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Stunning Background Header */}
+          {/* Executive Header Banner */}
           <View style={styles.headerBackground}>
             <SafeAreaView edges={['top']}>
               <View style={styles.headerContent}>
-                {/* 1. Prochem Logo & Tagline */}
-                <Image 
-                  source={require('../../assets/logo.png')} 
-                  style={styles.headerLogo}
-                  resizeMode="contain"
-                />
-                <Text style={styles.taglineText}>India's Trusted Chemical Marketplace</Text>
+                <View style={styles.brandRow}>
+                  <Text style={styles.brandTitle}>PROCHEM</Text>
+                  <View style={styles.exchangeBadge}>
+                    <Text style={styles.exchangeBadgeText}>EXCHANGE</Text>
+                  </View>
+                </View>
+                <Text style={styles.taglineText}>India's Industrial Chemical Trading Network</Text>
                 
-                {/* 2. Welcome Back & Glad to see you again */}
                 <View style={styles.welcomeContainer}>
-                  <Text style={styles.welcomeSmallText}>Welcome back,</Text>
-                  <Text style={styles.welcomeBigText}>Glad to see you again!</Text>
+                  <Text style={styles.welcomeSmallText}>SECURE BUSINESS PORTAL</Text>
+                  <Text style={styles.welcomeBigText}>Sign In to Account</Text>
                 </View>
               </View>
             </SafeAreaView>
           </View>
 
-          {/* Floating Form Card */}
+          {/* Clean Form Card */}
           <View style={styles.formCard}>
-            
-            <Text style={styles.cardSubtitle}>Sign in to continue to your business account.</Text>
+            <Text style={styles.cardSubtitle}>
+              Enter your registered corporate credentials to access live markets and negotiations.
+            </Text>
 
-            {/* Email Form (Tabs removed) */}
-            <TextInput
-              label="Email Address"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setLoginError('');
-              }}
-              mode="outlined"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              textColor="#0F172A"
-              left={<TextInput.Icon icon="email-outline" color="#64748B" />}
-              error={loginError.includes('email') || loginError.includes('Account')}
-            />
-
-            <View style={styles.passwordContainer}>
+            {/* Email Field */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>CORPORATE EMAIL</Text>
               <TextInput
-                label="Password"
+                placeholder="name@company.com"
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setLoginError('');
+                }}
+                mode="outlined"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor="#0F172A"
+                left={<TextInput.Icon icon="email-outline" color="#64748B" />}
+                error={loginError.includes('email') || loginError.includes('Account')}
+              />
+            </View>
+
+            {/* Password Field */}
+            <View style={styles.fieldGroup}>
+              <View style={styles.passwordLabelRow}>
+                <Text style={styles.fieldLabel}>PASSWORD</Text>
+                <TouchableOpacity onPress={handleForgotPassword} disabled={resetLoading}>
+                  <Text style={styles.forgotPassText}>
+                    {resetLoading ? 'Sending link...' : 'Forgot password?'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                placeholder="••••••••••••"
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
@@ -196,7 +202,7 @@ export default function LoginScreen() {
                 error={loginError.includes('password') || loginError.includes('Incorrect') || loginError.includes('Invalid')}
                 right={
                   <TextInput.Icon
-                    icon={secureTextEntry ? 'eye-off' : 'eye'}
+                    icon={secureTextEntry ? 'eye-off-outline' : 'eye-outline'}
                     onPress={() => setSecureTextEntry(!secureTextEntry)}
                     forceTextInputFocus={false}
                     color="#64748B"
@@ -211,93 +217,54 @@ export default function LoginScreen() {
               </HelperText>
             ) : null}
 
-            <TouchableOpacity style={styles.forgotPass} onPress={handleForgotPassword}>
-              <Text style={styles.forgotPassText}>
-                {resetLoading ? 'Sending link...' : 'Forgot Password?'}
+            {/* Primary Sign In Button */}
+            <TouchableOpacity
+              style={[styles.loginBtn, loading && { opacity: 0.7 }]}
+              onPress={handleEmailLogin}
+              disabled={loading}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.loginBtnText}>
+                {loading ? 'Authenticating...' : 'Sign In to Account'}
               </Text>
             </TouchableOpacity>
-
-            <Button
-              mode="contained"
-              onPress={handleEmailLogin}
-              loading={loading}
-              disabled={loading}
-              icon="arrow-right"
-              style={styles.loginBtn}
-              contentStyle={styles.loginBtnContent}
-              labelStyle={styles.loginBtnLabel}
-            >
-              Login
-            </Button>
-
-            {/* Security Banner */}
-            <View style={styles.safetyBanner}>
-              <MaterialCommunityIcons name="shield-lock-outline" size={24} color="#059669" style={{ marginTop: 2 }} />
-              <View style={styles.safetyTextContainer}>
-                <Text style={styles.safetyTitle}>Your security is our priority</Text>
-                <Text style={styles.safetySubtext}>We use industry-standard encryption to protect your data.</Text>
-              </View>
-            </View>
 
             {/* Divider */}
             <View style={styles.dividerContainer}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
+              <Text style={styles.dividerText}>OR SIGN IN VIA</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            {/* ✅ NEW: Create Account CTA */}
-            <Button
-              mode="outlined"
-              icon="account-plus-outline"
-              onPress={() => navigation.navigate('Registration')}
-              style={styles.createAccountBtn}
-              contentStyle={styles.createAccountBtnContent}
-              labelStyle={styles.createAccountBtnLabel}
-              textColor="#0F172A"
+            {/* Mobile OTP Login Shortcut */}
+            <TouchableOpacity
+              style={styles.mobileLoginBtn}
+              onPress={() => navigation.navigate('MobileLogin')}
+              activeOpacity={0.85}
             >
-              Create your account
-            </Button>
+              <IconButton icon="cellphone" size={18} iconColor="#0F172A" style={{ margin: 0 }} />
+              <Text style={styles.mobileLoginBtnText}>Instant Mobile Number & OTP</Text>
+            </TouchableOpacity>
 
-            {/* Mobile Login Section */}
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>Prefer logging in with OTP?</Text>
-              <Button 
-                mode="text" 
-                onPress={() => navigation.navigate('MobileLogin')}
-                labelStyle={styles.registerBtnLabel}
-                textColor="#2563EB"
-              >
-                Continue with mobile number
-              </Button>
+            {/* Register Shortcut */}
+            <View style={styles.registerPrompt}>
+              <Text style={styles.registerPromptText}>Don't have an enterprise account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Registration')}>
+                <Text style={styles.registerPromptLink}>Register here</Text>
+              </TouchableOpacity>
             </View>
 
-            {/* App Features */}
-            <View style={styles.featuresContainer}>
-              <View style={styles.featureItem}>
-                <View style={styles.featureIconBox}>
-                  <MaterialCommunityIcons name="lock-outline" size={22} color="#2563EB" />
-                </View>
-                <Text style={styles.featureText}>Secure</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <View style={styles.featureIconBox}>
-                  <MaterialCommunityIcons name="headset" size={22} color="#2563EB" />
-                </View>
-                <Text style={styles.featureText}>24/7 Support</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <View style={styles.featureIconBox}>
-                  <MaterialCommunityIcons name="handshake-outline" size={22} color="#2563EB" />
-                </View>
-                <Text style={styles.featureText}>B2B Network</Text>
+            {/* Security Guarantee Banner */}
+            <View style={styles.safetyBanner}>
+              <IconButton icon="shield-check" size={20} iconColor="#059669" style={{ margin: 0 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.safetyTitle}>Bank-Grade 256-Bit SSL Encryption</Text>
+                <Text style={styles.safetySubtext}>
+                  All trade negotiations, price quotes, and enterprise data are confidential.
+                </Text>
               </View>
             </View>
-
           </View>
-
-          <View style={styles.bottomSpacer} />
-
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -307,146 +274,140 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   mainContainer: { 
     flex: 1, 
-    backgroundColor: '#F1F5F9',
-  },
-  keyboardView: {
-    flex: 1,
+    backgroundColor: '#F8FAFC',
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 40,
   },
   headerBackground: {
-    backgroundColor: '#2563EB',
-    paddingBottom: 70,
-    borderBottomLeftRadius: 40,
-    borderBottomRightRadius: 40,
+    backgroundColor: '#0F172A',
+    paddingBottom: 50,
   },
   headerContent: {
-    alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 10,
+    paddingTop: 16,
     paddingBottom: 20,
   },
-  headerLogo: {
-    width: 160,
-    height: 60,
-    marginBottom: 8,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  brandTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  exchangeBadge: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  exchangeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   taglineText: {
-    fontSize: 13,
-    color: '#E0E7FF',
-    fontWeight: '500',
-    marginBottom: 30,
-    letterSpacing: 0.5,
+    fontSize: 12,
+    color: '#94A3B8',
+    marginBottom: 24,
   },
   welcomeContainer: {
     width: '100%',
-    alignItems: 'flex-start',
   },
   welcomeSmallText: {
-    fontSize: 16,
-    color: '#BFDBFE',
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669',
+    letterSpacing: 0.8,
     marginBottom: 4,
   },
   welcomeBigText: {
-    fontSize: 30,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     color: '#FFFFFF',
+    letterSpacing: -0.3,
   },
   formCard: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
-    marginTop: -40,
-    borderRadius: 24,
-    padding: 24,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
+    marginTop: -30,
+    borderRadius: 16,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
   },
   cardSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748B',
     marginBottom: 20,
-    lineHeight: 20,
+    lineHeight: 18,
+  },
+  fieldGroup: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  passwordLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  forgotPassText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#004AAD',
+    marginBottom: 6,
   },
   input: { 
     backgroundColor: '#F8FAFC', 
-    fontSize: 15,
+    fontSize: 14,
+    height: 46,
   },
   inputOutline: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  passwordContainer: {
-    marginTop: 16,
+    borderRadius: 8,
+    borderColor: '#CBD5E1',
   },
   errorText: {
-    paddingHorizontal: 0,
-    marginTop: 4,
-    marginBottom: -8,
-  },
-  forgotPass: { 
-    alignSelf: 'flex-end', 
-    marginTop: 12,
-    marginBottom: 24,
-  },
-  forgotPassText: {
-    color: '#2563EB',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  loginBtn: { 
-    borderRadius: 12, 
-    backgroundColor: '#2563EB',
-    elevation: 4,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  loginBtnContent: { 
-    paddingVertical: 10,
-    flexDirection: 'row-reverse', 
-  },
-  loginBtnLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-  },
-  safetyBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#ECFDF5',
-    padding: 14,
-    borderRadius: 12,
-    marginTop: 24,
-    borderWidth: 1,
-    borderColor: '#D1FAE5'
-  },
-  safetyTextContainer: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  safetyTitle: {
-    color: '#065F46',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  safetySubtext: {
-    color: '#059669',
     fontSize: 12,
-    lineHeight: 18,
+    marginTop: -8,
+    marginBottom: 10,
+    paddingHorizontal: 0,
+  },
+  loginBtn: {
+    backgroundColor: '#0F172A',
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  loginBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
   },
   dividerLine: {
     flex: 1,
@@ -454,66 +415,64 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
   },
   dividerText: {
-    marginHorizontal: 16,
+    fontSize: 10,
+    fontWeight: '700',
     color: '#94A3B8',
-    fontWeight: '600',
-    fontSize: 12,
+    marginHorizontal: 12,
+    letterSpacing: 0.5,
   },
-  createAccountBtn: {
-    borderRadius: 12,
-    borderColor: '#CBD5E1',
-    borderWidth: 1.5,
-    marginBottom: 24,
-  },
-  createAccountBtnContent: {
-    paddingVertical: 8,
-  },
-  createAccountBtnLabel: {
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  registerContainer: {
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  registerText: {
-    color: '#64748B',
-    fontSize: 14,
-    marginBottom: -4, 
-  },
-  registerBtnLabel: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    paddingVertical: 4,
-  },
-  featuresContainer: {
+  mobileLoginBtn: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingTop: 24,
-    marginTop: 24,
-  },
-  featureItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  featureIconBox: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    height: 46,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  mobileLoginBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginLeft: 4,
+  },
+  registerPrompt: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
     marginBottom: 8,
   },
-  featureText: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '600',
-    textAlign: 'center',
+  registerPromptText: {
+    fontSize: 13,
+    color: '#64748B',
   },
-  bottomSpacer: {
-    height: 40,
-  }
+  registerPromptLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  safetyBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F0FDF4',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    marginTop: 16,
+    gap: 8,
+  },
+  safetyTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#166534',
+    marginBottom: 2,
+  },
+  safetySubtext: {
+    fontSize: 10,
+    color: '#15803D',
+    lineHeight: 14,
+  },
 });

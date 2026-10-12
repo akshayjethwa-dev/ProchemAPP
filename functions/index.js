@@ -2,6 +2,7 @@
 const functions = require("firebase-functions/v1"); 
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore"); 
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 const { Expo } = require("expo-server-sdk"); 
 const { Cashfree } = require("cashfree-pg"); 
 
@@ -13,9 +14,166 @@ const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
 const TWILIO_AUTH_TOKEN   = defineSecret("TWILIO_AUTH_TOKEN");
 const TWILIO_PHONE_NUMBER = defineSecret("TWILIO_PHONE_NUMBER");
 const TWILIO_MESSAGING_SERVICE_SID = defineSecret("TWILIO_MESSAGING_SERVICE_SID");
+const JUSPAY_MERCHANT_PRIVATE_KEY = defineSecret("JUSPAY_MERCHANT_PRIVATE_KEY");
+const JUSPAY_PUBLIC_KEY = defineSecret("JUSPAY_PUBLIC_KEY");
 
 admin.initializeApp();
 const expo = new Expo();
+
+const JUSPAY_SUBSCRIPTION_PLANS = {
+  basic: { amount: 2359, tier: "BASIC", durationDays: 30 },
+  premium_growth: { amount: 5899, tier: "GROWTH_PACKAGE", durationDays: 30 },
+  standard: { amount: 50, tier: "GROWTH_PACKAGE", durationDays: 365 },
+  growth: { amount: 100000, tier: "GROWTH_PACKAGE", durationDays: 1095 },
+};
+const JUSPAY_SESSION_URLS = [
+  "https://sandbox.juspay.in/session",
+  "https://api.juspay.in/session",
+];
+
+const getJuspaySessionUrl = () => {
+  const sessionUrl = process.env.JUSPAY_API_URL;
+  if (!JUSPAY_SESSION_URLS.includes(sessionUrl)) {
+    throw new Error("JUSPAY_API_URL must be set to the matching sandbox or production Session API URL.");
+  }
+  return sessionUrl;
+};
+
+const markJuspayOrderCharged = async (orderId, transactionId, chargedAmount, currency) => {
+  const db = admin.firestore();
+  const sessionRef = db.collection("juspaySessions").doc(String(orderId));
+
+  return db.runTransaction(async (transaction) => {
+    const sessionSnapshot = await transaction.get(sessionRef);
+    if (!sessionSnapshot.exists) return null;
+
+    const session = sessionSnapshot.data();
+    if (session.status === "CHARGED") return session;
+
+    const expectedAmount = Number(session.amount);
+    const actualAmount = Number(chargedAmount);
+    if (!Number.isFinite(actualAmount) || Math.round(expectedAmount * 100) !== Math.round(actualAmount * 100)) {
+      throw new Error("Verified Juspay charge amount does not match the stored order amount.");
+    }
+    if (String(currency || "").toUpperCase() !== "INR") {
+      throw new Error("Verified Juspay charge currency is not INR.");
+    }
+
+    let userRef;
+    let userSnapshot;
+    let orderRef;
+    let orderSnapshot;
+    if (session.type === "subscription") {
+      userRef = db.collection("users").doc(session.userId);
+      userSnapshot = await transaction.get(userRef);
+      if (!userSnapshot.exists || !session.planTier || !session.subscriptionDurationDays) {
+        throw new Error("Subscription payment session is missing its user or plan details.");
+      }
+    } else if (session.type === "product") {
+      orderRef = db.collection("orders").doc(session.referenceId);
+      orderSnapshot = await transaction.get(orderRef);
+      if (!orderSnapshot.exists) {
+        throw new Error("Product payment session is missing its order document.");
+      }
+    } else {
+      throw new Error("Unsupported Juspay payment session type.");
+    }
+
+    const paidAt = new Date();
+    const subscriptionExpiry = session.type === "subscription" && session.subscriptionDurationDays
+      ? new Date(paidAt.getTime() + session.subscriptionDurationDays * 86400000).toISOString()
+      : null;
+
+    transaction.update(sessionRef, {
+      status: "CHARGED",
+      transactionId: transactionId || null,
+      ...(subscriptionExpiry ? { subscriptionExpiry } : {}),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    if (session.type === "subscription") {
+      transaction.update(userRef, {
+        subscriptionTier: session.planTier,
+        subscriptionPlan: session.referenceId,
+        subscriptionExpiry,
+        subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else if (session.type === "product") {
+      transaction.update(orderRef, {
+        status: "PENDING_SELLER",
+        paymentStatus: "completed",
+        paymentDetails: {
+          provider: "JUSPAY_HYPERCHECKOUT",
+          juspayOrderId: String(orderId),
+          transactionId: transactionId || null,
+          paidAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+      });
+    }
+
+    return {
+      ...session,
+      status: "CHARGED",
+      ...(subscriptionExpiry ? { subscriptionExpiry } : {}),
+    };
+  });
+};
+
+const base64UrlToBuffer = (value) => Buffer.from(value, "base64url");
+
+const decryptAndVerifyJuspayStatus = (encryptedResponse, merchantPrivateKeyPem, juspayPublicKeyPem) => {
+  const token = typeof encryptedResponse === "string"
+    ? encryptedResponse
+    : encryptedResponse?.header && encryptedResponse?.encryptedKey && encryptedResponse?.iv && encryptedResponse?.encryptedPayload && encryptedResponse?.tag
+      ? [encryptedResponse.header, encryptedResponse.encryptedKey, encryptedResponse.iv, encryptedResponse.encryptedPayload, encryptedResponse.tag].join(".")
+      : null;
+  if (!token) throw new Error("Juspay status response did not contain a supported encrypted payload.");
+
+  const jweParts = token.split(".");
+  if (jweParts.length !== 5) throw new Error("Juspay status JWE is malformed.");
+  const [protectedHeader, encryptedKey, iv, encryptedPayload, authTag] = jweParts;
+  const header = JSON.parse(base64UrlToBuffer(protectedHeader).toString("utf8"));
+  if (!(["RSA-OAEP", "RSA-OAEP-256"].includes(header.alg)) || header.enc !== "A256GCM") {
+    throw new Error("Juspay status JWE uses an unsupported encryption algorithm.");
+  }
+
+  const cek = crypto.privateDecrypt({
+    key: crypto.createPrivateKey(merchantPrivateKeyPem),
+    padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+    oaepHash: "sha256",
+  }, base64UrlToBuffer(encryptedKey));
+  const decipher = crypto.createDecipheriv("aes-256-gcm", cek, base64UrlToBuffer(iv));
+  decipher.setAAD(Buffer.from(protectedHeader));
+  decipher.setAuthTag(base64UrlToBuffer(authTag));
+  const signedToken = Buffer.concat([
+    decipher.update(base64UrlToBuffer(encryptedPayload)),
+    decipher.final(),
+  ]).toString("utf8");
+
+  const jwsParts = signedToken.split(".");
+  if (jwsParts.length !== 3) throw new Error("Juspay status JWS is malformed.");
+  const [signedHeader, signedPayload, signature] = jwsParts;
+  const jwsHeader = JSON.parse(base64UrlToBuffer(signedHeader).toString("utf8"));
+  if (jwsHeader.alg !== "RS256") throw new Error("Juspay status JWS uses an unsupported signing algorithm.");
+  const valid = crypto.verify(
+    "RSA-SHA256",
+    Buffer.from(`${signedHeader}.${signedPayload}`),
+    crypto.createPublicKey(juspayPublicKeyPem),
+    base64UrlToBuffer(signature)
+  );
+  if (!valid) throw new Error("Juspay status signature verification failed.");
+
+  return JSON.parse(base64UrlToBuffer(signedPayload).toString("utf8"));
+};
+
+const readJuspayEncryptedResponse = async (response) => {
+  const responseText = await response.text();
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return responseText;
+  }
+};
 
 // ==========================================
 // 🚀 PUSH NOTIFICATION TRIGGER (Gen 2 - INDIA REGION)
@@ -722,15 +880,8 @@ exports.cashfreeWebhook = functions
                   createdAt: admin.firestore.FieldValue.serverTimestamp()
               });
 
-              const calculatedTier = (
-                referenceId === "premium_growth" ||
-                referenceId === "growth" ||
-                referenceId === "growth_monthly" ||
-                referenceId === "growth_annual"
-              ) ? "GROWTH_PACKAGE" : "BASIC";
-
               await admin.firestore().collection("users").doc(customerId).update({
-                  subscriptionTier: calculatedTier, 
+                  subscriptionTier: "GROWTH_PACKAGE",
                   subscriptionPlan: referenceId, 
                   subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
               });
@@ -764,19 +915,10 @@ exports.createJuspaySession = functions
   .https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
 
-    const { amount, type = "product", referenceId, customerDetails, planTier } = data || {};
-    if (!amount || !referenceId) {
-      throw new functions.https.HttpsError("invalid-argument", "Amount and referenceId are required.");
+    const { type = "product", referenceId, customerDetails } = data || {};
+    if (!referenceId || !["product", "subscription"].includes(type)) {
+      throw new functions.https.HttpsError("invalid-argument", "A valid payment type and referenceId are required.");
     }
-
-    const calculatedPlanTier = planTier || (
-      referenceId === "premium_growth" ||
-      referenceId === "growth" ||
-      referenceId === "growth_monthly" ||
-      referenceId === "growth_annual"
-        ? "GROWTH_PACKAGE"
-        : "BASIC"
-    );
 
     const merchantId = process.env.JUSPAY_MERCHANT_ID;
     const clientId = process.env.JUSPAY_CLIENT_ID;
@@ -784,12 +926,43 @@ exports.createJuspaySession = functions
     if (!merchantId || !clientId || !apiKey) {
       throw new functions.https.HttpsError("failed-precondition", "Juspay server credentials are not configured.");
     }
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+    const returnUrl = process.env.JUSPAY_RETURN_URL ||
+      (projectId ? `https://asia-south1-${projectId}.cloudfunctions.net/juspayReturn` : null);
+    if (!returnUrl || !returnUrl.startsWith("https://")) {
+      throw new functions.https.HttpsError("failed-precondition", "JUSPAY_RETURN_URL must be configured as an HTTPS URL for this Firebase project.");
+    }
 
-    const juspayOrderId = `jp_${referenceId}_${Date.now()}`.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 21);
+    let amountInPaiseSafeRupees;
+    let planTier;
+    let subscriptionDurationDays;
+    let orderSnapshot;
+
+    if (type === "subscription") {
+      const plan = JUSPAY_SUBSCRIPTION_PLANS[referenceId];
+      if (!plan) throw new functions.https.HttpsError("invalid-argument", "Unknown subscription plan.");
+      amountInPaiseSafeRupees = plan.amount;
+      planTier = plan.tier;
+      subscriptionDurationDays = plan.durationDays;
+    } else {
+      orderSnapshot = await admin.firestore().collection("orders").doc(referenceId).get();
+      if (!orderSnapshot.exists || orderSnapshot.data().buyerId !== context.auth.uid) {
+        throw new functions.https.HttpsError("permission-denied", "Order does not belong to the current user.");
+      }
+      amountInPaiseSafeRupees = Number(orderSnapshot.data().totalAmount);
+    }
+
+    if (!Number.isFinite(amountInPaiseSafeRupees) || amountInPaiseSafeRupees < 1) {
+      throw new functions.https.HttpsError("invalid-argument", "The payable amount is invalid.");
+    }
+
+    const juspayOrderId = `jp${Date.now().toString(36)}${crypto.randomBytes(4).toString("hex")}`.slice(0, 21);
     const phone = String(customerDetails?.phone || "9999999999").replace(/[^0-9]/g, "").slice(-10);
     const email = customerDetails?.email || "buyer@prochem.in";
-    const name = customerDetails?.name || "Prochem Buyer";
-    const sessionUrl = process.env.JUSPAY_API_URL || "https://api.juspay.in/session";
+    const sessionUrl = process.env.JUSPAY_API_URL;
+    if (!JUSPAY_SESSION_URLS.includes(sessionUrl)) {
+      throw new functions.https.HttpsError("failed-precondition", "JUSPAY_API_URL must match the configured Juspay environment.");
+    }
 
     try {
       const response = await fetch(sessionUrl, {
@@ -802,18 +975,53 @@ exports.createJuspaySession = functions
         },
         body: JSON.stringify({
           order_id: juspayOrderId,
-          amount: Number(amount).toFixed(2),
+          amount: amountInPaiseSafeRupees.toFixed(2),
+          currency: "INR",
           customer_id: context.auth.uid,
           customer_email: email,
           customer_phone: phone,
           payment_page_client_id: clientId,
           action: "paymentPage",
-          return_url: "https://asia-south1-prochemapp-dev.cloudfunctions.net/juspayReturn",
+          return_url: returnUrl,
         }),
       });
       const payload = await response.json();
-      if (!response.ok || !payload.sdk_payload && !payload.payment_links?.mobile) {
-        console.error("Juspay session error:", { status: response.status, payload });
+      if (response.status === 401 || response.status === 403) {
+        console.error("Juspay rejected Session API credentials:", { status: response.status, errorCode: payload.error_info?.error_code });
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Juspay rejected the production API credentials. Check that the active API key, merchant ID, and production endpoint belong to the same account."
+        );
+      }
+      if (response.status === 400) {
+        const invalidFields = Array.isArray(payload.error_info?.fields)
+          ? payload.error_info.fields.map((field) => {
+              if (typeof field === "string") return field;
+              if (!field || typeof field !== "object") return "unknown field";
+              const fieldName = field.name || field.field || field.field_name || field.parameter || field.path;
+              const reason = field.message || field.reason || field.code;
+              return [fieldName, reason].filter(Boolean).join(": ") || `field keys: ${Object.keys(field).join(",")}`;
+            }).join("; ")
+          : "request parameters";
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          `Juspay rejected the Session API request. Check these fields: ${invalidFields}.`
+        );
+      }
+      if (!response.ok || !(payload.payment_links?.mobile || payload.payment_links?.web)) {
+        const fields = Array.isArray(payload.error_info?.fields)
+          ? payload.error_info.fields.map((field) => ({
+              name: field.name || field.field,
+              code: field.code,
+              message: field.message,
+            }))
+          : undefined;
+        console.error("Juspay session error:", JSON.stringify({
+          httpStatus: response.status,
+          errorCode: payload.error_info?.code || payload.error_code,
+          fields,
+          developerMessage: payload.error_info?.developer_message,
+        }));
         throw new Error("Juspay did not return a payment session.");
       }
 
@@ -822,9 +1030,9 @@ exports.createJuspaySession = functions
         userId: context.auth.uid,
         type,
         referenceId,
-        planTier: calculatedPlanTier,
-        amount: Number(amount),
+        amount: amountInPaiseSafeRupees,
         status: "PENDING",
+        ...(planTier ? { planTier, subscriptionDurationDays } : {}),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -839,10 +1047,10 @@ exports.createJuspaySession = functions
 
       return {
         order_id: juspayOrderId,
-        sdk_payload: payload.sdk_payload || null,
         payment_url: payload.payment_links?.mobile || payload.payment_links?.web,
       };
     } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
       console.error("Juspay session error:", error.response?.data || error.message);
       throw new functions.https.HttpsError("internal", "Failed to create Juspay payment session.");
     }
@@ -852,6 +1060,7 @@ exports.createJuspaySession = functions
 // JUSPAY HYPERCHECKOUT: ORDER STATUS
 // ==========================================
 exports.getJuspayOrderStatus = functions
+  .runWith({ secrets: [JUSPAY_MERCHANT_PRIVATE_KEY, JUSPAY_PUBLIC_KEY] })
   .region("asia-south1")
   .https.onCall(async (data, context) => {
     if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
@@ -865,24 +1074,48 @@ exports.getJuspayOrderStatus = functions
 
     const merchantId = process.env.JUSPAY_MERCHANT_ID;
     const apiKey = process.env.JUSPAY_API_KEY;
-    if (!merchantId || !apiKey) {
-      throw new functions.https.HttpsError("failed-precondition", "Juspay server credentials are not configured.");
+    if (!merchantId || !apiKey || !JUSPAY_MERCHANT_PRIVATE_KEY.value() || !JUSPAY_PUBLIC_KEY.value()) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials and response-verification keys must be configured.");
     }
 
     try {
-      const statusUrl = (process.env.JUSPAY_API_URL || "https://api.juspay.in/session").replace(/\/session\/?$/, "");
+      const statusUrl = getJuspaySessionUrl().replace(/\/session\/?$/, "");
       const response = await fetch(`${statusUrl}/orders/${encodeURIComponent(orderId)}`, {
         headers: {
           Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`,
           "x-merchantid": merchantId,
         },
       });
-      const payload = await response.json();
+      const encryptedPayload = await readJuspayEncryptedResponse(response);
       if (!response.ok) {
-        console.error("Juspay status error:", { status: response.status, payload });
+        console.error("Juspay status error:", { status: response.status });
         throw new Error("Juspay status request failed.");
       }
-      return { status: payload.status, payload };
+      const payload = decryptAndVerifyJuspayStatus(
+        encryptedPayload,
+        JUSPAY_MERCHANT_PRIVATE_KEY.value(),
+        JUSPAY_PUBLIC_KEY.value()
+      );
+      const status = String(payload.status || "").toUpperCase();
+      let sessionData = session.data();
+      if (status === "CHARGED") {
+        sessionData = await markJuspayOrderCharged(
+          orderId,
+          payload.txn_detail?.txn_id || payload.txn_id || null,
+          payload.amount ?? payload.txn_detail?.txn_amount,
+          payload.currency || payload.txn_detail?.currency
+        );
+      }
+
+      return {
+        status,
+        session: sessionData ? {
+          type: sessionData.type,
+          referenceId: sessionData.referenceId,
+          planTier: sessionData.planTier || null,
+          subscriptionExpiry: sessionData.subscriptionExpiry || null,
+        } : null,
+      };
     } catch (error) {
       console.error("Juspay status error:", error.response?.data || error.message);
       throw new functions.https.HttpsError("internal", "Failed to retrieve Juspay order status.");
@@ -913,53 +1146,31 @@ exports.juspayWebhook = functions
       const status = String(payload.status || payload.order?.status || "").toUpperCase();
       if (!orderId) return res.status(400).send("Missing order_id");
 
-      const eventId = payload.id || payload.event_id || `${orderId}:${status}:${payload.txn_id || "event"}`;
+      const eventId = payload.event_id || `${orderId}:${status}:${payload.txn_detail?.txn_id || payload.txn_id || payload.status_id || "event"}`;
       const eventRef = admin.firestore().collection("juspayWebhookEvents").doc(String(eventId));
       const eventSnap = await eventRef.get();
       if (eventSnap.exists) return res.status(200).send("OK");
-      await eventRef.set({ orderId, status, receivedAt: admin.firestore.FieldValue.serverTimestamp() });
 
       if (status === "CHARGED") {
-        const sessionRef = admin.firestore().collection("juspaySessions").doc(String(orderId));
-        const sessionSnap = await sessionRef.get();
-        if (sessionSnap.exists) {
-          await sessionRef.update({ status: "CHARGED", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-        }
-
-        const sessionData = sessionSnap.data() || {};
-        if (sessionData.type === "subscription") {
-          const determinedTier = sessionData.planTier || (
-            sessionData.referenceId === "premium_growth" ||
-            sessionData.referenceId === "growth" ||
-            sessionData.referenceId === "growth_monthly" ||
-            sessionData.referenceId === "growth_annual"
-              ? "GROWTH_PACKAGE"
-              : "BASIC"
-          );
-
-          await admin.firestore().collection("users").doc(sessionData.userId).update({
-            subscriptionTier: determinedTier,
-            subscriptionPlan: sessionData.referenceId,
-            subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            pendingPlan: admin.firestore.FieldValue.delete(),
-          });
-        }
-
-        const orders = await admin.firestore().collection("orders")
-          .where("juspayOrderId", "==", orderId).limit(1).get();
-        if (!orders.empty) {
-          await orders.docs[0].ref.update({
-            status: "PENDING_SELLER",
-            paymentStatus: "PAID",
-            paymentDetails: {
-              provider: "JUSPAY_HYPERCHECKOUT",
-              juspayOrderId: orderId,
-              transactionId: payload.txn_id || payload.payment?.txn_id || null,
-              paidAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-          });
-        }
+        const updatedSession = await markJuspayOrderCharged(
+          orderId,
+          payload.txn_detail?.txn_id || payload.txn_id || payload.payment?.txn_id || null,
+          payload.amount ?? payload.txn_detail?.txn_amount,
+          payload.currency || payload.txn_detail?.currency
+        );
+        if (!updatedSession) return res.status(404).send("Payment session not found");
       }
+
+      await admin.firestore().runTransaction(async (transaction) => {
+        const existingEvent = await transaction.get(eventRef);
+        if (!existingEvent.exists) {
+          transaction.set(eventRef, {
+            orderId,
+            status,
+            receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      });
 
       return res.status(200).send("OK");
     } catch (error) {
@@ -972,6 +1183,7 @@ exports.juspayWebhook = functions
 // JUSPAY HYPERCHECKOUT: RETURN URL
 // ==========================================
 exports.juspayReturn = functions
+  .runWith({ secrets: [JUSPAY_MERCHANT_PRIVATE_KEY, JUSPAY_PUBLIC_KEY] })
   .region("asia-south1")
   .https.onRequest(async (req, res) => {
     const orderId = req.query.order_id;
@@ -982,43 +1194,47 @@ exports.juspayReturn = functions
       const sessionSnap = await sessionRef.get();
       if (!sessionSnap.exists) return res.status(404).send("Payment session not found");
 
-      const sessionData = sessionSnap.data();
-      const statusUrl = (process.env.JUSPAY_API_URL || "https://api.juspay.in/session").replace(/\/session\/?$/, "");
+      let sessionData = sessionSnap.data();
+      const apiKey = process.env.JUSPAY_API_KEY;
+      const merchantId = process.env.JUSPAY_MERCHANT_ID;
+      const merchantPrivateKey = JUSPAY_MERCHANT_PRIVATE_KEY.value();
+      const juspayPublicKey = JUSPAY_PUBLIC_KEY.value();
+      if (!apiKey || !merchantId || !merchantPrivateKey || !juspayPublicKey) {
+        return res.status(503).send("Juspay verification is not configured");
+      }
+      const statusUrl = getJuspaySessionUrl().replace(/\/session\/?$/, "");
       const statusResponse = await fetch(`${statusUrl}/orders/${encodeURIComponent(orderId)}`, {
         headers: {
-          Authorization: `Basic ${Buffer.from(`${process.env.JUSPAY_API_KEY}:`).toString("base64")}`,
-          "x-merchantid": process.env.JUSPAY_MERCHANT_ID,
+          Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`,
+          "x-merchantid": merchantId,
         },
       });
-      const statusPayload = await statusResponse.json();
-      const status = statusResponse.ok
-        ? String(statusPayload.status || "").toUpperCase()
-        : "UNKNOWN";
+      if (!statusResponse.ok) {
+        console.error("Juspay return status request failed:", { status: statusResponse.status });
+        return res.status(502).send("Unable to verify payment status");
+      }
+      const statusPayload = decryptAndVerifyJuspayStatus(
+        await readJuspayEncryptedResponse(statusResponse),
+        merchantPrivateKey,
+        juspayPublicKey
+      );
+      const status = String(statusPayload.status || "").toUpperCase();
 
       if (status === "CHARGED") {
-        await sessionRef.update({ status: "CHARGED", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-        if (sessionData.type === "subscription") {
-          const determinedTier = sessionData.planTier || (
-            sessionData.referenceId === "premium_growth" ||
-            sessionData.referenceId === "growth" ||
-            sessionData.referenceId === "growth_monthly" ||
-            sessionData.referenceId === "growth_annual"
-              ? "GROWTH_PACKAGE"
-              : "BASIC"
-          );
-
-          await admin.firestore().collection("users").doc(sessionData.userId).update({
-            subscriptionTier: determinedTier,
-            subscriptionPlan: sessionData.referenceId,
-            subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        }
+        sessionData = await markJuspayOrderCharged(
+          orderId,
+          statusPayload.txn_detail?.txn_id || statusPayload.txn_id || null,
+          statusPayload.amount ?? statusPayload.txn_detail?.txn_amount,
+          statusPayload.currency || statusPayload.txn_detail?.currency
+        );
       }
 
       const isSuccess = status === "CHARGED";
       const title = isSuccess ? "Payment successful" : `Payment status: ${status || "PENDING"}`;
-      const message = isSuccess
-        ? "Your order is being placed."
+      const message = isSuccess && sessionData?.type === "subscription"
+        ? "Your Prochem subscription is now active."
+        : isSuccess
+          ? "Your order is being placed."
         : "You can return to Prochem and check the payment status again.";
       return res.status(statusResponse.ok ? 200 : 502).send(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Prochem Payment</title><style>body{font-family:Arial,sans-serif;text-align:center;padding:48px 20px;color:#1e293b}h2{color:${isSuccess ? "#15803d" : "#b45309"}}</style></head><body><h2>${isSuccess ? "Payment successful" : title}</h2><p>${message}</p><p>This window will close automatically in <span id="countdown">0</span> seconds.</p><script>setTimeout(()=>window.close(),3000);</script></body></html>`);
     } catch (error) {

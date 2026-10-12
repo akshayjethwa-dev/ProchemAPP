@@ -87,7 +87,7 @@ export default function OTPVerificationScreen() {
         const planToPay = formData.selectedPlan || route.params?.selectedPlan || session?.selectedPlan;
         clearPhoneAuthSession();
 
-        if (planToPay) {
+        if (planToPay && planToPay.price > 0) {
           useAppStore.getState().setUser({
             ...createdUser,
             uid: userCredential.user.uid,
@@ -106,12 +106,19 @@ export default function OTPVerificationScreen() {
           });
           return;
         }
+
+        useAppStore.getState().setUser({
+          ...createdUser,
+          uid: userCredential.user.uid,
+          subscriptionTier: 'FREE',
+          subscriptionPlan: 'free',
+        });
       } else {
         const planToPay = route.params?.selectedPlan || session?.selectedPlan;
         const mobileUser = await processMobileLogin(userCredential.user, mobile, planToPay);
         clearPhoneAuthSession();
 
-        if (planToPay) {
+        if (planToPay && planToPay.price > 0) {
           const hasActiveSubscription = mobileUser.subscriptionStatus === 'active' && 
             (mobileUser.subscriptionTier === 'BASIC' || mobileUser.subscriptionTier === 'GROWTH_PACKAGE');
 
@@ -134,6 +141,12 @@ export default function OTPVerificationScreen() {
             return;
           }
         }
+
+        useAppStore.getState().setUser({
+          ...mobileUser,
+          uid: userCredential.user.uid,
+          subscriptionTier: mobileUser.subscriptionTier || 'FREE',
+        });
       }
       
       useAppStore.getState().resetOnboarding();

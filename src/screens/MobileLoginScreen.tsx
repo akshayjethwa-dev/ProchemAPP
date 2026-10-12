@@ -25,11 +25,8 @@ export default function MobileLoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [phone, setPhone] = useState('');
-  const [selectedPlanKey, setSelectedPlanKey] = useState<'basic' | 'premium_growth'>('basic');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const selectedPlan: PlanDetails = SUBSCRIPTION_PLANS[selectedPlanKey];
 
   const handleSendOTP = async () => {
     setError('');
@@ -57,7 +54,7 @@ export default function MobileLoginScreen() {
         webConfirmation: Platform.OS === 'web' ? result.confirmationResult : undefined,
         nativeConfirmation: Platform.OS !== 'web' ? result.confirmationResult : undefined,
         mobile: result.formattedMobile,
-        selectedPlan,
+        selectedPlan: null,
         mode: 'login',
       });
 
@@ -66,7 +63,7 @@ export default function MobileLoginScreen() {
       navigation.navigate('OTPVerification', { 
         mobile: result.formattedMobile, 
         mode: 'login',
-        selectedPlan,
+        selectedPlan: null,
       });
     } catch (err: any) {
       setLoading(false);
@@ -99,7 +96,7 @@ export default function MobileLoginScreen() {
           />
           <Text variant="headlineMedium" style={styles.title}>Continue with Mobile</Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
-            Enter your mobile number, select your subscription plan, and verify OTP to start trading.
+            Enter your 10-digit mobile number to receive an SMS verification code and access your free account.
           </Text>
 
           {/* Phone Input */}
@@ -126,103 +123,16 @@ export default function MobileLoginScreen() {
             </HelperText>
           ) : null}
 
-          {/* Plan Selection Header */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Select Your Plan</Text>
-            <Text style={styles.sectionSubtitle}>Select plan to activate your verified trading account</Text>
+          {/* Free Plan Benefit Banner */}
+          <View style={styles.freePlanBanner}>
+            <MaterialCommunityIcons name="check-decagram" size={22} color="#16A34A" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.freePlanTitle}>Free Account Access</Text>
+              <Text style={styles.freePlanDesc}>
+                Browse verified suppliers, send inquiries, and start negotiating with zero subscription charges.
+              </Text>
+            </View>
           </View>
-
-          {/* Plan Option 1: Basic Plan */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setSelectedPlanKey('basic')}
-            style={[
-              styles.planCard,
-              selectedPlanKey === 'basic' && styles.planCardSelected
-            ]}
-          >
-            <View style={styles.planHeader}>
-              <View style={styles.planTitleContainer}>
-                <Text style={styles.planTitle}>Basic Plan</Text>
-                <View style={styles.standardBadge}>
-                  <Text style={styles.standardBadgeText}>Standard</Text>
-                </View>
-              </View>
-              <View style={[styles.radioCircle, selectedPlanKey === 'basic' && styles.radioCircleSelected]}>
-                {selectedPlanKey === 'basic' && <View style={styles.radioDot} />}
-              </View>
-            </View>
-
-            <View style={styles.priceRow}>
-              <Text style={styles.currencySymbol}>₹</Text>
-              <Text style={styles.priceAmount}>1,999</Text>
-              <Text style={styles.priceDuration}>/ month + GST</Text>
-            </View>
-
-            <View style={styles.featureList}>
-              <View style={styles.featureRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#2563EB" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Verified chemical catalog & search</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#2563EB" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Send direct RFQ & quotation requests</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#2563EB" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Real-time price negotiation with suppliers</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-
-          {/* Plan Option 2: Business Growth Package */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setSelectedPlanKey('premium_growth')}
-            style={[
-              styles.planCard,
-              styles.growthPlanCard,
-              selectedPlanKey === 'premium_growth' && styles.growthPlanCardSelected
-            ]}
-          >
-            <View style={styles.planHeader}>
-              <View style={styles.planTitleContainer}>
-                <Text style={styles.planTitle}>Business Growth Package</Text>
-                <View style={styles.popularBadge}>
-                  <MaterialCommunityIcons name="crown" size={12} color="#D97706" />
-                  <Text style={styles.popularBadgeText}>Recommended</Text>
-                </View>
-              </View>
-              <View style={[styles.radioCircle, selectedPlanKey === 'premium_growth' && styles.radioCircleSelected]}>
-                {selectedPlanKey === 'premium_growth' && <View style={styles.radioDot} />}
-              </View>
-            </View>
-
-            <View style={styles.priceRow}>
-              <Text style={styles.currencySymbol}>₹</Text>
-              <Text style={styles.priceAmount}>4,999</Text>
-              <Text style={styles.priceDuration}>/ month + GST</Text>
-            </View>
-
-            <View style={styles.featureList}>
-              <View style={styles.featureRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#D97706" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Everything in Basic Plan included</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#D97706" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Compare chemicals with 5+ verified companies</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#D97706" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Exclusive Premium Hub & priority bulk leads</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#D97706" style={styles.featureIcon} />
-                <Text style={styles.featureText}>Dedicated Prochem relationship manager</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
 
           {/* Action Button */}
           <Button
@@ -235,7 +145,7 @@ export default function MobileLoginScreen() {
             contentStyle={styles.btnContent}
             labelStyle={styles.btnLabel}
           >
-            Send OTP & Proceed (₹{selectedPlan.price.toLocaleString('en-IN')})
+            {loading ? 'Sending Code...' : 'Send OTP & Continue'}
           </Button>
 
           {/* Trust Footnote */}
@@ -299,6 +209,28 @@ const styles = StyleSheet.create({
   errorText: {
     paddingHorizontal: 0,
     marginBottom: 12,
+  },
+  freePlanBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  freePlanTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#15803D',
+    marginBottom: 2,
+  },
+  freePlanDesc: {
+    fontSize: 12,
+    color: '#166534',
+    lineHeight: 18,
   },
   sectionHeader: {
     marginTop: 16,
@@ -431,8 +363,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   btn: { 
-    borderRadius: 12, 
-    backgroundColor: '#2563EB',
+    borderRadius: 8, 
+    backgroundColor: '#0F172A',
     marginTop: 18,
   },
   btnContent: { 

@@ -1,7 +1,7 @@
 // src/screens/BuyerRequirementsScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
-import { Text, IconButton, useTheme, FAB, Card, Divider, Button } from 'react-native-paper';
+import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { Text, IconButton, useTheme, FAB, Divider, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -28,6 +28,7 @@ export default function BuyerRequirementsScreen() {
       snapshot.forEach((doc) => reqs.push({ id: doc.id, ...doc.data() }));
       reqs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setRequirements(reqs);
+      setLoading(false);
     });
 
     // Fetch active Conversations related to requirements
@@ -36,120 +37,355 @@ export default function BuyerRequirementsScreen() {
       const chats: Conversation[] = [];
       snapshot.forEach(doc => chats.push({ id: doc.id, ...doc.data() } as Conversation));
       setConversations(chats);
-      setLoading(false);
     });
 
     return () => { unsubReqs(); unsubChats(); };
   }, [user]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'QUOTED': return { bg: '#DCFCE7', text: '#166534' };
-      case 'PENDING': return { bg: '#FEF3C7', text: '#D97706' };
-      case 'CLOSED': return { bg: '#F1F5F9', text: '#64748B' };
-      case 'RESOLVED': return { bg: '#DBEAFE', text: '#1E40AF' };
-      default: return { bg: '#F1F5F9', text: '#64748B' };
-    }
-  };
-
   const renderItem = ({ item }: { item: any }) => {
-    const statusStyle = getStatusColor(item.status || 'PENDING');
-    
     // Find if there are active approved chats for this requirement
     const activeChats = conversations.filter(c => c.requirementId === item.id);
-    
+    const targetPrice = item.targetPrice ? `₹${Number(item.targetPrice).toLocaleString('en-IN')}` : 'Open Target';
+    const hasChats = activeChats.length > 0;
+
     return (
-      <Card style={styles.card} mode="elevated" onPress={() => {}}>
+      <View style={styles.card}>
+        {/* Header */}
         <View style={styles.cardHeader}>
-          <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-          <View style={[styles.badge, { backgroundColor: statusStyle.bg }]}>
-            <Text style={[styles.badgeText, { color: statusStyle.text }]}>{item.status || 'PENDING'}</Text>
+          <View style={{ flex: 1 }}>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusBadge, item.status === 'QUOTED' ? styles.statusQuoted : styles.statusPending]}>
+                <Text style={[styles.statusText, item.status === 'QUOTED' ? styles.statusQuotedText : styles.statusPendingText]}>
+                  {item.status || 'PENDING QUOTES'}
+                </Text>
+              </View>
+              <Text style={styles.dateText}>
+                {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Recent'}
+              </Text>
+            </View>
+            <Text style={styles.productName} numberOfLines={2}>
+              {item.productName}
+            </Text>
           </View>
         </View>
-        
-        <Text style={styles.productName}>{item.productName}</Text>
-        
-        <View style={styles.specsRow}>
-          <Text style={styles.specText}>Target: ₹{item.targetPrice}/{item.unit}</Text>
-          <Text style={styles.specText}>Qty: {item.quantity} {item.unit}</Text>
+
+        {/* 2x2 Structured Matrix */}
+        <View style={styles.matrixContainer}>
+          <View style={styles.matrixRow}>
+            <View style={[styles.matrixCell, styles.matrixBorderRight]}>
+              <Text style={styles.matrixLabel}>TARGET BUDGET</Text>
+              <Text style={styles.matrixPrice}>
+                {targetPrice}
+                <Text style={styles.matrixUnit}> / {item.unit || 'unit'}</Text>
+              </Text>
+            </View>
+            <View style={styles.matrixCell}>
+              <Text style={styles.matrixLabel}>ESTIMATED QUANTITY</Text>
+              <Text style={styles.matrixValue}>
+                {Number(item.quantity).toLocaleString('en-IN')} {item.unit}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.matrixRow, styles.matrixBorderTop]}>
+            <View style={[styles.matrixCell, styles.matrixBorderRight]}>
+              <Text style={styles.matrixLabel}>DESTINATION PINCODE</Text>
+              <Text style={styles.matrixMeta} numberOfLines={1}>
+                📍 {item.deliveryPincode || 'All India'}
+              </Text>
+            </View>
+            <View style={styles.matrixCell}>
+              <Text style={styles.matrixLabel}>TIMELINE</Text>
+              <Text style={styles.matrixMeta} numberOfLines={1}>
+                ⏳ {item.timeline || 'Standard Procurement'}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        <Divider style={{ marginVertical: 12, backgroundColor: '#F1F5F9' }} />
-        
-        <View style={styles.footerRow}>
-           <Text style={styles.locationText}>📍 {item.deliveryPincode || 'N/A'}</Text>
-           <Text style={styles.timelineText}>⏳ {item.timeline || 'Standard'}</Text>
-        </View>
-
-        {/* 🚀 ACTION CTA: Open negotiation rooms if admin approved quotes */}
-        {activeChats.length > 0 && (
-           <View style={{ marginTop: 12 }}>
-             <Button 
-                mode="contained" 
-                buttonColor="#004AAD"
-                onPress={() => navigation.navigate('NegotiationsList')}
-             >
-                View Negotiations ({activeChats.length})
-             </Button>
-           </View>
+        {/* Action Button for Active Supplier Chats */}
+        {hasChats ? (
+          <TouchableOpacity 
+            style={styles.openChatButton}
+            onPress={() => {
+              if (activeChats.length === 1) {
+                navigation.navigate('NegotiationRoom', {
+                  requirementId: item.id,
+                  conversationId: activeChats[0].id
+                });
+              } else {
+                navigation.navigate('NegotiationsList');
+              }
+            }}
+            activeOpacity={0.85}
+          >
+            <IconButton icon="message-text" size={18} iconColor="#FFFFFF" style={{ margin: 0, padding: 0 }} />
+            <Text style={styles.openChatText}>
+              {activeChats.length === 1 ? 'Open Supplier Negotiation Desk' : `View Supplier Quotations (${activeChats.length})`}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.waitingContainer}>
+            <Text style={styles.waitingText}>
+              📡 Broadcasted to verified suppliers. You will be notified when quotes arrive.
+            </Text>
+          </View>
         )}
-      </Card>
+      </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* Top Header */}
       <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="titleLarge" style={{fontWeight:'bold'}}>My Sourcing Requests</Text>
+        <IconButton icon="arrow-left" size={24} iconColor="#0F172A" onPress={() => navigation.goBack()} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>My Sourcing Inquiries</Text>
+          <Text style={styles.headerSubtitle}>
+            {requirements.length} customized chemical requests submitted
+          </Text>
+        </View>
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#004AAD" />
+        </View>
       ) : (
         <FlatList
           data={requirements}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text style={{fontSize: 50}}>📝</Text>
-              <Text style={styles.emptyTitle}>No Requests Yet</Text>
-              <Text style={styles.emptySub}>Post a custom chemical requirement to get competitive quotes from verified suppliers.</Text>
+              <IconButton icon="clipboard-text-outline" size={54} iconColor="#94A3B8" />
+              <Text style={styles.emptyTitle}>No Custom Requests Yet</Text>
+              <Text style={styles.emptySub}>
+                Post custom volume, packaging, or target price specifications to receive verified direct quotations.
+              </Text>
             </View>
           }
         />
       )}
 
-      <FAB icon="plus" label="Post Requirement" style={styles.fab} color="white" onPress={() => navigation.navigate('PostRequirement')} />
+      <FAB 
+        icon="plus" 
+        label="Post New Requirement" 
+        style={styles.fab} 
+        color="#FFFFFF" 
+        onPress={() => navigation.navigate('PostRequirement')} 
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', paddingBottom: 8 },
-  listContent: { padding: 16, paddingBottom: 100 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  
-  card: { backgroundColor: 'white', marginBottom: 12, borderRadius: 12, padding: 16, elevation: 1 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  dateText: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  badgeText: { fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
-  
-  productName: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', marginBottom: 8 },
-  specsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  specText: { fontSize: 13, color: '#475569', fontWeight: '500' },
-  
-  footerRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  locationText: { fontSize: 12, color: '#64748B' },
-  timelineText: { fontSize: 12, color: '#64748B' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F8FAFC' 
+  },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#FFFFFF', 
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F172A',
+    letterSpacing: -0.2,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  listContent: { 
+    padding: 16, 
+    paddingBottom: 110 
+  },
+  center: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
 
-  emptyState: { alignItems: 'center', marginTop: 80, paddingHorizontal: 30 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginTop: 16, marginBottom: 8 },
-  emptySub: { fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 20 },
+  /* Card */
+  card: { 
+    backgroundColor: '#FFFFFF', 
+    marginBottom: 16, 
+    borderRadius: 12, 
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  cardHeader: { 
+    padding: 16,
+    paddingBottom: 12,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  statusQuoted: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusPending: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  statusQuotedText: {
+    color: '#166534',
+  },
+  statusPendingText: {
+    color: '#B45309',
+  },
+  dateText: { 
+    fontSize: 11, 
+    color: '#94A3B8', 
+    fontWeight: '500' 
+  },
+  productName: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#0F172A', 
+    letterSpacing: -0.2,
+    lineHeight: 22,
+  },
+
+  /* 2x2 Matrix */
+  matrixContainer: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  matrixRow: {
+    flexDirection: 'row',
+  },
+  matrixCell: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  matrixBorderRight: {
+    borderRightWidth: 1,
+    borderRightColor: '#E2E8F0',
+  },
+  matrixBorderTop: {
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  matrixLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  matrixPrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#059669',
+    fontVariant: ['tabular-nums'],
+  },
+  matrixUnit: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  matrixValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    fontVariant: ['tabular-nums'],
+  },
+  matrixMeta: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '500',
+  },
+
+  /* Action CTA */
+  openChatButton: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#004AAD',
+    paddingHorizontal: 12,
+  },
+  openChatText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 6,
+  },
+  waitingContainer: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 6,
+  },
+  waitingText: {
+    fontSize: 11,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+
+  /* Empty State */
+  emptyState: { 
+    alignItems: 'center', 
+    marginTop: 60, 
+    paddingHorizontal: 30 
+  },
+  emptyTitle: { 
+    fontSize: 17, 
+    fontWeight: '700', 
+    color: '#0F172A', 
+    marginTop: 12, 
+    marginBottom: 6 
+  },
+  emptySub: { 
+    fontSize: 13, 
+    color: '#64748B', 
+    textAlign: 'center', 
+    lineHeight: 20 
+  },
   
-  fab: { position: 'absolute', margin: 16, right: 0, bottom: 20, backgroundColor: '#004AAD' }
+  fab: { 
+    position: 'absolute', 
+    margin: 16, 
+    right: 0, 
+    bottom: 24, 
+    backgroundColor: '#004AAD',
+    borderRadius: 24,
+  }
 });

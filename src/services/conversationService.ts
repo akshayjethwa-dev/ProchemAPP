@@ -12,37 +12,54 @@ export const createConversation = async (params: {
   rfqId?: string;
   requirementId?: string;
   quoteId?: string;
+  leadId?: string;
   buyerUserId: string;
   sellerUserId: string;
-  initialMessage?: string; // ✅ Added support for system-generated initial message
+  initialMessage?: string;
+  productName?: string;
+  quantity?: any;
+  targetPrice?: any;
+  unit?: string;
 }): Promise<string> => {
   try {
-    const conversationData: Omit<Conversation, 'id'> = {
+    const conversationData: any = {
       buyerUserId: params.buyerUserId,
       sellerUserId: params.sellerUserId,
-      rfqId: params.rfqId || '', // Fallback for existing RFQ logic
-      requirementId: params.requirementId || '', // New logic for custom reqs
-      quoteId: params.quoteId || '', // New logic for quotes
       status: 'open',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     };
+
+    if (params.rfqId) conversationData.rfqId = params.rfqId;
+    if (params.requirementId) conversationData.requirementId = params.requirementId;
+    if (params.quoteId) conversationData.quoteId = params.quoteId;
+    if (params.leadId) conversationData.leadId = params.leadId;
+    if (params.productName) conversationData.productName = params.productName;
+    if (params.quantity) conversationData.targetQuantity = params.quantity;
+    if (params.targetPrice) conversationData.targetPrice = params.targetPrice;
+    if (params.unit) conversationData.unit = params.unit;
 
     const docRef = await addDoc(collection(db, CONVERSATIONS_COLLECTION), conversationData);
 
-    // ✅ Generate the context message automatically if passed
+    // Generate initial message matching current authenticated user
     if (params.initialMessage) {
-      await addDoc(collection(db, `${CONVERSATIONS_COLLECTION}/${docRef.id}/messages`), {
-        text: params.initialMessage,
-        body: params.initialMessage,
-        senderId: 'system',
-        senderRole: 'system',
-        direction: 'both',
-        source: 'app',
-        timestamp: serverTimestamp(),
-        isBuyer: false,
-        isOffer: false
-      });
+      try {
+        await addDoc(collection(db, `${CONVERSATIONS_COLLECTION}/${docRef.id}/messages`), {
+          ...(params.requirementId ? { requirementId: params.requirementId } : {}),
+          ...(params.rfqId ? { rfqId: params.rfqId } : {}),
+          text: params.initialMessage,
+          body: params.initialMessage,
+          senderId: params.sellerUserId, // Authenticated seller UID
+          senderRole: 'seller',
+          direction: 'toBuyer',
+          source: 'app',
+          timestamp: Date.now(),
+          isBuyer: false,
+          isOffer: false
+        });
+      } catch (msgErr) {
+        console.warn('Initial context message could not be added:', msgErr);
+      }
     }
 
     return docRef.id;

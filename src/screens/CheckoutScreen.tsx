@@ -64,16 +64,6 @@ export default function CheckoutScreen() {
       setSelectedAddress({ 
         id: 'legacy', label: 'Default', street: user.address, city: '', state: '', zipCode: '', country: 'India' 
       });
-    } else if (user) {
-      setSelectedAddress({
-        id: 'primary',
-        label: user.companyName || 'Business Location',
-        street: 'Commercial Delivery Address',
-        city: user.city || 'Industrial Hub',
-        state: 'Gujarat',
-        zipCode: '380001',
-        country: 'India'
-      });
     }
 
     fetchSellerDetails();
@@ -245,12 +235,6 @@ export default function CheckoutScreen() {
       if (Platform.OS === 'web') {
         paymentWindow!.location.href = paymentUrl;
         const checkPayment = async () => {
-          if (paymentWindow!.closed) {
-            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-            setPaymentOrderId(null);
-            setLoading(false);
-            return;
-          }
           try {
             const statusResponse: any = await httpsCallable(
               getFunctions(getApp(), 'asia-south1'),
@@ -266,6 +250,11 @@ export default function CheckoutScreen() {
                 setLoading(false);
                 window.alert(`Payment not completed: ${status}`);
               }
+            }
+            if (paymentWindow!.closed && status !== 'CHARGED' && !['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
+              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+              setPaymentOrderId(null);
+              setLoading(false);
             }
           } catch (error) {
             console.error('Juspay status polling failed:', error);

@@ -1,15 +1,13 @@
 // src/screens/AccountScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Modal, ActivityIndicator, Alert } from 'react-native';
-import { Text, Avatar, List, Divider, Button, useTheme, Switch, Badge, ProgressBar } from 'react-native-paper'; 
+import { Text, Avatar, List, Divider, Button, useTheme, Switch, Badge, ProgressBar, IconButton } from 'react-native-paper'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore'; 
 import { db } from '../config/firebase'; 
 import { useAppStore } from '../store/appStore';
 import { logoutUser, deleteUserAccount } from '../services/authService';
-
-// 🚀 ADDED: Import profile completion utility
 import { getProfileCompletion } from '../utils/profileCompletion';
 import { listenToPayLaterApplication } from '../services/payLaterService';
 import { PayLaterApplication } from '../types';
@@ -35,7 +33,6 @@ export default function AccountScreen() {
     user?.payLaterApplication || null
   );
 
-  // 🚀 ADDED: Calculate completion data
   const isMobileReg = user?.registrationType === 'mobile';
   const completionData = user ? getProfileCompletion(user) : { percentage: 0, isComplete: false };
 
@@ -73,14 +70,14 @@ export default function AccountScreen() {
     setTimeout(() => {
       setViewMode(viewMode === 'buyer' ? 'seller' : 'buyer');
       setSwitching(false);
-    }, 800);
+    }, 600);
   };
 
   const handleDeleteAccount = async () => {
     try {
       setIsDeleting(true);
       await deleteUserAccount();
-      Alert.alert("Account Deleted", "Your account has been permanently removed.");
+      Alert.alert("Account Deleted", "Your enterprise profile has been permanently removed.");
     } catch (error: any) {
       Alert.alert("Deletion Failed", error.message);
     } finally {
@@ -99,9 +96,8 @@ export default function AccountScreen() {
   };
 
   const openDialer = () => Linking.openURL('tel:+918460852903');
-  const openWhatsApp = () => Linking.openURL('whatsapp://send?phone=918460852903&text=Hello, I need assistance with the ProChem App.');
+  const openWhatsApp = () => Linking.openURL('whatsapp://send?phone=918460852903&text=Hello, I need assistance with the ProChem Enterprise Platform.');
 
-  // UI Component for grouping lists cleanly
   const SettingsGroup = ({ children, title }: any) => (
     <View style={styles.groupContainer}>
       {title && <Text style={styles.groupTitle}>{title}</Text>}
@@ -109,287 +105,725 @@ export default function AccountScreen() {
     </View>
   );
 
+  const initialChar = user?.companyName?.[0]?.toUpperCase() || user?.name?.[0]?.toUpperCase() || 'P';
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       
-      {/* WHATSAPP PREFS MODAL */}
+      {/* WHATSAPP PREFERENCES MODAL */}
       <Modal transparent visible={showWaPrefsModal} animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { padding: 0, overflow: 'hidden' }]}>
-            <View style={{backgroundColor: '#25D366', padding: 20, alignItems: 'center'}}>
-              <Avatar.Icon size={50} icon="whatsapp" style={{backgroundColor: 'white'}} color="#25D366" />
-              <Text variant="titleLarge" style={{fontWeight:'bold', color: 'white', marginTop: 10}}>
-                WhatsApp Notifications
-              </Text>
+          <View style={styles.modalCard}>
+            <View style={styles.waModalHeader}>
+              <View style={styles.waIconBox}>
+                <IconButton icon="whatsapp" size={24} iconColor="#FFFFFF" style={{ margin: 0 }} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.waModalTitle}>WhatsApp Alerts</Text>
+                <Text style={styles.waModalSub}>Commercial notifications & updates</Text>
+              </View>
+              <IconButton icon="close" size={20} iconColor="#64748B" onPress={() => setShowWaPrefsModal(false)} />
             </View>
-            <View style={{padding: 20}}>
+
+            <View style={{ padding: 18 }}>
               <View style={styles.switchRow}>
-                <View style={{flex: 1}}><Text style={styles.switchLabel}>General Updates</Text><Text style={styles.switchSub}>Marketing, promos, and platform news.</Text></View>
-                <Switch value={waPrefs.general} onValueChange={(val) => toggleWaPref('general', val)} color="#25D366" />
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  <Text style={styles.switchLabel}>Market Alerts</Text>
+                  <Text style={styles.switchSub}>Live chemical requirements & bids</Text>
+                </View>
+                <Switch value={waPrefs.marketAlerts} onValueChange={(val) => toggleWaPref('marketAlerts', val)} color="#059669" />
               </View>
               <View style={styles.switchRow}>
-                <View style={{flex: 1}}><Text style={styles.switchLabel}>Market Alerts</Text><Text style={styles.switchSub}>Live buyer requirements and sourcing requests.</Text></View>
-                <Switch value={waPrefs.marketAlerts} onValueChange={(val) => toggleWaPref('marketAlerts', val)} color="#25D366" />
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  <Text style={styles.switchLabel}>Negotiations & Orders</Text>
+                  <Text style={styles.switchSub}>Chat relays, counter-offers, payment status</Text>
+                </View>
+                <Switch value={waPrefs.negotiations} onValueChange={(val) => toggleWaPref('negotiations', val)} color="#059669" />
               </View>
-              <View style={styles.switchRow}>
-                <View style={{flex: 1}}><Text style={styles.switchLabel}>Negotiations & Orders</Text><Text style={styles.switchSub}>Chat relays, quotes, and payment status.</Text></View>
-                <Switch value={waPrefs.negotiations} onValueChange={(val) => toggleWaPref('negotiations', val)} color="#25D366" />
+              <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  <Text style={styles.switchLabel}>General & Digest</Text>
+                  <Text style={styles.switchSub}>Weekly chemical commodity summaries</Text>
+                </View>
+                <Switch value={waPrefs.digest} onValueChange={(val) => toggleWaPref('digest', val)} color="#059669" />
               </View>
-              <View style={[styles.switchRow, {borderBottomWidth: 0}]}>
-                <View style={{flex: 1}}><Text style={styles.switchLabel}>Weekly Digest</Text><Text style={styles.switchSub}>Weekly summary of your market activity.</Text></View>
-                <Switch value={waPrefs.digest} onValueChange={(val) => toggleWaPref('digest', val)} color="#25D366" />
-              </View>
-              <Button mode="contained" onPress={() => setShowWaPrefsModal(false)} style={{marginTop: 10, backgroundColor: '#1E293B'}}>Done</Button>
+
+              <TouchableOpacity 
+                style={styles.modalPrimaryBtn} 
+                onPress={() => setShowWaPrefsModal(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalPrimaryBtnText}>Save Preferences</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 1. SWITCH MODE CONFIRMATION MODAL */}
+      {/* SWITCH MODE MODAL */}
       <Modal transparent visible={showSwitchModal} animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-               <Avatar.Icon size={50} icon="swap-horizontal" style={{backgroundColor: '#E3F2FD', marginBottom: 15}} color="#004AAD" />
-               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>Switch to {viewMode === 'buyer' ? 'Selling' : 'Buying'}?</Text>
-            </View>
-            <Text style={styles.modalBody}>{viewMode === 'buyer' ? 'You will be moved to the Seller Dashboard.' : 'You will be moved to the Marketplace.'}</Text>
-            <View style={styles.modalActions}>
-              <Button mode="outlined" onPress={() => setShowSwitchModal(false)} style={{flex:1, marginRight:10}}>Cancel</Button>
-              <Button mode="contained" onPress={confirmSwitch} style={{flex:1}}>Switch</Button>
+          <View style={styles.modalCard}>
+            <View style={{ padding: 22, alignItems: 'center' }}>
+              <View style={[styles.modalIconBox, { backgroundColor: '#F1F5F9' }]}>
+                <IconButton icon="swap-horizontal" size={28} iconColor="#0F172A" style={{ margin: 0 }} />
+              </View>
+              <Text style={styles.modalHeaderTitle}>
+                Switch to {viewMode === 'buyer' ? 'Seller Workspace' : 'Buyer Marketplace'}?
+              </Text>
+              <Text style={styles.modalBodyText}>
+                {viewMode === 'buyer' 
+                  ? 'You will switch to the Supplier Desk to manage your products, live RFQs, and commercial bids.'
+                  : 'You will switch to the Chemical Marketplace to discover chemicals, request quotes, and source materials.'}
+              </Text>
+              <View style={styles.modalActionButtons}>
+                <Button mode="outlined" onPress={() => setShowSwitchModal(false)} style={{ flex: 1, marginRight: 8, borderColor: '#CBD5E1' }}>
+                  Cancel
+                </Button>
+                <Button mode="contained" buttonColor="#0F172A" onPress={confirmSwitch} style={{ flex: 1 }}>
+                  Switch Workspace
+                </Button>
+              </View>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 2. SUPPORT DETAILS MODAL */}
+      {/* SUPPORT MODAL */}
       <Modal transparent visible={showSupportModal} animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-               <Avatar.Icon size={50} icon="headset" style={{backgroundColor: '#E3F2FD', marginBottom: 15}} color="#004AAD" />
-               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center'}}>Promact Support</Text>
-            </View>
-            <Text style={[styles.modalBody, {marginBottom: 20}]}>We are here to help! Choose a method below to contact us.</Text>
-            <View style={{width: '100%'}}>
-               <Button mode="outlined" icon="phone" onPress={openDialer} style={{borderColor: '#004AAD', marginBottom: 10}} textColor="#004AAD">Call +91-84608 52903</Button>
-               <Button mode="outlined" icon="whatsapp" onPress={openWhatsApp} style={{borderColor: '#25D366', marginBottom: 15}} textColor="#25D366">Chat on WhatsApp</Button>
-               <Button mode="contained" onPress={() => setShowSupportModal(false)} style={{backgroundColor: '#64748B'}}>Close</Button>
+          <View style={styles.modalCard}>
+            <View style={{ padding: 20 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                <View style={[styles.modalIconBox, { backgroundColor: '#EFF6FF', marginBottom: 0 }]}>
+                  <IconButton icon="headset" size={22} iconColor="#1D4ED8" style={{ margin: 0 }} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.modalHeaderTitle}>Prochem Trade Concierge</Text>
+                  <Text style={styles.modalBodySub}>Direct support for orders, escrow & testing</Text>
+                </View>
+                <IconButton icon="close" size={20} iconColor="#64748B" onPress={() => setShowSupportModal(false)} />
+              </View>
+
+              <TouchableOpacity style={styles.supportOptionBtn} onPress={openWhatsApp} activeOpacity={0.85}>
+                <IconButton icon="whatsapp" size={22} iconColor="#FFFFFF" style={{ margin: 0 }} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.supportOptionTitle}>Chat on WhatsApp Desk</Text>
+                  <Text style={styles.supportOptionSub}>Immediate response from chemical trade desk</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.supportOptionBtn, { backgroundColor: '#0F172A', marginTop: 10 }]} onPress={openDialer} activeOpacity={0.85}>
+                <IconButton icon="phone-in-talk" size={22} iconColor="#FFFFFF" style={{ margin: 0 }} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.supportOptionTitle}>Call +91-84608 52903</Text>
+                  <Text style={styles.supportOptionSub}>Direct phone line (Mon-Sat, 9AM-8PM)</Text>
+                </View>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 3. DELETE ACCOUNT CONFIRMATION MODAL */}
+      {/* DELETE ACCOUNT MODAL */}
       <Modal transparent visible={showDeleteModal} animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-               <Avatar.Icon size={50} icon="alert" style={{backgroundColor: '#FFEBEE', marginBottom: 15}} color="#D32F2F" />
-               <Text variant="titleLarge" style={{fontWeight:'bold', textAlign:'center', color: '#D32F2F'}}>Delete Account?</Text>
-            </View>
-            <Text style={styles.modalBody}>Are you sure you want to permanently delete your account? This action cannot be undone.</Text>
-            <View style={styles.modalActions}>
-              <Button mode="outlined" onPress={() => setShowDeleteModal(false)} style={{flex:1, marginRight:10}} disabled={isDeleting}>Cancel</Button>
-              <Button mode="contained" buttonColor="#D32F2F" onPress={handleDeleteAccount} style={{flex:1}} loading={isDeleting} disabled={isDeleting}>Delete</Button>
+          <View style={styles.modalCard}>
+            <View style={{ padding: 22, alignItems: 'center' }}>
+              <View style={[styles.modalIconBox, { backgroundColor: '#FEE2E2' }]}>
+                <IconButton icon="alert" size={26} iconColor="#DC2626" style={{ margin: 0 }} />
+              </View>
+              <Text style={[styles.modalHeaderTitle, { color: '#DC2626' }]}>Delete Account?</Text>
+              <Text style={styles.modalBodyText}>
+                Permanently deletes your corporate credentials, active RFQs, and supplier profiles. This action is irreversible.
+              </Text>
+              <View style={styles.modalActionButtons}>
+                <Button mode="outlined" onPress={() => setShowDeleteModal(false)} style={{ flex: 1, marginRight: 8, borderColor: '#CBD5E1' }} disabled={isDeleting}>
+                  Cancel
+                </Button>
+                <Button mode="contained" buttonColor="#DC2626" onPress={handleDeleteAccount} style={{ flex: 1 }} loading={isDeleting} disabled={isDeleting}>
+                  Delete
+                </Button>
+              </View>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 4. LOADING SPINNER OVERLAY */}
+      {/* SWITCHING SPINNER */}
       <Modal transparent visible={switching}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, {alignItems:'center', paddingVertical: 40}]}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={{marginTop:20, fontWeight:'bold', fontSize: 16}}>Switching Mode...</Text>
+          <View style={[styles.modalCard, { alignItems: 'center', paddingVertical: 36 }]}>
+            <ActivityIndicator size="large" color="#0F172A" />
+            <Text style={{ marginTop: 16, fontWeight: '700', fontSize: 15, color: '#0F172A' }}>
+              Switching Workspace...
+            </Text>
           </View>
         </View>
       </Modal>
 
-      <ScrollView contentContainerStyle={{paddingBottom: 40}} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
         
-        {/* COMPACT PROFILE HEADER */}
-        <TouchableOpacity style={styles.profileHeader} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.7}>
-          <Avatar.Text size={60} label={user?.companyName?.[0]?.toUpperCase() || "U"} style={{backgroundColor: theme.colors.primary}} color='white'/>
-          <View style={{flex: 1, marginLeft: 16}}>
-            <Text variant="titleMedium" style={{fontWeight:'bold'}} numberOfLines={1}>{user?.companyName || "Business User"}</Text>
-            <Text style={{color:'#64748B', fontSize: 13}}>{user?.email || 'No email provided'}</Text>
-            <Text style={{color: user?.verified ? '#059669' : '#D97706', fontSize: 12, fontWeight: 'bold', marginTop: 4}}>
-              {user?.verified ? '✓ Verified Business' : 'Pending Verification'}
+        {/* EXECUTIVE PROFILE HEADER */}
+        <TouchableOpacity 
+          style={styles.profileHeader} 
+          onPress={() => navigation.navigate('EditProfile')} 
+          activeOpacity={0.88}
+        >
+          <View style={styles.avatarBox}>
+            <Text style={styles.avatarChar}>{initialChar}</Text>
+          </View>
+          <View style={{ flex: 1, marginLeft: 14 }}>
+            <View style={styles.nameRow}>
+              <Text style={styles.companyName} numberOfLines={1}>
+                {user?.companyName || user?.name || "Business Enterprise"}
+              </Text>
+            </View>
+            <Text style={styles.companyEmail} numberOfLines={1}>
+              {user?.email || 'Corporate Account'}
             </Text>
-
-            {/* 🚀 ADDED: Profile Completion Indicator below name */}
-            {isMobileReg && (
-              <View style={{marginTop: 8}}>
-                <Text style={{
-                  color: completionData.isComplete ? '#059669' : '#D97706', 
-                  fontSize: 11, 
-                  fontWeight: 'bold',
-                  marginBottom: 4
-                }}>
-                  {completionData.isComplete ? 'Profile Complete ✓' : `Incomplete Profile (${completionData.percentage}%)`}
+            
+            <View style={styles.verificationRow}>
+              <View style={[styles.verificationBadge, (user?.verified || user?.isGSTVerified) ? styles.verifiedBadge : styles.pendingBadge]}>
+                <Text style={[styles.verificationBadgeText, (user?.verified || user?.isGSTVerified) ? styles.verifiedText : styles.pendingText]}>
+                  {(user?.verified || user?.isGSTVerified) ? '✓ GST VERIFIED' : 'PENDING VERIFICATION'}
                 </Text>
-                {!completionData.isComplete && (
-                  <ProgressBar progress={completionData.percentage / 100} color="#D97706" style={{height: 4, borderRadius: 2, backgroundColor: '#FEF3C7', width: '80%'}} />
-                )}
+              </View>
+              {Boolean((user as any)?.gstin || user?.gstNumber) && (
+                <Text style={styles.gstText}>GST: {(user as any)?.gstin || user?.gstNumber}</Text>
+              )}
+            </View>
+
+            {/* Profile completion bar */}
+            {isMobileReg && !completionData.isComplete && (
+              <View style={{ marginTop: 8 }}>
+                <Text style={styles.completionText}>
+                  Profile Completeness: {completionData.percentage}%
+                </Text>
+                <ProgressBar 
+                  progress={completionData.percentage / 100} 
+                  color="#059669" 
+                  style={styles.progressBar} 
+                />
               </View>
             )}
           </View>
-          <List.Icon icon="chevron-right" color="#CBD5E1" />
+          <IconButton icon="chevron-right" size={20} iconColor="#94A3B8" />
         </TouchableOpacity>
 
-        {/* MEMBERSHIP & SUBSCRIPTION */}
-        <SettingsGroup title="MEMBERSHIP & PLAN">
-          <List.Item 
-            title={
-              user?.subscriptionTier === 'GROWTH_PACKAGE' 
-                ? 'Premium Growth Plan 👑' 
-                : user?.subscriptionTier === 'BASIC' || user?.subscriptionPlan === 'basic'
-                ? 'Basic Marketplace Plan'
-                : 'Complimentary Access'
-            }
-            description={
-              user?.subscriptionTier === 'GROWTH_PACKAGE'
-                ? 'Active (All premium features unlocked)'
-                : user?.subscriptionTier === 'BASIC' || user?.subscriptionPlan === 'basic'
-                ? 'Active (₹1,999/mo) • Standard marketplace trading'
-                : 'Free tier access'
-            }
-            left={props => (
-              <List.Icon 
-                {...props} 
-                icon={user?.subscriptionTier === 'GROWTH_PACKAGE' ? 'crown' : 'shield-check'} 
-                color={user?.subscriptionTier === 'GROWTH_PACKAGE' ? '#EAB308' : '#0284C7'} 
-              />
-            )}
-            right={props => (
-              user?.subscriptionTier !== 'GROWTH_PACKAGE' ? (
-                <View style={{ justifyContent: 'center' }}>
-                  <Button 
-                    mode="contained" 
-                    compact 
-                    buttonColor="#F59E0B" 
-                    textColor="#ffffff"
-                    style={{ borderRadius: 6 }}
-                    onPress={() => navigation.navigate('BusinessGrowth')}
-                  >
-                    Upgrade ₹4,999
-                  </Button>
-                </View>
-              ) : (
-                <Badge style={{ backgroundColor: '#10B981', alignSelf: 'center', marginRight: 8 }}>ACTIVE</Badge>
-              )
-            )}
-            onPress={() => navigation.navigate('BusinessGrowth')}
-          />
-        </SettingsGroup>
+        {/* WORKSPACE SWITCHER BANNER */}
+        <TouchableOpacity 
+          style={styles.workspaceBanner}
+          onPress={() => setShowSwitchModal(true)}
+          activeOpacity={0.88}
+        >
+          <View style={[styles.workspaceIconBox, { backgroundColor: viewMode === 'buyer' ? '#EFF6FF' : '#ECFDF5' }]}>
+            <IconButton 
+              icon={viewMode === 'buyer' ? "storefront-outline" : "cart-outline"} 
+              size={22} 
+              iconColor={viewMode === 'buyer' ? '#1D4ED8' : '#059669'} 
+              style={{ margin: 0 }} 
+            />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.workspacePretitle}>ACTIVE WORKSPACE</Text>
+            <Text style={styles.workspaceTitle}>
+              {viewMode === 'buyer' ? 'Buyer Mode (Procurement)' : 'Seller Mode (Supplier Desk)'}
+            </Text>
+            <Text style={styles.workspaceSubtitle}>
+              {viewMode === 'buyer' ? 'Tap to switch to Supplier Desk' : 'Tap to switch to Marketplace'}
+            </Text>
+          </View>
+          <View style={styles.workspaceSwitchBtn}>
+            <Text style={styles.workspaceSwitchBtnText}>Switch</Text>
+          </View>
+        </TouchableOpacity>
 
-        {/* WORKSPACE SWITCHER */}
-        <SettingsGroup>
-          <List.Item 
-            title={viewMode === 'buyer' ? "Switch to Seller Mode" : "Switch to Buyer Mode"}
-            description={viewMode === 'buyer' ? "Manage Products & Orders" : "Browse Marketplace"}
-            left={props => <List.Icon {...props} icon={viewMode === 'buyer' ? "store-cog" : "shopping"} color={viewMode === 'buyer' ? '#E65100' : '#0D47A1'} />}
-            right={props => <List.Icon {...props} icon="swap-horizontal" color="#CBD5E1" />}
-            onPress={() => setShowSwitchModal(true)}
-          />
-        </SettingsGroup>
-
-        {/* FINANCIAL SERVICES / PAYLATER CREDIT */}
+        {/* TRADE CREDIT / PAYLATER */}
         <SettingsGroup title="FINANCIAL SERVICES">
           <List.Item 
-            title="Get PayLater Credit" 
+            title="Trade Credit (PayLater)" 
             description={
               payLaterApp?.status === 'under_review' 
-                ? "Application in Process ⏳ • Verification underway"
+                ? "Application Under Review • Credit assessment underway"
                 : payLaterApp?.status === 'approved' 
-                ? `Credit Approved ✓ • ₹${(payLaterApp.approvedLimit || 1000000).toLocaleString('en-IN')} limit`
-                : "Upload documents to know your credit limit"
+                ? `Approved • Limit: ₹${(payLaterApp.approvedLimit || 1000000).toLocaleString('en-IN')}`
+                : "Apply for collateral-free chemical trade credit"
             }
-            titleStyle={{ color: '#0F172A', fontWeight: 'bold' }}
+            titleStyle={{ color: '#0F172A', fontWeight: '700', fontSize: 14 }}
+            descriptionStyle={{ fontSize: 11, color: '#64748B' }}
             left={props => (
               <List.Icon 
                 {...props} 
                 icon="credit-card-clock-outline" 
-                color={payLaterApp?.status === 'under_review' ? '#D97706' : payLaterApp?.status === 'approved' ? '#059669' : '#2563EB'} 
+                color={payLaterApp?.status === 'under_review' ? '#D97706' : payLaterApp?.status === 'approved' ? '#059669' : '#0F172A'} 
               />
             )} 
             right={props => (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {payLaterApp?.status === 'under_review' ? (
-                  <Badge style={{ backgroundColor: '#F59E0B', color: '#FFFFFF', marginRight: 8, fontWeight: 'bold' }}>
-                    IN PROCESS
-                  </Badge>
-                ) : payLaterApp?.status === 'approved' ? (
-                  <Badge style={{ backgroundColor: '#10B981', color: '#FFFFFF', marginRight: 8, fontWeight: 'bold' }}>
-                    APPROVED
-                  </Badge>
-                ) : (
-                  <Badge style={{ backgroundColor: '#2563EB', color: '#FFFFFF', marginRight: 8, fontWeight: 'bold' }}>
-                    NEW
-                  </Badge>
-                )}
-                <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />
+                <View style={[
+                  styles.statusBadgeSmall,
+                  payLaterApp?.status === 'approved' ? { backgroundColor: '#DCFCE7' } : { backgroundColor: '#FEF3C7' }
+                ]}>
+                  <Text style={[
+                    styles.statusBadgeSmallText,
+                    payLaterApp?.status === 'approved' ? { color: '#166534' } : { color: '#B45309' }
+                  ]}>
+                    {payLaterApp?.status === 'approved' ? 'APPROVED' : payLaterApp?.status === 'under_review' ? 'PENDING' : 'APPLY'}
+                  </Text>
+                </View>
+                <List.Icon {...props} icon="chevron-right" color="#94A3B8" />
               </View>
             )} 
             onPress={() => navigation.navigate('PayLaterCredit')} 
           />
         </SettingsGroup>
 
-        {/* ACTIVITY GROUP */}
+        {/* COMMERCIAL ACTIVITY */}
         {viewMode === 'buyer' && (
-          <SettingsGroup title="BUYING ACTIVITY">
-            <List.Item title="My Negotiations" left={props => <List.Icon {...props} icon="handshake-outline" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('NegotiationsList')} />
+          <SettingsGroup title="COMMERCIAL ACTIVITY">
+            <List.Item 
+              title="My Negotiations" 
+              description="Active supplier deals and counter-offers"
+              titleStyle={styles.menuItemTitle}
+              descriptionStyle={styles.menuItemSub}
+              left={props => <List.Icon {...props} icon="handshake-outline" color="#0F172A" />} 
+              right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
+              onPress={() => navigation.navigate('NegotiationsList')} 
+            />
             <Divider style={styles.divider} />
-            <List.Item title="Sourcing Requests" left={props => <List.Icon {...props} icon="clipboard-search-outline" color="#475569" />} right={props => <View style={{flexDirection:'row', alignItems:'center'}}>{quotedReqsCount > 0 && <Badge style={{marginRight: 8}}>{`${quotedReqsCount} New`}</Badge>}<List.Icon {...props} icon="chevron-right" color="#CBD5E1" /></View>} onPress={() => navigation.navigate('BuyerRequirements')} />
+            <List.Item 
+              title="Sourcing Inquiries" 
+              description="Custom volume & specification requests"
+              titleStyle={styles.menuItemTitle}
+              descriptionStyle={styles.menuItemSub}
+              left={props => <List.Icon {...props} icon="clipboard-text-outline" color="#0F172A" />} 
+              right={props => (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {quotedReqsCount > 0 && (
+                    <View style={styles.badgeNew}>
+                      <Text style={styles.badgeNewText}>{quotedReqsCount} Quoted</Text>
+                    </View>
+                  )}
+                  <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />
+                </View>
+              )} 
+              onPress={() => navigation.navigate('BuyerRequirements')} 
+            />
           </SettingsGroup>
         )}
 
         {/* SETTINGS GROUP */}
-        <SettingsGroup title="ACCOUNT SETTINGS">
-          <List.Item title="Company Details" left={props => <List.Icon {...props} icon="domain" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('EditProfile')} />
+        <SettingsGroup title="ENTERPRISE SETTINGS">
+          <List.Item 
+            title="Company Profile & GST" 
+            description="Manage legal identity and bank info"
+            titleStyle={styles.menuItemTitle}
+            descriptionStyle={styles.menuItemSub}
+            left={props => <List.Icon {...props} icon="domain" color="#0F172A" />} 
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => navigation.navigate('EditProfile')} 
+          />
           <Divider style={styles.divider} />
-          <List.Item title="Saved Addresses" left={props => <List.Icon {...props} icon="map-marker-outline" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('AddressList')} />
+          <List.Item 
+            title="Delivery Addresses" 
+            description="Factory and warehouse dispatch locations"
+            titleStyle={styles.menuItemTitle}
+            descriptionStyle={styles.menuItemSub}
+            left={props => <List.Icon {...props} icon="map-marker-outline" color="#0F172A" />} 
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => navigation.navigate('AddressList')} 
+          />
           <Divider style={styles.divider} />
-          <List.Item title="WhatsApp Notifications" left={props => <List.Icon {...props} icon="whatsapp" color="#25D366" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => setShowWaPrefsModal(true)} />
+          <List.Item 
+            title="WhatsApp Alerts" 
+            description="Trade relays and daily market digests"
+            titleStyle={styles.menuItemTitle}
+            descriptionStyle={styles.menuItemSub}
+            left={props => <List.Icon {...props} icon="whatsapp" color="#059669" />} 
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => setShowWaPrefsModal(true)} 
+          />
         </SettingsGroup>
 
-        {/* SUPPORT & LEGAL GROUP */}
-        <SettingsGroup title="SUPPORT & ABOUT">
-          <List.Item title="Help Center" left={props => <List.Icon {...props} icon="headset" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => setShowSupportModal(true)} />
+        {/* SUPPORT & ABOUT */}
+        <SettingsGroup title="SUPPORT & COMPLIANCE">
+          <List.Item 
+            title="Trade Concierge & Help Desk" 
+            description="Direct WhatsApp & phone hotline"
+            titleStyle={styles.menuItemTitle}
+            descriptionStyle={styles.menuItemSub}
+            left={props => <List.Icon {...props} icon="headset" color="#0F172A" />} 
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => setShowSupportModal(true)} 
+          />
           <Divider style={styles.divider} />
-          <List.Item title="About Prochem" left={props => <List.Icon {...props} icon="information-outline" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('AboutProchem')} />
+          <List.Item 
+            title="Terms of Trade & Privacy" 
+            description="Platform rules and escrow conditions"
+            titleStyle={styles.menuItemTitle}
+            descriptionStyle={styles.menuItemSub}
+            left={props => <List.Icon {...props} icon="file-document-outline" color="#0F172A" />} 
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => navigation.navigate('LegalPages')} 
+          />
           <Divider style={styles.divider} />
-          <List.Item title="Legal & Privacy" left={props => <List.Icon {...props} icon="file-document-outline" color="#475569" />} right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} onPress={() => navigation.navigate('LegalPages')} />
+          <List.Item 
+            title="About Prochem Exchange" 
+            description="Platform overview and network members"
+            titleStyle={styles.menuItemTitle}
+            descriptionStyle={styles.menuItemSub}
+            left={props => <List.Icon {...props} icon="information-outline" color="#0F172A" />} 
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />} 
+            onPress={() => navigation.navigate('AboutProchem')} 
+          />
         </SettingsGroup>
 
-        {/* DANGER ZONE */}
+        {/* LOGOUT & DANGER ZONE */}
         <SettingsGroup>
-          <List.Item title="Sign Out" titleStyle={{color: '#EF5350', fontWeight: 'bold'}} left={props => <List.Icon {...props} icon="logout" color="#EF5350" />} onPress={logoutUser} />
+          <List.Item 
+            title="Sign Out" 
+            titleStyle={{ color: '#EF4444', fontWeight: '700', fontSize: 14 }} 
+            left={props => <List.Icon {...props} icon="logout" color="#EF4444" />} 
+            onPress={logoutUser} 
+          />
           <Divider style={styles.divider} />
-          <List.Item title="Delete Account" titleStyle={{color: '#D32F2F'}} left={props => <List.Icon {...props} icon="delete-outline" color="#D32F2F" />} onPress={() => setShowDeleteModal(true)} />
+          <List.Item 
+            title="Delete Account" 
+            titleStyle={{ color: '#64748B', fontSize: 13 }} 
+            left={props => <List.Icon {...props} icon="delete-outline" color="#94A3B8" />} 
+            onPress={() => setShowDeleteModal(true)} 
+          />
         </SettingsGroup>
 
-        <Text style={{textAlign:'center', color:'#94A3B8', marginTop: 20, fontSize: 12}}>App Version 2.1.1</Text>
+        <Text style={styles.versionText}>Prochem Chemical Exchange • v2.2.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F5F9' },
-  profileHeader: { flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: 'white', marginBottom: 20 },
-  groupContainer: { paddingHorizontal: 16, marginBottom: 24 },
-  groupTitle: { fontSize: 12, fontWeight: 'bold', color: '#64748B', marginLeft: 16, marginBottom: 8, letterSpacing: 1 },
-  groupBlock: { backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' },
-  divider: { marginLeft: 56, backgroundColor: '#F1F5F9' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: 'white', padding: 24, borderRadius: 20, width: '100%', maxWidth: 360, elevation: 10 },
-  modalHeader: { alignItems: 'center', marginBottom: 10 },
-  modalBody: { textAlign: 'center', color: '#64748B', marginBottom: 25, lineHeight: 20 },
-  modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  switchLabel: { fontWeight: 'bold', fontSize: 16, color: '#1E293B' },
-  switchSub: { fontSize: 12, color: '#64748B', marginTop: 2 }
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F8FAFC' 
+  },
+  profileHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 16, 
+    backgroundColor: '#FFFFFF', 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  avatarBox: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#0F172A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarChar: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  companyName: { 
+    fontSize: 16, 
+    fontWeight: '800', 
+    color: '#0F172A',
+    letterSpacing: -0.2,
+  },
+  companyEmail: { 
+    color: '#64748B', 
+    fontSize: 12, 
+    marginTop: 1,
+  },
+  verificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  verificationBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  verifiedBadge: {
+    backgroundColor: '#ECFDF5',
+  },
+  pendingBadge: {
+    backgroundColor: '#FEF3C7',
+  },
+  verificationBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  verifiedText: {
+    color: '#059669',
+  },
+  pendingText: {
+    color: '#D97706',
+  },
+  gstText: {
+    fontSize: 10,
+    color: '#64748B',
+    fontFamily: 'monospace',
+  },
+  completionText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 3,
+  },
+  progressBar: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E2E8F0',
+    width: '90%',
+  },
+
+  /* Workspace Banner */
+  workspaceBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  workspaceIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workspacePretitle: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  workspaceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 1,
+  },
+  workspaceSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  workspaceSwitchBtn: {
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  workspaceSwitchBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  /* Groups */
+  groupContainer: { 
+    paddingHorizontal: 16, 
+    marginBottom: 16,
+  },
+  groupTitle: { 
+    fontSize: 10, 
+    fontWeight: '800', 
+    color: '#64748B', 
+    marginLeft: 4, 
+    marginBottom: 6, 
+    letterSpacing: 0.6,
+  },
+  groupBlock: { 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 12, 
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  menuItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  menuItemSub: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  divider: { 
+    marginLeft: 54, 
+    backgroundColor: '#F1F5F9',
+  },
+  statusBadgeSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+  statusBadgeSmallText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  badgeNew: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+  badgeNewText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669',
+  },
+
+  /* Modals */
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(15, 23, 42, 0.6)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 20,
+  },
+  modalCard: { 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 16, 
+    width: '100%', 
+    maxWidth: 380, 
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  modalIconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  modalHeaderTitle: { 
+    fontWeight: '800', 
+    fontSize: 17, 
+    textAlign: 'center',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  modalBodyText: { 
+    textAlign: 'center', 
+    color: '#64748B', 
+    marginBottom: 20, 
+    lineHeight: 18,
+    fontSize: 13,
+  },
+  modalBodySub: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  modalActionButtons: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  modalPrimaryBtn: {
+    backgroundColor: '#0F172A',
+    height: 44,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  modalPrimaryBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  /* WhatsApp Modal */
+  waModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  waIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#25D366',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waModalTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  waModalSub: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  switchRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingVertical: 12, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F1F5F9',
+  },
+  switchLabel: { 
+    fontWeight: '700', 
+    fontSize: 13, 
+    color: '#0F172A',
+  },
+  switchSub: { 
+    fontSize: 11, 
+    color: '#64748B', 
+    marginTop: 2,
+  },
+
+  /* Support */
+  supportOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#25D366',
+    borderRadius: 10,
+    padding: 14,
+  },
+  supportOptionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  supportOptionSub: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 1,
+  },
+
+  versionText: { 
+    textAlign: 'center', 
+    color: '#94A3B8', 
+    marginTop: 16, 
+    fontSize: 11,
+  },
 });

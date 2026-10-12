@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
     width: '100%' 
   },
   
-  btn: { marginTop: 10, borderRadius: 8, backgroundColor: '#004AAD' },
+  btn: { marginTop: 10, borderRadius: 8, backgroundColor: '#0F172A' },
   
   payoutCard: { marginTop: 12, padding: 12, backgroundColor: '#F1F8E9', borderColor: '#C8E6C9', borderWidth: 1, borderRadius: 8 },
   payoutRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },

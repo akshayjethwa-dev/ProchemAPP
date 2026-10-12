@@ -4,10 +4,11 @@ import { View, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Alert, M
 import { Text, Card, Button, SegmentedButtons, useTheme, IconButton, TextInput, Chip, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product, BroadcastLead, RFQ } from '../types';
+import { createConversation } from '../services/conversationService';
 
 // Helper function to safely parse Firestore timestamps or ISO strings for sorting
 const getTime = (dateVal: any) => {
@@ -37,6 +38,7 @@ export default function CommerceHubScreen() {
   const [quoteQty, setQuoteQty] = useState('');
   const [quoteDays, setQuoteDays] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [chatLoadingId, setChatLoadingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user?.uid) return;
@@ -202,7 +204,115 @@ export default function CommerceHubScreen() {
     </Card>
   );
 
+  const handleStartChat = async (lead: BroadcastLead) => {
+    if (!user?.uid) return Alert.alert('Login Required', 'Please log in to chat with the buyer.');
+    if (lead.buyerId === user.uid) {
+      return Alert.alert('Notice', 'You cannot start a discussion on your own requirement.');
+    }
+
+    setChatLoadingId(lead.id || 'loading');
+    try {
+      let reqId = lead.originalOrderId || lead.id || '';
+      let buyerId = lead.buyerId || (lead as any).userId || '';
+
+      if (!buyerId && reqId) {
+        try {
+          const reqSnap = await getDoc(doc(db, 'customRequirements', reqId));
+          if (reqSnap.exists()) {
+            const rData = reqSnap.data();
+            if (rData.buyerId) buyerId = rData.buyerId;
+          }
+        } catch (e) {}
+      }
+
+      if (!buyerId && lead.originalOrderId) {
+        try {
+          const rfqSnap = await getDoc(doc(db, 'rfqs', lead.originalOrderId));
+          if (rfqSnap.exists()) {
+            const rfqData = rfqSnap.data();
+            if (rfqData.buyerId) buyerId = rfqData.buyerId;
+          }
+        } catch (e) {}
+      }
+
+      if (!buyerId) {
+        buyerId = 'buyer';
+      }
+
+      let convId = '';
+      try {
+        const qExisting = query(
+          collection(db, 'conversations'),
+          where('sellerUserId', '==', user.uid)
+        );
+        const existingSnap = await getDocs(qExisting);
+        const match = existingSnap.docs.find(d => {
+          const cData = d.data();
+          return (
+            (reqId && (cData.requirementId === reqId || cData.rfqId === reqId)) ||
+            (lead.id && cData.leadId === lead.id)
+          );
+        });
+        if (match) {
+          convId = match.id;
+        }
+      } catch (qErr) {
+        console.warn('Could not query conversations list:', qErr);
+      }
+
+      if (!convId) {
+        const initialMsg = `Discussion started for Custom Requirement: ${lead.productName}
+Quantity: ${lead.quantityRequired} ${lead.unit}
+Target Price: ₹${lead.targetPrice || 'Open'} / ${lead.unit}
+Supplier connected to discuss specifications and custom offer.`;
+
+        convId = await createConversation({
+          requirementId: reqId,
+          leadId: lead.id,
+          buyerUserId: buyerId,
+          sellerUserId: user.uid,
+          productName: lead.productName,
+          quantity: lead.quantityRequired,
+          targetPrice: lead.targetPrice,
+          unit: lead.unit,
+          initialMessage: initialMsg,
+        });
+
+        if (reqId) {
+          try {
+            await updateDoc(doc(db, 'customRequirements', reqId), {
+              status: 'NEGOTIATING',
+              updatedAt: new Date().toISOString()
+            });
+          } catch (e) {}
+        }
+      }
+
+      setChatLoadingId(null);
+      navigation.navigate('NegotiationRoom', {
+        requirementId: reqId,
+        conversationId: convId,
+        leadInfo: {
+          productName: lead.productName,
+          quantity: lead.quantityRequired,
+          targetPrice: lead.targetPrice,
+          unit: lead.unit,
+          buyerId: buyerId,
+          sellerId: user.uid,
+          sellerName: user.companyName || user.name || 'Verified Supplier'
+        }
+      });
+
+    } catch (error: any) {
+      setChatLoadingId(null);
+      console.error('Error starting chat:', error);
+      Alert.alert('Error', error.message || 'Failed to start chat with buyer.');
+    }
+  };
+
   const renderLiveRequirement = ({ item }: { item: BroadcastLead }) => {
+    const isChatting = chatLoadingId === item.id;
+
     return (
       <Card style={styles.card}>
         <Card.Content>
@@ -225,8 +335,25 @@ export default function CommerceHubScreen() {
             </View>
           </View>
           <View style={styles.actionRow}>
-             <Button mode="contained" buttonColor="#F59E0B" style={{flex: 1}} onPress={() => { setSelectedReq(item); setQuoteModalVisible(true); }}>
-               Submit Quote
+             <Button 
+                mode="contained" 
+                buttonColor="#10B981" 
+                icon="gavel"
+                style={{flex: 1, marginRight: 8}} 
+                onPress={() => { setSelectedReq(item); setQuoteModalVisible(true); }}
+             >
+               Bid
+             </Button>
+             <Button 
+                mode="contained" 
+                buttonColor="#004AAD" 
+                icon="chat-outline"
+                loading={isChatting}
+                disabled={isChatting}
+                style={{flex: 1}} 
+                onPress={() => handleStartChat(item)}
+             >
+               Chat
              </Button>
           </View>
         </Card.Content>
