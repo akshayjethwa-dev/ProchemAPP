@@ -135,6 +135,12 @@ export default ({ config }) => {
     extra: {
       eas: {
         projectId: "7a075ff7-f9b3-47cf-ab49-523d173d19ae"
+      },
+      juspay: {
+        merchantId: process.env.EXPO_PUBLIC_JUSPAY_MERCHANT_ID || "",
+        clientId: process.env.EXPO_PUBLIC_JUSPAY_CLIENT_ID || "",
+        environment: process.env.EXPO_PUBLIC_JUSPAY_ENVIRONMENT || "production",
+        apiUrl: process.env.EXPO_PUBLIC_JUSPAY_API_URL || "https://api.juspay.in/session"
       }
     },
 

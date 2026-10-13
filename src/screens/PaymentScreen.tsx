@@ -158,7 +158,7 @@ export default function PaymentScreen() {
     }
   };
 
-  const methods: { key: PaymentMethod; icon: string; title: string; description: string }[] = [
+  const methods: Array<{ key: 'UPI' | 'CARD' | 'NB'; icon: string; title: string; description: string }> = [
     { key: 'UPI', icon: 'cellphone-check', title: 'UPI', description: 'Google Pay, PhonePe, Paytm, BHIM' },
     { key: 'CARD', icon: 'credit-card-outline', title: 'Credit / Debit Cards', description: 'Visa, Mastercard, RuPay' },
     { key: 'NB', icon: 'bank-outline', title: 'Net Banking', description: 'Corporate and personal bank accounts' },

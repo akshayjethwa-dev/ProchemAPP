@@ -550,7 +550,7 @@ function UpgradePaymentModal({
               <MaterialCommunityIcons name="information-outline" size={18} color="#004AAD" style={{ marginTop: 2 }} />
               <Text style={upgradeStyles.noteText}>
                 <Text style={{ fontWeight: '700' }}>Secure Checkout: </Text>
-                Your payment will be securely processed under Prochem Marketplace Private Limited via Juspay.
+                Your payment will be securely processed under Prochem Marketplace Private Limited via DBS Bank.
               </Text>
             </View>
 
