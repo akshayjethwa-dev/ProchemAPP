@@ -31,7 +31,7 @@ Marketplace and subscription checkout use Juspay HyperCheckout through Firebase 
 - `JUSPAY_WEBHOOK_USERNAME`
 - `JUSPAY_WEBHOOK_PASSWORD`
 
-The Session API URL is a Juspay endpoint, not a dashboard value. The sandbox Order Status API base is `https://sandbox.juspay.in/orders/`; production uses `https://api.juspay.in/session` and `https://api.juspay.in/orders/` respectively. Keep the API key and webhook credentials server-side.
+The Session API URL is a Juspay endpoint, not a dashboard value. The sandbox Order Status API base is `https://sandbox.juspay.in/orders/`; production uses `https://api.dbs.bank.in/session` and `https://api.dbs.bank.in/orders/` respectively. Keep the API key and webhook credentials server-side.
 
 ### Sandbox Dashboard
 
@@ -46,14 +46,14 @@ The Session API URL is a Juspay endpoint, not a dashboard value. The sandbox Ord
 
 The payment return endpoint is separate from the webhook endpoint. Set `JUSPAY_RETURN_URL` to the `juspayReturn` HTTPS function URL for each Firebase project. Firebase Functions run on Node.js 22; deploy the four Juspay functions with `firebase deploy --only "functions:createJuspaySession,functions:getJuspayOrderStatus,functions:juspayWebhook,functions:juspayReturn" --project <firebase-project-id>`.
 
-For production, replace the sandbox Session API URL with `https://api.juspay.in/session`, use the production Juspay credentials and production JWT key pair, and set `JUSPAY_RETURN_URL` and the webhook URL to the production Firebase project's function URLs. Never point the production EAS build at a development Firebase project.
+For production, replace the sandbox Session API URL with `https://api.dbs.bank.in/session`, use the production Juspay credentials and production JWT key pair, and set `JUSPAY_RETURN_URL` and the webhook URL to the production Firebase project's function URLs. Never point the production EAS build at a development Firebase project.
 
 ### Production Cutover
 
 The production EAS profile and `.firebaserc` currently target `prochemapp-dev` (the project ID supplied for this cutover). Confirm that this is intentionally the live Firebase project before deploying real payments.
 
 1. In the production Juspay Portal at <https://portal.juspay.in>, confirm the production MID/CID and generate a new active production API key. Do not reuse a sandbox API key.
-2. Update `functions/.env` locally with the production values: `JUSPAY_MERCHANT_ID`, `JUSPAY_CLIENT_ID`, `JUSPAY_API_KEY`, `JUSPAY_WEBHOOK_USERNAME`, `JUSPAY_WEBHOOK_PASSWORD`, `JUSPAY_API_URL=https://api.juspay.in/session`, and `JUSPAY_RETURN_URL=https://asia-south1-prochemapp-dev.cloudfunctions.net/juspayReturn`.
+2. Update `functions/.env` locally with the production values: `JUSPAY_MERCHANT_ID`, `JUSPAY_CLIENT_ID`, `JUSPAY_API_KEY`, `JUSPAY_WEBHOOK_USERNAME`, `JUSPAY_WEBHOOK_PASSWORD`, `JUSPAY_API_URL=https://api.dbs.bank.in/session`, and `JUSPAY_RETURN_URL=https://asia-south1-prochemapp-dev.cloudfunctions.net/juspayReturn`.
 3. In the production Portal, configure **Payments → Settings → Webhook** with `https://asia-south1-prochemapp-dev.cloudfunctions.net/juspayWebhook`, matching production webhook Basic Auth credentials, and the charged/succeeded events.
 4. In **Payments → Settings → Security → JWT Keys**, generate/download the production merchant private key and Juspay public key. Store them in Secret Manager without committing the PEM files:
    `firebase functions:secrets:set JUSPAY_MERCHANT_PRIVATE_KEY --data-file <merchant-private-key.pem> --project prochemapp-dev`

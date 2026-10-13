@@ -140,7 +140,7 @@ export default ({ config }) => {
         merchantId: process.env.EXPO_PUBLIC_JUSPAY_MERCHANT_ID || "",
         clientId: process.env.EXPO_PUBLIC_JUSPAY_CLIENT_ID || "",
         environment: process.env.EXPO_PUBLIC_JUSPAY_ENVIRONMENT || "production",
-        apiUrl: process.env.EXPO_PUBLIC_JUSPAY_API_URL || "https://api.juspay.in/session"
+        apiUrl: process.env.EXPO_PUBLIC_JUSPAY_API_URL || "https://api.dbs.bank.in/session"
       }
     },
 

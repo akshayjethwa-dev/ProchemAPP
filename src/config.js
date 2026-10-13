@@ -16,7 +16,7 @@ const readEnv = (key, fallback = "") => {
 const merchantId = readEnv("EXPO_PUBLIC_JUSPAY_MERCHANT_ID", "");
 const clientId = readEnv("EXPO_PUBLIC_JUSPAY_CLIENT_ID", "");
 const environment = readEnv("EXPO_PUBLIC_JUSPAY_ENVIRONMENT", "production");
-const apiUrl = readEnv("EXPO_PUBLIC_JUSPAY_API_URL", "https://api.juspay.in/session");
+const apiUrl = readEnv("EXPO_PUBLIC_JUSPAY_API_URL", "https://api.dbs.bank.in/session");
 
 export const HYPER_SDK_CONFIG = {
   merchantId,

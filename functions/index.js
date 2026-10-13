@@ -82,6 +82,21 @@ const getDbsOrderStatusBaseUrl = () => {
   return base;
 };
 
+const getJuspayMandateEndpoint = (mandateId) =>
+  `${getDbsOrderStatusBaseUrl()}/mandates/${encodeURIComponent(mandateId)}`;
+
+const getJuspayCustomerMandatesEndpoint = (customerId) =>
+  `${getDbsOrderStatusBaseUrl()}/customers/${encodeURIComponent(customerId)}/mandates`;
+
+const getJuspayOffersEndpoint = (params = {}) => {
+  const url = new URL(`${getDbsOrderStatusBaseUrl()}/offers`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    url.searchParams.append(key, String(value));
+  });
+  return url.toString();
+};
+
 const JUSPAY_SUBSCRIPTION_PLANS = {
   basic: { amount: 2359, tier: "BASIC", durationDays: 30 },
   premium_growth: { amount: 5899, tier: "GROWTH_PACKAGE", durationDays: 30 },
@@ -1226,6 +1241,539 @@ exports.createJuspaySession = functions
       if (error instanceof functions.https.HttpsError) throw error;
       console.error("DBS session error:", error.response?.data || error.message);
       throw new functions.https.HttpsError("internal", "Failed to create DBS payment session.");
+    }
+  });
+
+exports.executeJuspayMandate = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const {
+      mandateId,
+      orderId,
+      amount,
+      customerId = context.auth.uid,
+      currency = "INR",
+      returnUrl = process.env.JUSPAY_RETURN_URL,
+    } = data || {};
+
+    if (!mandateId || !orderId) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "mandateId and orderId are required."
+      );
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const response = await fetch(`${getDbsOrderStatusBaseUrl()}/txns`, {
+        method: "POST",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": customerId,
+          "Content-Type": "application/json",
+          version: "2023-06-30",
+        },
+        body: JSON.stringify({
+          merchant_id: merchantId,
+          order: {
+            order_id: orderId,
+            amount: String(amount ?? 0),
+            customer_id: customerId,
+            currency,
+            return_url: returnUrl,
+          },
+          mandate_id: mandateId,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay mandate execution error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to execute Juspay mandate.");
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay mandate execution error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to execute Juspay mandate.");
+    }
+  });
+
+exports.listJuspayMandates = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const customerId = data?.customerId || context.auth.uid;
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const response = await fetch(getJuspayCustomerMandatesEndpoint(customerId), {
+        method: "GET",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": customerId,
+          "Content-Type": "application/x-www-form-urlencoded",
+          version: "2023-06-30",
+        },
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay list mandates error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to fetch mandates.");
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay list mandate error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to fetch mandates.");
+    }
+  });
+
+exports.getJuspayMandateStatus = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const { mandateId, orderId } = data || {};
+    const lookupOrderId = orderId || mandateId;
+    if (!lookupOrderId) {
+      throw new functions.https.HttpsError("invalid-argument", "orderId or mandateId is required.");
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const response = await fetch(`${getDbsOrderStatusBaseUrl()}/orders/${encodeURIComponent(lookupOrderId)}`, {
+        method: "GET",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": context.auth.uid,
+          "Content-Type": "application/x-www-form-urlencoded",
+          version: "2023-06-30",
+        },
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay mandate status error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to fetch mandate status.");
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay mandate status error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to fetch mandate status.");
+    }
+  });
+
+exports.pauseJuspayMandate = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const { mandateId, pauseStartDate, pauseEndDate } = data || {};
+    if (!mandateId) {
+      throw new functions.https.HttpsError("invalid-argument", "mandateId is required.");
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const body = {
+        command: "pause",
+        pause_start_date: pauseStartDate ?? Math.floor(Date.now() / 1000),
+        pause_end_date: pauseEndDate ?? null,
+      };
+
+      const response = await fetch(getJuspayMandateEndpoint(mandateId), {
+        method: "POST",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": context.auth.uid,
+          "Content-Type": "application/x-www-form-urlencoded",
+          version: "2023-06-30",
+        },
+        body: new URLSearchParams(body).toString(),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay pause mandate error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to pause Juspay mandate.");
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay pause mandate error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to pause Juspay mandate.");
+    }
+  });
+
+exports.revokeJuspayMandate = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const { mandateId, shouldDoImplicitRevoke = false } = data || {};
+    if (!mandateId) {
+      throw new functions.https.HttpsError("invalid-argument", "mandateId is required.");
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const response = await fetch(getJuspayMandateEndpoint(mandateId), {
+        method: "POST",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": context.auth.uid,
+          "Content-Type": "application/x-www-form-urlencoded",
+          version: "2023-06-30",
+        },
+        body: new URLSearchParams({
+          command: "revoke",
+          should_do_implicit_revoke: String(shouldDoImplicitRevoke),
+        }).toString(),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay revoke mandate error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to revoke Juspay mandate.");
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay revoke mandate error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to revoke Juspay mandate.");
+    }
+  });
+
+exports.stopJuspayMandateExecution = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const { mandateId, orderId } = data || {};
+    if (!mandateId || !orderId) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "mandateId and orderId are required."
+      );
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const response = await fetch(getJuspayMandateEndpoint(mandateId), {
+        method: "POST",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": context.auth.uid,
+          "Content-Type": "application/x-www-form-urlencoded",
+          version: "2023-06-30",
+        },
+        body: new URLSearchParams({
+          command: "cancel_recurring_transaction",
+          order_id: String(orderId),
+        }).toString(),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay stop mandate execution error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to stop Juspay mandate execution.");
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay stop mandate execution error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to stop Juspay mandate execution.");
+    }
+  });
+
+exports.listJuspayOffers = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const {
+      orderId,
+      customerId = context.auth.uid,
+      amount,
+      currency = "INR",
+      offerCode,
+    } = data || {};
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const queryParams = {
+        merchant_id: merchantId,
+        customer_id: customerId,
+        currency,
+        ...(orderId ? { order_id: orderId } : {}),
+        ...(amount !== undefined && amount !== null ? { amount: String(amount) } : {}),
+        ...(offerCode ? { offer_code: offerCode } : {}),
+      };
+
+      const response = await fetch(getJuspayOffersEndpoint(queryParams), {
+        method: "GET",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": customerId,
+          "Content-Type": "application/x-www-form-urlencoded",
+          version: "2023-06-30",
+        },
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay list offers error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to list Juspay offers.");
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay list offers error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to list Juspay offers.");
+    }
+  });
+
+exports.getJuspayOrderStatusWithOffers = functions
+  .runWith({ secrets: [JUSPAY_MERCHANT_PRIVATE_KEY, JUSPAY_PUBLIC_KEY] })
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+    const { orderId } = data || {};
+    if (!orderId) throw new functions.https.HttpsError("invalid-argument", "orderId is required.");
+
+    const session = await admin.firestore().collection("juspaySessions").doc(orderId).get();
+    if (!session.exists || session.data().userId !== context.auth.uid) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Order does not belong to the current user."
+      );
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (
+      !merchantId ||
+      !apiKey ||
+      !JUSPAY_MERCHANT_PRIVATE_KEY.value() ||
+      !JUSPAY_PUBLIC_KEY.value()
+    ) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "DBS API credentials and response-verification keys must be configured."
+      );
+    }
+
+    try {
+      const response = await fetch(`${getDbsOrderStatusBaseUrl()}/orders/${encodeURIComponent(orderId)}`, {
+        method: "GET",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": context.auth.uid,
+          "Content-Type": "application/x-www-form-urlencoded",
+          version: "2023-06-30",
+        },
+      });
+
+      const encryptedPayload = await readJuspayEncryptedResponse(response);
+      if (!response.ok) {
+        console.error("DBS order status with offers error:", { status: response.status });
+        throw new Error("DBS status request failed.");
+      }
+
+      const payload =
+        typeof encryptedPayload === "string"
+          ? decryptAndVerifyJuspayStatus(
+              encryptedPayload,
+              JUSPAY_MERCHANT_PRIVATE_KEY.value(),
+              JUSPAY_PUBLIC_KEY.value()
+            )
+          : encryptedPayload;
+
+      return {
+        orderId,
+        status: String(payload.status || "").toUpperCase(),
+        status_id: payload.status_id || null,
+        offers: payload.offers || payload.offer_details || payload.offer || [],
+        raw: payload,
+      };
+    } catch (error) {
+      console.error("DBS order status with offers error:", error.response?.data || error.message);
+      throw new functions.https.HttpsError("internal", "Failed to retrieve DBS order status with offer details.");
+    }
+  });
+
+exports.cancelJuspayOrder = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const { orderId, reason = "customer_cancelled" } = data || {};
+    if (!orderId) {
+      throw new functions.https.HttpsError("invalid-argument", "orderId is required.");
+    }
+
+    const session = await admin.firestore().collection("juspaySessions").doc(String(orderId)).get();
+    if (!session.exists || session.data().userId !== context.auth.uid) {
+      throw new functions.https.HttpsError("permission-denied", "Order does not belong to the current user.");
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const response = await fetch(`${getDbsOrderStatusBaseUrl()}/orders/${encodeURIComponent(orderId)}/cancel`, {
+        method: "POST",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": context.auth.uid,
+          "Content-Type": "application/json",
+          version: "2023-06-30",
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay cancel error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to cancel Juspay order.");
+      }
+
+      await admin.firestore().collection("juspaySessions").doc(String(orderId)).update({
+        status: "CANCELLED",
+        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return {
+        orderId,
+        status: payload.status || "CANCELLED",
+        message: payload.message || "Order cancelled successfully.",
+      };
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay cancel error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to cancel Juspay order.");
+    }
+  });
+
+exports.refundJuspayOrder = functions
+  .region("asia-south1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+
+    const { orderId, amount, reason = "customer_refund" } = data || {};
+    if (!orderId) {
+      throw new functions.https.HttpsError("invalid-argument", "orderId is required.");
+    }
+
+    const session = await admin.firestore().collection("juspaySessions").doc(String(orderId)).get();
+    if (!session.exists || session.data().userId !== context.auth.uid) {
+      throw new functions.https.HttpsError("permission-denied", "Order does not belong to the current user.");
+    }
+
+    const merchantId = process.env.JUSPAY_MERCHANT_ID;
+    const apiKey = process.env.JUSPAY_API_KEY;
+    if (!merchantId || !apiKey) {
+      throw new functions.https.HttpsError("failed-precondition", "Juspay API credentials are not configured.");
+    }
+
+    try {
+      const response = await fetch(`${getDbsOrderStatusBaseUrl()}/orders/${encodeURIComponent(orderId)}/refund`, {
+        method: "POST",
+        headers: {
+          Authorization: getDbsAuthHeader(),
+          "x-merchantid": merchantId,
+          "x-routing-id": context.auth.uid,
+          "Content-Type": "application/json",
+          version: "2023-06-30",
+        },
+        body: JSON.stringify({
+          amount: amount ?? session.data().amount,
+          reason,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error("Juspay refund error:", { status: response.status, payload });
+        throw new functions.https.HttpsError("internal", "Failed to refund Juspay order.");
+      }
+
+      await admin.firestore().collection("juspaySessions").doc(String(orderId)).update({
+        status: "REFUNDED",
+        refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return {
+        orderId,
+        status: payload.status || "REFUNDED",
+        message: payload.message || "Refund initiated successfully.",
+        payload,
+      };
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("Juspay refund error:", error.message);
+      throw new functions.https.HttpsError("internal", "Failed to refund Juspay order.");
     }
   });
 
