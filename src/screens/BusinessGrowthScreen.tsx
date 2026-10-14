@@ -23,6 +23,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
+import { JuspayApiError } from "../services/payment";
 
 const { width } = Dimensions.get('window');
 const WHATSAPP_NUMBER = '917984856652'; 
@@ -368,98 +369,143 @@ function UpgradePaymentModal({
   if (!plan) return null;
 
   const handlePayNow = async () => {
-    if (!user) return;
+  if (!user) return;
 
-    const paymentWindow = Platform.OS === 'web'
-      ? window.open('', '_blank', 'width=480,height=800')
-      : null;
-    if (Platform.OS === 'web' && !paymentWindow) {
-      Alert.alert('Popup blocked', 'Please allow pop-ups for Prochem to open Juspay checkout.');
-      return;
+  const paymentWindow = Platform.OS === 'web'
+    ? window.open('', '_blank', 'width=480,height=800')
+    : null;
+  if (Platform.OS === 'web' && !paymentWindow) {
+    Alert.alert('Popup blocked', 'Please allow pop-ups for Prochem to open Juspay checkout.');
+    return;
+  }
+
+  try {
+    setIsProcessing(true);
+
+    const app = getApp();
+    const functions = getFunctions(app, 'asia-south1');
+    const createJuspaySession = httpsCallable(functions, 'createJuspaySession');
+
+    let safePhone = user?.phoneNumber || user?.phone || "9876543210";
+    safePhone = safePhone.replace(/[^0-9]/g, '');
+    if (safePhone.length > 10) safePhone = safePhone.slice(-10);
+    if (safePhone.length < 10) safePhone = "9876543210";
+
+    const response: any = await createJuspaySession({
+      amount: plan.amountRaw,
+      type: 'subscription',
+      referenceId: plan.key,
+      customerDetails: {
+        name: user?.companyName || user?.businessName || 'Prochem User',
+        email: user?.email || 'user@prochem.in',
+        phone: safePhone
+      }
+    });
+
+    const paymentUrl = response.data?.payment_url;
+    const orderId = response.data?.order_id;
+
+    if (!paymentUrl || !orderId) {
+      throw new Error("Could not retrieve Juspay payment session.");
     }
-    
-    try {
-      setIsProcessing(true);
-      
-      const app = getApp();
-      const functions = getFunctions(app, 'asia-south1'); 
-      const createJuspaySession = httpsCallable(functions, 'createJuspaySession');
-      
-      let safePhone = user?.phoneNumber || user?.phone || "9876543210";
-      safePhone = safePhone.replace(/[^0-9]/g, '');
-      if (safePhone.length > 10) safePhone = safePhone.slice(-10);
-      if (safePhone.length < 10) safePhone = "9876543210";
-      
-      const response: any = await createJuspaySession({ 
-        amount: plan.amountRaw, 
-        type: 'subscription',
-        referenceId: plan.key,
-        customerDetails: {
-          name: user?.companyName || user?.businessName || 'Prochem User',
-          email: user?.email || 'user@prochem.in',
-          phone: safePhone
-        }
-      });
 
-      const paymentUrl = response.data?.payment_url;
-      const orderId = response.data?.order_id;
-      if (!paymentUrl || !orderId) throw new Error("Could not retrieve Juspay payment session.");
-      setJuspayOrderId(orderId);
-      if (Platform.OS === 'web') {
-        paymentWindow!.location.href = paymentUrl;
+    setJuspayOrderId(orderId);
 
-        const checkPayment = async () => {
-          try {
-            const statusResponse: any = await httpsCallable(
-              getFunctions(getApp(), 'asia-south1'),
-              'getJuspayOrderStatus'
-            )({ orderId });
-            const status = String(statusResponse.data?.status || '').toUpperCase();
-            if (status === 'CHARGED' || ['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
-              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-              setJuspayOrderId(null);
-              if (status === 'CHARGED') {
-                const session = statusResponse.data?.session;
-                if (!session?.planTier || !session?.subscriptionExpiry) {
-                  throw new Error('Payment is charged, but subscription details are not available yet.');
-                }
-                await completePayment(session.planTier, session.subscriptionExpiry);
-              } else {
-                setIsProcessing(false);
-                Alert.alert('Payment not completed', `Juspay status: ${status}`);
+    if (Platform.OS === 'web') {
+      paymentWindow!.location.href = paymentUrl;
+
+      const checkPayment = async () => {
+        try {
+          const statusResponse: any = await httpsCallable(
+            getFunctions(getApp(), 'asia-south1'),
+            'getJuspayOrderStatus'
+          )({ orderId });
+
+          const status = String(statusResponse.data?.status || '').toUpperCase();
+          if (status === 'CHARGED' || ['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setJuspayOrderId(null);
+            if (status === 'CHARGED') {
+              const session = statusResponse.data?.session;
+              if (!session?.planTier || !session?.subscriptionExpiry) {
+                throw new Error('Payment charged, but subscription details not yet available.');
               }
-            }
-            if (paymentWindow!.closed && status !== 'CHARGED' && !['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
-              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-              setJuspayOrderId(null);
+              await completePayment(session.planTier, session.subscriptionExpiry);
+            } else {
               setIsProcessing(false);
-            }
-          } catch (error) {
-            console.error('Juspay status polling failed:', error);
-            const code = (error as { code?: string })?.code;
-            if (code === 'functions/permission-denied' || code === 'permission-denied') {
-              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-              setJuspayOrderId(null);
-              if (!paymentWindow!.closed) paymentWindow!.close();
-              setIsProcessing(false);
-              Alert.alert('Payment session expired', 'Please start the payment again.');
+              Alert.alert('Payment not completed', `Juspay status: ${status}`);
             }
           }
-        };
+          if (paymentWindow!.closed && status !== 'CHARGED' && !['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setJuspayOrderId(null);
+            setIsProcessing(false);
+          }
+        } catch (error) {
+          console.error('Juspay status polling failed:', error);
+          const code = (error as { code?: string })?.code;
+          if (code === 'functions/permission-denied' || code === 'permission-denied') {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setJuspayOrderId(null);
+            if (!paymentWindow!.closed) paymentWindow!.close();
+            setIsProcessing(false);
+            Alert.alert('Payment session expired', 'Please start the payment again.');
+          }
+        }
+      };
 
-        void checkPayment();
-        paymentPollRef.current = setInterval(checkPayment, 2500);
+      void checkPayment();
+      paymentPollRef.current = setInterval(checkPayment, 2500);
+      return;
+    }
+
+    setPaymentUrl(paymentUrl);
+
+  } catch (error: any) {
+    if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+    console.error('[BusinessGrowth] Payment failed:', error);
+
+    // ─── Structured error handling ───
+    if (error instanceof JuspayApiError) {
+      if (error.userAction === 'retry') {
+        Alert.alert(
+          'Payment Gateway Busy',
+          error.message,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => setIsProcessing(false) },
+            {
+              text: 'Retry',
+              onPress: () => {
+                setIsProcessing(false);
+                setTimeout(() => void handlePayNow(), 400);
+              },
+            },
+          ]
+        );
         return;
       }
-      setPaymentUrl(paymentUrl);
-
-    } catch (error: any) {
-      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-      console.error(error);
-      Alert.alert("Error", error.message || "Could not initialize payment. Try again.");
+      if (error.userAction === 'new_order_id') {
+        setIsProcessing(false);
+        Alert.alert(
+          'Order Already Exists',
+          'Please try again — a new order will be created.'
+        );
+        return;
+      }
+      if (error.userAction === 'contact_support') {
+        setIsProcessing(false);
+        Alert.alert('Payment Unavailable', error.message);
+        return;
+      }
       setIsProcessing(false);
+      Alert.alert('Error', error.message);
+      return;
     }
-  };
+
+    setIsProcessing(false);
+    Alert.alert('Error', error?.message || 'Could not initialize payment. Try again.');
+  }
+};
 
   const completePayment = async (tier: string, expiry: string) => {
     if (!user) return;

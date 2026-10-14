@@ -70,4 +70,11 @@ export type RootStackParamList = {
   ManageChemicals: undefined;
   OrderHistory: undefined;
   CommerceHub: undefined;
+
+  OrderRefund: {
+    orderId: string;
+    effectiveAmount: number;
+    amountRefunded?: number;
+    customerId?: string;
+  };
 };

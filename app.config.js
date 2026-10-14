@@ -1,10 +1,11 @@
+// File: app.config.js
 import { withAndroidManifest } from '@expo/config-plugins';
 
 // 👇 CUSTOM PLUGIN TO FIX ANDROID 11+ UPI PACKAGE VISIBILITY (Android only)
 const withUPIIntents = (config) => {
   return withAndroidManifest(config, async (config) => {
     const androidManifest = config.modResults;
-    
+
     // Ensure the queries array exists
     if (!androidManifest.manifest.queries) {
       androidManifest.manifest.queries = [];
@@ -42,14 +43,14 @@ export default ({ config }) => {
     name: "Prochem Marketplace",
     slug: "prochem-app",
     version: "2.1.2",
-    
+
     scheme: "prochem", // Deep link scheme
-    
+
     orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     newArchEnabled: true,
-    
+
     // EAS Update configuration
     updates: {
       url: "https://u.expo.dev/7a075ff7-f9b3-47cf-ab49-523d173d19ae"
@@ -68,7 +69,7 @@ export default ({ config }) => {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.prochemapp.prochem", // Must match your App ID in Apple Developer
-      
+
       // Firebase iOS config file (must be placed in the project root)
       googleServicesFile: "./GoogleService-Info.plist",
 
@@ -76,7 +77,7 @@ export default ({ config }) => {
       associatedDomains: [
         "applinks:app.prochemapp.com"
       ],
-      
+
       // Allow iOS to open external UPI payment apps
       infoPlist: {
         LSApplicationQueriesSchemes: [
@@ -86,7 +87,7 @@ export default ({ config }) => {
           "bhim",     // BHIM
           "upi"       // Generic UPI
         ],
-        // ✅ ADDED: Encryption exemption declaration
+        // ✅ Encryption exemption declaration
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -103,7 +104,7 @@ export default ({ config }) => {
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       compileSdkVersion: 34,
       targetSdkVersion: 34,
-      
+
       intentFilters: [
         // Handle UPI schemes (Android)
         {
@@ -132,10 +133,19 @@ export default ({ config }) => {
       favicon: "./assets/favicon.png"
     },
 
+    // ─────────────────────────────────────────────────────────────
+    // 💳 EXTRA (runtime config + Juspay Hypercheckout SDK)
+    // ─────────────────────────────────────────────────────────────
     extra: {
+      // ✅ Required by hyper-sdk-expo-plugin during prebuild
+      //    Plugin reads this and injects it into native Android/iOS code.
+      clientId: process.env.EXPO_PUBLIC_JUSPAY_CLIENT_ID || "",
+
       eas: {
         projectId: "7a075ff7-f9b3-47cf-ab49-523d173d19ae"
       },
+
+      // Existing Juspay config used at runtime by your app code
       juspay: {
         merchantId: process.env.EXPO_PUBLIC_JUSPAY_MERCHANT_ID || "",
         clientId: process.env.EXPO_PUBLIC_JUSPAY_CLIENT_ID || "",
@@ -144,7 +154,9 @@ export default ({ config }) => {
       }
     },
 
-    // Plugins – important for Firebase and static frameworks
+    // ─────────────────────────────────────────────────────────────
+    // 🔌 PLUGINS
+    // ─────────────────────────────────────────────────────────────
     plugins: [
       "@react-native-firebase/app",
       [
@@ -159,7 +171,9 @@ export default ({ config }) => {
             ],
           }
         }
-      ]
+      ],
+      // 💳 Juspay Hypercheckout SDK — injects native code during prebuild
+      "hyper-sdk-expo-plugin"
     ]
   };
 

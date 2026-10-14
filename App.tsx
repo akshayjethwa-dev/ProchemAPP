@@ -1,5 +1,5 @@
 // File: App.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Platform, View, StyleSheet, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,8 +11,8 @@ import Constants from 'expo-constants';
 
 // 🚀 Firebase Auth & Firestore
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
-import { db } from './src/config/firebase'; 
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from './src/config/firebase';
 
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useAppStore } from './src/store/appStore';
@@ -20,49 +20,55 @@ import { useAppStore } from './src/store/appStore';
 // 🎨 Import unified internal theme
 import { theme as internalTheme } from './src/theme';
 
+// 💳 Hypercheckout SDK bootstrap (Stage 1 – App load)
+import {
+  initiateHyperSdk,
+  registerHyperCallbackHandler,
+  unregisterHyperCallbackHandler,
+} from './src/services/hyperSdk';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true, 
-    shouldPlaySound: true, 
-    shouldSetBadge: true,  
-    shouldShowBanner: true, 
-    shouldShowList: true,   
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
 // 🛠 Map internal semantic typography to React Native Paper's variants
 const fontConfig = {
-  headlineMedium: { 
-    fontSize: internalTheme.typography.sizes.pageTitle, 
-    fontWeight: internalTheme.typography.weights.bold 
+  headlineMedium: {
+    fontSize: internalTheme.typography.sizes.pageTitle,
+    fontWeight: internalTheme.typography.weights.bold,
   },
-  displayLarge: { 
-    fontSize: internalTheme.typography.sizes.pageTitle, 
-    fontWeight: internalTheme.typography.weights.bold 
+  displayLarge: {
+    fontSize: internalTheme.typography.sizes.pageTitle,
+    fontWeight: internalTheme.typography.weights.bold,
   },
-  titleLarge: { 
-    fontSize: internalTheme.typography.sizes.sectionTitle, 
-    fontWeight: internalTheme.typography.weights.semiBold 
+  titleLarge: {
+    fontSize: internalTheme.typography.sizes.sectionTitle,
+    fontWeight: internalTheme.typography.weights.semiBold,
   },
-  bodyLarge: { 
-    fontSize: internalTheme.typography.sizes.bodyLarge, 
-    fontWeight: internalTheme.typography.weights.regular 
+  bodyLarge: {
+    fontSize: internalTheme.typography.sizes.bodyLarge,
+    fontWeight: internalTheme.typography.weights.regular,
   },
-  bodyMedium: { 
-    fontSize: internalTheme.typography.sizes.body, 
-    fontWeight: internalTheme.typography.weights.regular 
+  bodyMedium: {
+    fontSize: internalTheme.typography.sizes.body,
+    fontWeight: internalTheme.typography.weights.regular,
   },
-  labelLarge: { 
-    fontSize: internalTheme.typography.sizes.label, 
-    fontWeight: internalTheme.typography.weights.medium 
+  labelLarge: {
+    fontSize: internalTheme.typography.sizes.label,
+    fontWeight: internalTheme.typography.weights.medium,
   },
-  bodySmall: { 
-    fontSize: internalTheme.typography.sizes.caption, 
-    fontWeight: internalTheme.typography.weights.regular 
+  bodySmall: {
+    fontSize: internalTheme.typography.sizes.caption,
+    fontWeight: internalTheme.typography.weights.regular,
   },
 };
 
-// 🎨 Merge our custom global theme with the paper font configuration
 const paperTheme = {
   ...internalTheme,
   fonts: configureFonts({ config: fontConfig }),
@@ -86,12 +92,46 @@ export default function App() {
   const [storeUrl, setStoreUrl] = useState('');
   const [checkingVersion, setCheckingVersion] = useState(true);
 
+  // 🛡 Guard: `initiate` must fire exactly once per app lifecycle to avoid JP_017
+  const sdkBootstrappedRef = useRef(false);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // 💳 STAGE 1 – Boot Hypercheckout SDK as soon as the app loads
+  // ────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (sdkBootstrappedRef.current) return;
+    sdkBootstrappedRef.current = true;
+
+    // 1. Fire-and-forget: warm up the SDK before user reaches checkout.
+    initiateHyperSdk();
+
+    // 2. Register the global callback handler for all SDK events,
+    //    including the mandatory `process_result` event.
+    //    NOTE: The heavy lifting (S2S verification, polling for PENDING_VBV,
+    //    fulfilment window handling) is now done inside hyperSdk.ts.
+    //    This callback is only for UI-level side effects.
+    registerHyperCallbackHandler((event, data) => {
+      if (event === 'process_result') {
+        console.log('[App] process_result received:', data);
+        // Optional: navigate to a processing/success/failure screen here.
+        // The actual order fulfilment logic is handled in hyperSdk.ts.
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      unregisterHyperCallbackHandler();
+    };
+  }, []);
+
   // Zustand state hydration check
   useEffect(() => {
     if (useAppStore.persist.hasHydrated()) {
       setIsHydrated(true);
     } else {
-      const unsubFinishHydration = useAppStore.persist.onFinishHydration(() => setIsHydrated(true));
+      const unsubFinishHydration = useAppStore.persist.onFinishHydration(() =>
+        setIsHydrated(true)
+      );
       return () => unsubFinishHydration();
     }
   }, []);
@@ -105,26 +145,29 @@ export default function App() {
   const setupPushNotifications = async () => {
     try {
       const token = await registerForPushNotificationsAsync();
-      
+
       if (token) {
         const auth = getAuth();
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
             try {
               await updateDoc(doc(db, 'users', user.uid), {
-                expoPushToken: token
+                expoPushToken: token,
               });
-              console.log("Push token saved to user profile!");
+              console.log('Push token saved to user profile!');
             } catch (error: any) {
-              console.warn("Failed to save push token to user (Check Firestore Rules):", error.message);
+              console.warn(
+                'Failed to save push token to user (Check Firestore Rules):',
+                error.message
+              );
             }
           }
         });
-        
+
         return () => unsubscribe();
       }
     } catch (err) {
-      console.warn("Push notification setup failed:", err);
+      console.warn('Push notification setup failed:', err);
     }
   };
 
@@ -143,25 +186,27 @@ export default function App() {
     if (Device.isDevice) {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
-      
+
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      
+
       if (finalStatus !== 'granted') {
         console.log('User denied push notification permissions!');
         return null;
       }
 
       try {
-        const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-        token = (await Notifications.getExpoPushTokenAsync({
-          projectId: projectId, 
-        })).data;
+        const projectId =
+          Constants.expoConfig?.extra?.eas?.projectId ||
+          Constants.easConfig?.projectId;
+        token = (
+          await Notifications.getExpoPushTokenAsync({ projectId })
+        ).data;
         return token;
       } catch (e) {
-        console.log("Error getting push token:", e);
+        console.log('Error getting push token:', e);
         return null;
       }
     } else {
@@ -179,37 +224,49 @@ export default function App() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const minRequiredVersion = data.minRequiredVersion;
-        
+
         if (minRequiredVersion && isVersionOlder(currentVersion, minRequiredVersion)) {
           setIsUpdateRequired(true);
           setStoreUrl(data.playStoreUrl || '');
         }
       }
     } catch (error: any) {
-      console.warn("Skipping version check (Firestore Permission Denied or Not Found):", error.message);
+      console.warn(
+        'Skipping version check (Firestore Permission Denied or Not Found):',
+        error.message
+      );
     } finally {
       setCheckingVersion(false);
     }
   };
 
   // Wait for both version check and state hydration to finish
-  if (checkingVersion || !isHydrated) return null; 
+  if (checkingVersion || !isHydrated) return null;
 
   if (isUpdateRequired) {
     return (
       <SafeAreaProvider>
         <PaperProvider theme={paperTheme}>
           <View style={styles.forceUpdateContainer}>
-            <Text variant="headlineMedium" style={styles.title}>Update Required</Text>
-            <Text variant="bodyLarge" style={styles.subtitle}>
-              A new version of Prochem is available! Please update the app to continue enjoying the latest features and security improvements.
+            <Text variant="headlineMedium" style={styles.title}>
+              Update Required
             </Text>
-            <Button 
-              mode="contained" 
-              style={{ width: '80%', paddingVertical: internalTheme.spacing.sm, borderRadius: internalTheme.radius.md }}
+            <Text variant="bodyLarge" style={styles.subtitle}>
+              A new version of Prochem is available! Please update the app to
+              continue enjoying the latest features and security improvements.
+            </Text>
+            <Button
+              mode="contained"
+              style={{
+                width: '80%',
+                paddingVertical: internalTheme.spacing.sm,
+                borderRadius: internalTheme.radius.md,
+              }}
               onPress={() => {
                 if (storeUrl) {
-                  Linking.openURL(storeUrl).catch(err => console.error("Couldn't open store url", err));
+                  Linking.openURL(storeUrl).catch((err) =>
+                    console.error("Couldn't open store url", err)
+                  );
                 }
               }}
             >
@@ -241,7 +298,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: internalTheme.colors.primary,
-    marginBottom: internalTheme.spacing.md, 
+    marginBottom: internalTheme.spacing.md,
   },
   subtitle: {
     textAlign: 'center',

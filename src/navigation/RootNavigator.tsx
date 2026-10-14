@@ -36,6 +36,9 @@ import NotificationDetailScreen from '../screens/NotificationDetailScreen';
 import KYCVerificationScreen from '../screens/KYCVerificationScreen';
 import PayLaterCreditScreen from '../screens/PayLaterCreditScreen';
 
+// 💳 Refund screen
+import OrderRefundScreen from '../screens/OrderRefundScreen';
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
@@ -49,7 +52,7 @@ export const RootNavigator = () => {
       if (initializing) setInitializing(false);
       return;
     }
-    
+
     const unsubscribe = onAuthStateChanged(auth, async (u: FirebaseUser | null) => {
       if (useAppStore.getState().adminImpersonating) {
         if (initializing) setInitializing(false);
@@ -80,10 +83,10 @@ export const RootNavigator = () => {
                 cleanUserData.subscriptionTier = 'FREE';
                 cleanUserData.subscriptionPlan = 'free';
                 cleanUserData.subscriptionStatus = 'active';
-                updateDoc(doc(db, 'users', u.uid), { 
-                  subscriptionTier: 'FREE', 
-                  subscriptionPlan: 'free', 
-                  subscriptionStatus: 'active' 
+                updateDoc(doc(db, 'users', u.uid), {
+                  subscriptionTier: 'FREE',
+                  subscriptionPlan: 'free',
+                  subscriptionStatus: 'active'
                 }).catch(() => {});
               }
               setUser({ uid: u.uid, email: u.email || '', ...cleanUserData } as any);
@@ -95,7 +98,7 @@ export const RootNavigator = () => {
             }
           } catch (error: any) {
             console.warn("Firestore access denied when fetching user:", error.message);
-            break; 
+            break;
           }
         }
 
@@ -111,7 +114,7 @@ export const RootNavigator = () => {
         if (initializing) setInitializing(false);
       }
     });
-    
+
     return () => unsubscribe();
   }, []);
 
@@ -139,16 +142,16 @@ export const RootNavigator = () => {
       )}
 
       <NavigationContainer key={adminImpersonating ? 'impersonating-mode' : 'admin-mode'}>
-        <Stack.Navigator 
-          screenOptions={{ 
+        <Stack.Navigator
+          screenOptions={{
             headerShown: false,
-            headerBackTitle: '', 
-            headerTintColor: theme.colors.textPrimary, 
-            headerShadowVisible: false, 
-            headerStyle: { backgroundColor: theme.colors.surface }, 
+            headerBackTitle: '',
+            headerTintColor: theme.colors.textPrimary,
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: theme.colors.surface },
             headerTitleStyle: { fontSize: theme.typography.sizes.bodyLarge, fontWeight: '600', color: theme.colors.textPrimary },
             headerTitleAlign: 'center',
-            animation: 'slide_from_right', 
+            animation: 'slide_from_right',
             animationDuration: 250,
           }}
         >
@@ -163,7 +166,7 @@ export const RootNavigator = () => {
               <Stack.Screen name="Payment" component={PaymentScreen} />
               <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
               <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
-              <Stack.Screen name="AboutProchem" component={AboutProchemScreen} /> 
+              <Stack.Screen name="AboutProchem" component={AboutProchemScreen} />
             </Stack.Group>
           ) : user.subscriptionTier === 'PENDING_PAYMENT' ? (
             <Stack.Group screenOptions={{ animation: 'fade' }}>
@@ -196,12 +199,12 @@ export const RootNavigator = () => {
                   <Stack.Screen name="BuyerApp" component={BuyerNavigator} />
                 </>
               )}
-              
+
               {/* ✅ ENABLE HEADER POLICY FOR FORMS/PROFILE/KYC HERE */}
               <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Identity Verification' }} />
               <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_bottom', headerShown: true, title: 'Edit Profile' }} />
               <Stack.Screen name="PayLaterCredit" component={PayLaterCreditScreen} options={{ animation: 'slide_from_bottom', headerShown: false }} />
-              
+
               <Stack.Screen name="Payment" component={PaymentScreen} />
               <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
               <Stack.Screen name="OrderTracking" component={OrderTracking} options={{ headerShown: true, title: 'Order Details' }} />
@@ -211,6 +214,13 @@ export const RootNavigator = () => {
               <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} options={{ headerShown: true, title: 'Notification' }} />
               <Stack.Screen name="LegalPages" component={LegalPagesScreen} />
               <Stack.Screen name="AboutProchem" component={AboutProchemScreen} />
+
+              {/* 💳 Refund screen */}
+              <Stack.Screen
+                name="OrderRefund"
+                component={OrderRefundScreen}
+                options={{ headerShown: true, title: 'Refunds' }}
+              />
             </Stack.Group>
           )}
         </Stack.Navigator>

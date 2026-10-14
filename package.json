@@ -43,6 +43,8 @@
     "expo-status-bar": "~3.0.9",
     "expo-updates": "~29.0.16",
     "firebase": "^12.7.0",
+    "hyper-sdk-expo-plugin": "^1.0.3",
+    "hyper-sdk-react": "^5.0.38",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
