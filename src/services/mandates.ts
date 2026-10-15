@@ -14,19 +14,42 @@ export type MandateStatus =
   | "EXPIRED"
   | string;
 
+export type MandateFrequency =
+  | "ONETIME"
+  | "DAILY"
+  | "WEEKLY"
+  | "FORTNIGHTLY"
+  | "MONTHLY"
+  | "BIMONTHLY"
+  | "QUARTERLY"
+  | "HALFYEARLY"
+  | "YEARLY"
+  | "ASPRESENTED";
+
 export interface MandateConfig {
   maxAmount: number;
-  frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY";
-  startDate?: number;  // epoch seconds
-  endDate?: number;    // epoch seconds
+  frequency: MandateFrequency;
+  /**
+   * Required for WEEKLY → YEARLY.
+   *   WEEKLY       → 1-7  (Monday = 1)
+   *   FORTNIGHTLY  → 1-16
+   *   MONTHLY+     → 1-31 (day of the month)
+   */
+  ruleValue?: number;
+  /** UNIX epoch seconds (UTC). Defaults to today at 00:00 UTC on the server. */
+  startDate?: number;
+  /** UNIX epoch seconds (UTC). Defaults to start + plan duration on the server. */
+  endDate?: number;
   amountRule?: "VARIABLE" | "FIXED";
   revokableByCustomer?: boolean;
+  blockFunds?: boolean;
 }
 
 export interface MandateDetails {
   mandate_id: string;
   status: MandateStatus;
   frequency?: string;
+  rule_value?: string;
   end_date?: string;
   start_date?: string;
   max_amount?: string;
@@ -51,6 +74,13 @@ export interface MandateExecutionResult {
   raw?: any;
 }
 
+export interface MandateSubscriptionSessionResult {
+  order_id: string;
+  sdk_payload: any;
+  payment_url: string | null;
+  mandate_requested: boolean;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Create a mandate-enabled subscription session
 // ─────────────────────────────────────────────────────────────
@@ -62,7 +92,15 @@ export async function createMandateSubscriptionSession(params: {
     phone?: string;
   };
   mandate: MandateConfig;
-}) {
+}): Promise<MandateSubscriptionSessionResult> {
+  // Client-side sanity checks (server also validates)
+  if (!params.mandate?.maxAmount || params.mandate.maxAmount < 1) {
+    throw new Error("mandate.maxAmount must be at least ₹1.");
+  }
+  if (!params.mandate?.frequency) {
+    throw new Error("mandate.frequency is required.");
+  }
+
   const functionsInstance = getFunctions(getApp(), "asia-south1");
   const createSession = httpsCallable(functionsInstance, "createJuspaySession");
 
@@ -73,12 +111,7 @@ export async function createMandateSubscriptionSession(params: {
     mandate: params.mandate,
   });
 
-  return response.data as {
-    order_id: string;
-    sdk_payload: any;
-    payment_url: string | null;
-    mandate_requested: boolean;
-  };
+  return response.data as MandateSubscriptionSessionResult;
 }
 
 // ─────────────────────────────────────────────────────────────

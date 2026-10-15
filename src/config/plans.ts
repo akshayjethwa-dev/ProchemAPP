@@ -21,7 +21,7 @@ export const SUBSCRIPTION_PLANS: Record<'basic' | 'premium_growth', PlanDetails>
   premium_growth: {
     id: 'premium_growth',
     title: 'Premium Growth Plan',
-    price: 4999,
+    price: 1,
     tier: 'GROWTH_PACKAGE',
     duration: '1 Month',
     description: 'All marketplace features plus high-volume leads, priority tools & dedicated promotion.',

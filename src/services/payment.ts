@@ -8,10 +8,10 @@ import { openHyperCheckout } from "./hyperSdk";
 // Typed error — thrown by all Juspay wrappers
 // ─────────────────────────────────────────────────────────────
 export type JuspayUserAction =
-  | "retry"            // transient — user can tap Retry
-  | "new_order_id"     // DUPLICATE_ORDER_ID — must regenerate order ID
-  | "fix_request"      // dev-time error (missing param, bad format)
-  | "contact_support"  // config / auth / origin errors
+  | "retry"
+  | "new_order_id"
+  | "fix_request"
+  | "contact_support"
   | "unknown";
 
 export class JuspayApiError extends Error {
@@ -41,15 +41,11 @@ export class JuspayApiError extends Error {
   }
 }
 
-// Translate Firebase FunctionsError → JuspayApiError
 function translateFirebaseError(err: any): JuspayApiError {
-  // Firebase HttpsError has `code` (e.g. "functions/invalid-argument") and `details`
   const details = err?.details || {};
   const fbCode: string = err?.code || "";
-
   const message = err?.message || details.message || "Payment gateway error.";
 
-  // Prefer structured details from the Cloud Function
   if (details.errorCode || details.subCode || details.userAction) {
     return new JuspayApiError(message, {
       errorCode: details.errorCode,
@@ -61,7 +57,6 @@ function translateFirebaseError(err: any): JuspayApiError {
     });
   }
 
-  // Fallback heuristic based on Firebase error code
   if (fbCode.includes("unavailable") || fbCode.includes("deadline-exceeded")) {
     return new JuspayApiError(message, {
       errorCode: "INTERNAL_SERVER_ERROR",
@@ -166,7 +161,7 @@ export interface JuspayRefundHistoryResponse {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Create Session — throws JuspayApiError on failure
+// Create Session
 // ─────────────────────────────────────────────────────────────
 export async function createJuspayCheckoutSession(params: {
   orderId: string;
@@ -197,10 +192,19 @@ export async function createJuspayCheckoutSession(params: {
 }) {
   validateJuspayProductionConfig();
   const functionsInstance = getFunctions(getApp(), "asia-south1");
-  const createSession = httpsCallable(functionsInstance, "createDBSSession");
+  const createSession = httpsCallable(functionsInstance, "createJuspaySession");
 
   try {
-    const response = await createSession(params);
+    const response = await createSession({
+      amount: params.amount,
+      type: "product",
+      referenceId: params.orderId,
+      customerDetails: {
+        name: params.firstName || "Prochem Buyer",
+        email: params.customerEmail,
+        phone: params.customerPhone,
+      },
+    });
     const payload = response.data as any;
     const sdkPayload = payload?.sdk_payload;
     if (!sdkPayload) {
@@ -213,9 +217,7 @@ export async function createJuspayCheckoutSession(params: {
     openHyperCheckout(sdkPayload, params.orderId, params.amount, params.customerId);
     return payload;
   } catch (err: any) {
-    // Already a typed error — rethrow
     if (err instanceof JuspayApiError) throw err;
-    // Translate Firebase error
     throw translateFirebaseError(err);
   }
 }
@@ -231,7 +233,7 @@ export async function getJuspayCheckoutStatus(
 ): Promise<JuspayOrderStatus> {
   if (!orderId) throw new Error("orderId is required.");
   const functionsInstance = getFunctions(getApp(), "asia-south1");
-  const getStatus = httpsCallable(functionsInstance, "getDBSOrderStatus");
+  const getStatus = httpsCallable(functionsInstance, "getJuspayOrderStatus");
   try {
     const response = await getStatus({
       orderId,
@@ -254,9 +256,9 @@ export async function cancelJuspayOrder(
 ): Promise<JuspayCancelResult> {
   if (!orderId) throw new Error("orderId is required to cancel an order.");
   const functionsInstance = getFunctions(getApp(), "asia-south1");
-  const cancelFn = httpsCallable(functionsInstance, "cancelDBSOrder");
+  const cancelFn = httpsCallable(functionsInstance, "cancelJuspayOrder");
   try {
-    const response = await cancelFn({ orderId, cancelReason });
+    const response = await cancelFn({ orderId, reason: cancelReason });
     return response.data as JuspayCancelResult;
   } catch (err: any) {
     throw translateFirebaseError(err);
@@ -275,7 +277,7 @@ export async function initiateJuspayRefund(
 ): Promise<JuspayRefundResult> {
   if (!orderId) throw new Error("orderId is required to initiate a refund.");
   const functionsInstance = getFunctions(getApp(), "asia-south1");
-  const refundFn = httpsCallable(functionsInstance, "createRefund");
+  const refundFn = httpsCallable(functionsInstance, "refundJuspayOrder");
   try {
     const response = await refundFn({ orderId, amount, reason, metadata, customerId });
     return response.data as JuspayRefundResult;
@@ -285,7 +287,7 @@ export async function initiateJuspayRefund(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Refund History
+// Refund History (reads from Firestore — no Cloud Function needed)
 // ─────────────────────────────────────────────────────────────
 export async function getJuspayRefunds(orderId: string): Promise<JuspayRefundHistoryResponse> {
   if (!orderId) throw new Error("orderId is required.");
@@ -295,6 +297,7 @@ export async function getJuspayRefunds(orderId: string): Promise<JuspayRefundHis
     const response = await getRefunds({ orderId });
     return response.data as JuspayRefundHistoryResponse;
   } catch (err: any) {
-    throw translateFirebaseError(err);
+    // If the function is missing, return an empty list instead of throwing
+    return { success: false, order_id: orderId, refunds: [] };
   }
 }

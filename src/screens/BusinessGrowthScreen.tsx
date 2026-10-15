@@ -1,5 +1,4 @@
 // src/screens/BusinessGrowthScreen.tsx
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, ScrollView, StyleSheet, TouchableOpacity, Dimensions,
@@ -9,7 +8,7 @@ import {
 import { WebView } from 'react-native-webview';
 import {
   Text, Card, Button, useTheme, Surface, Avatar, Chip,
-  Portal, Modal, TextInput
+  Portal, Modal, TextInput, Switch
 } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -23,29 +22,41 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { Product } from '../types';
-import { JuspayApiError } from "../services/payment";
+import { JuspayApiError } from '../services/payment';
+import { createMandateSubscriptionSession } from '../services/mandates';
 
 const { width } = Dimensions.get('window');
-const WHATSAPP_NUMBER = '917984856652'; 
+const WHATSAPP_NUMBER = '917984856652';
 
 const PLANS = {
   standard: {
     key: 'standard',
     title: 'Standard Plan',
-    amount: '50',
-    amountRaw: 50,
+    amount: '100',
+    amountRaw: 1,
     duration: '1 Year',
     description: 'Perfect for businesses looking to scale their sourcing and sales.',
-    highlights: ['Access to verified buyers & sellers', 'Live market leads', 'Ready-to-dispatch inventory', 'Full Prochem team support'],
+    highlights: [
+      'Access to verified buyers & sellers',
+      'Live market leads',
+      'Ready-to-dispatch inventory',
+      'Full Prochem team support',
+    ],
   },
   growth: {
     key: 'growth',
     title: '3-Year Growth Plan',
-    amount: '1,00,000',
-    amountRaw: 100000,
+    amount: '49,999',
+    amountRaw: 49999,
     duration: '3 Years',
     description: 'Lock in the best rates and secure your platform growth long-term.',
-    highlights: ['Everything in Standard', 'Save ₹50,000 vs yearly', 'Priority market leads', 'WhatsApp & Email promotion', 'Dedicated account manager'],
+    highlights: [
+      'Everything in Standard',
+      'Priority market leads',
+      'WhatsApp & Email promotion',
+      'Dedicated account manager',
+      'Best value for long-term users',
+    ],
   },
 };
 
@@ -57,7 +68,7 @@ export default function BusinessGrowthScreen() {
 }
 
 // ==========================================
-// 🌟 COMBINED PREMIUM HUB (With Tabs)
+// 🌟 COMBINED PREMIUM HUB
 // ==========================================
 function PremiumHubCombined() {
   const { viewMode } = useAppStore();
@@ -343,7 +354,7 @@ function PremiumSellerHubContent() {
 }
 
 // ==========================================
-// 3. UPGRADE PAYMENT MODAL (Juspay HyperCheckout)
+// 3. UPGRADE PAYMENT MODAL (Clean Production)
 // ==========================================
 function UpgradePaymentModal({
   visible,
@@ -359,6 +370,7 @@ function UpgradePaymentModal({
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [juspayOrderId, setJuspayOrderId] = useState<string | null>(null);
   const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [autoPayEnabled, setAutoPayEnabled] = useState(true);
 
   useEffect(() => {
     return () => {
@@ -369,143 +381,150 @@ function UpgradePaymentModal({
   if (!plan) return null;
 
   const handlePayNow = async () => {
-  if (!user) return;
+    if (!user) return;
 
-  const paymentWindow = Platform.OS === 'web'
-    ? window.open('', '_blank', 'width=480,height=800')
-    : null;
-  if (Platform.OS === 'web' && !paymentWindow) {
-    Alert.alert('Popup blocked', 'Please allow pop-ups for Prochem to open Juspay checkout.');
-    return;
-  }
+    const paymentWindow = Platform.OS === 'web'
+      ? window.open('', '_blank', 'width=480,height=800')
+      : null;
+    if (Platform.OS === 'web' && !paymentWindow) {
+      Alert.alert('Popup blocked', 'Please allow pop-ups for Prochem to open Juspay checkout.');
+      return;
+    }
 
-  try {
-    setIsProcessing(true);
+    try {
+      setIsProcessing(true);
 
-    const app = getApp();
-    const functions = getFunctions(app, 'asia-south1');
-    const createJuspaySession = httpsCallable(functions, 'createJuspaySession');
+      let safePhone = user?.phoneNumber || user?.phone || "9876543210";
+      safePhone = safePhone.replace(/[^0-9]/g, '');
+      if (safePhone.length > 10) safePhone = safePhone.slice(-10);
+      if (safePhone.length < 10) safePhone = "9876543210";
 
-    let safePhone = user?.phoneNumber || user?.phone || "9876543210";
-    safePhone = safePhone.replace(/[^0-9]/g, '');
-    if (safePhone.length > 10) safePhone = safePhone.slice(-10);
-    if (safePhone.length < 10) safePhone = "9876543210";
-
-    const response: any = await createJuspaySession({
-      amount: plan.amountRaw,
-      type: 'subscription',
-      referenceId: plan.key,
-      customerDetails: {
+      const customerDetails = {
         name: user?.companyName || user?.businessName || 'Prochem User',
         email: user?.email || 'user@prochem.in',
-        phone: safePhone
-      }
-    });
-
-    const paymentUrl = response.data?.payment_url;
-    const orderId = response.data?.order_id;
-
-    if (!paymentUrl || !orderId) {
-      throw new Error("Could not retrieve Juspay payment session.");
-    }
-
-    setJuspayOrderId(orderId);
-
-    if (Platform.OS === 'web') {
-      paymentWindow!.location.href = paymentUrl;
-
-      const checkPayment = async () => {
-        try {
-          const statusResponse: any = await httpsCallable(
-            getFunctions(getApp(), 'asia-south1'),
-            'getJuspayOrderStatus'
-          )({ orderId });
-
-          const status = String(statusResponse.data?.status || '').toUpperCase();
-          if (status === 'CHARGED' || ['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
-            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-            setJuspayOrderId(null);
-            if (status === 'CHARGED') {
-              const session = statusResponse.data?.session;
-              if (!session?.planTier || !session?.subscriptionExpiry) {
-                throw new Error('Payment charged, but subscription details not yet available.');
-              }
-              await completePayment(session.planTier, session.subscriptionExpiry);
-            } else {
-              setIsProcessing(false);
-              Alert.alert('Payment not completed', `Juspay status: ${status}`);
-            }
-          }
-          if (paymentWindow!.closed && status !== 'CHARGED' && !['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
-            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-            setJuspayOrderId(null);
-            setIsProcessing(false);
-          }
-        } catch (error) {
-          console.error('Juspay status polling failed:', error);
-          const code = (error as { code?: string })?.code;
-          if (code === 'functions/permission-denied' || code === 'permission-denied') {
-            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-            setJuspayOrderId(null);
-            if (!paymentWindow!.closed) paymentWindow!.close();
-            setIsProcessing(false);
-            Alert.alert('Payment session expired', 'Please start the payment again.');
-          }
-        }
+        phone: safePhone,
       };
 
-      void checkPayment();
-      paymentPollRef.current = setInterval(checkPayment, 2500);
-      return;
-    }
+      // Total including 18% GST
+      const baseAmount = Number(plan.amountRaw);
+      const totalWithGst = Math.round(baseAmount * 1.18);
 
-    setPaymentUrl(paymentUrl);
+      let paymentUrlFromServer: string | null = null;
+      let orderIdFromServer: string | null = null;
 
-  } catch (error: any) {
-    if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-    console.error('[BusinessGrowth] Payment failed:', error);
+      if (autoPayEnabled) {
+        // AUTO-PAY via MONTHLY mandate
+        const result = await createMandateSubscriptionSession({
+          planKey: plan.key,
+          customerDetails,
+          mandate: {
+            maxAmount: totalWithGst,
+            frequency: 'MONTHLY',
+            ruleValue: 1,
+            amountRule: 'VARIABLE',
+            revokableByCustomer: true,
+          },
+        });
+        paymentUrlFromServer = result.payment_url;
+        orderIdFromServer = result.order_id;
+      } else {
+        // One-time payment
+        const functions = getFunctions(getApp(), 'asia-south1');
+        const createJuspaySession = httpsCallable(functions, 'createJuspaySession');
+        const response: any = await createJuspaySession({
+          amount: totalWithGst,
+          type: 'subscription',
+          referenceId: plan.key,
+          customerDetails,
+        });
+        paymentUrlFromServer = response.data?.payment_url;
+        orderIdFromServer = response.data?.order_id;
+      }
 
-    // ─── Structured error handling ───
-    if (error instanceof JuspayApiError) {
-      if (error.userAction === 'retry') {
-        Alert.alert(
-          'Payment Gateway Busy',
-          error.message,
-          [
-            { text: 'Cancel', style: 'cancel', onPress: () => setIsProcessing(false) },
-            {
-              text: 'Retry',
-              onPress: () => {
+      if (!paymentUrlFromServer || !orderIdFromServer) {
+        throw new Error("Could not retrieve Juspay payment session.");
+      }
+
+      setJuspayOrderId(orderIdFromServer);
+
+      if (Platform.OS === 'web') {
+        paymentWindow!.location.href = paymentUrlFromServer;
+
+        const checkPayment = async () => {
+          try {
+            const statusResponse: any = await httpsCallable(
+              getFunctions(getApp(), 'asia-south1'),
+              'getJuspayOrderStatus'
+            )({ orderId: orderIdFromServer });
+
+            const status = String(statusResponse.data?.status || '').toUpperCase();
+            if (status === 'CHARGED' || ['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
+              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+              setJuspayOrderId(null);
+              if (status === 'CHARGED') {
+                const session = statusResponse.data?.session;
+                if (!session?.planTier || !session?.subscriptionExpiry) {
+                  throw new Error('Payment is charged, but subscription details are not available yet.');
+                }
+                await completePayment(session.planTier, session.subscriptionExpiry);
+              } else {
                 setIsProcessing(false);
-                setTimeout(() => void handlePayNow(), 400);
-              },
-            },
-          ]
-        );
-        return;
-      }
-      if (error.userAction === 'new_order_id') {
-        setIsProcessing(false);
-        Alert.alert(
-          'Order Already Exists',
-          'Please try again — a new order will be created.'
-        );
-        return;
-      }
-      if (error.userAction === 'contact_support') {
-        setIsProcessing(false);
-        Alert.alert('Payment Unavailable', error.message);
-        return;
-      }
-      setIsProcessing(false);
-      Alert.alert('Error', error.message);
-      return;
-    }
+                Alert.alert('Payment not completed', `Juspay status: ${status}`);
+              }
+            }
+            if (paymentWindow!.closed && status !== 'CHARGED' && !['FAILED', 'DECLINED', 'CANCELLED'].includes(status)) {
+              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+              setJuspayOrderId(null);
+              setIsProcessing(false);
+            }
+          } catch (error) {
+            console.error('Juspay status polling failed:', error);
+            const code = (error as { code?: string })?.code;
+            if (code === 'functions/permission-denied' || code === 'permission-denied') {
+              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+              setJuspayOrderId(null);
+              if (!paymentWindow!.closed) paymentWindow!.close();
+              setIsProcessing(false);
+              Alert.alert('Payment session expired', 'Please start the payment again.');
+            }
+          }
+        };
 
-    setIsProcessing(false);
-    Alert.alert('Error', error?.message || 'Could not initialize payment. Try again.');
-  }
-};
+        void checkPayment();
+        paymentPollRef.current = setInterval(checkPayment, 2500);
+        return;
+      }
+
+      setPaymentUrl(paymentUrlFromServer);
+
+    } catch (error: any) {
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+      console.error('[BusinessGrowth] Payment failed:', error);
+      setIsProcessing(false);
+
+      if (error instanceof JuspayApiError) {
+        if (error.userAction === 'retry') {
+          Alert.alert('Payment Gateway Busy', error.message, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Retry', onPress: () => setTimeout(() => void handlePayNow(), 400) },
+          ]);
+          return;
+        }
+        if (error.userAction === 'new_order_id') {
+          Alert.alert('Order Already Exists', 'Please try again — a new order will be created.');
+          return;
+        }
+        if (error.userAction === 'contact_support') {
+          Alert.alert('Auto-Pay Unavailable', error.message);
+          return;
+        }
+        Alert.alert('Error', error.message);
+        return;
+      }
+
+      Alert.alert("Error", error.message || "Could not initialize payment. Try again.");
+    }
+  };
 
   const completePayment = async (tier: string, expiry: string) => {
     if (!user) return;
@@ -514,7 +533,12 @@ function UpgradePaymentModal({
       subscriptionPlan: plan?.key,
       subscriptionExpiry: expiry,
     });
-    Alert.alert('Payment Successful!', 'Welcome to the Premium Hub. Your features are now unlocked!');
+    Alert.alert(
+      'Payment Successful!',
+      autoPayEnabled
+        ? 'Welcome to the Premium Hub. Auto-renewal is now active — your plan will renew monthly.'
+        : 'Welcome to the Premium Hub. Your features are now unlocked!'
+    );
     setIsProcessing(false);
     onClose();
   };
@@ -532,7 +556,6 @@ function UpgradePaymentModal({
         Alert.alert('Payment not completed', `Juspay status: ${response.data?.status || 'PENDING'}`);
         return;
       }
-
       const session = response.data?.session;
       if (!session?.planTier || !session?.subscriptionExpiry) {
         throw new Error('Payment is charged, but subscription details are not available yet.');
@@ -549,13 +572,9 @@ function UpgradePaymentModal({
     const userName = user?.companyName || user?.businessName || 'User';
     const userEmail = user?.email || 'N/A';
     const phone = user?.phone || 'N/A';
-    
     const message = `Hi Prochem Team,\n\nI need help with upgrading to the *${plan.title}*.\n\nUser ID: ${userId}\nName: ${userName}\nEmail: ${userEmail}\nPhone: ${phone}`;
-    
     const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
-    Linking.openURL(whatsappUrl).catch(() =>
-      Alert.alert('Error', 'Could not open WhatsApp.')
-    );
+    Linking.openURL(whatsappUrl).catch(() => Alert.alert('Error', 'Could not open WhatsApp.'));
   };
 
   return (
@@ -592,6 +611,30 @@ function UpgradePaymentModal({
               ))}
             </View>
 
+            <View style={upgradeStyles.autoPayBox}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <Text style={upgradeStyles.autoPayTitle}>Enable Auto-Renewal</Text>
+                  <Text style={upgradeStyles.autoPayDesc}>
+                    Your plan will renew automatically every month. You can pause or cancel anytime from your bank's UPI app or the Prochem app.
+                  </Text>
+                </View>
+                <Switch
+                  value={autoPayEnabled}
+                  onValueChange={setAutoPayEnabled}
+                  color="#004AAD"
+                />
+              </View>
+              {autoPayEnabled && (
+                <View style={upgradeStyles.autoPayBadge}>
+                  <MaterialCommunityIcons name="autorenew" size={14} color="#16A34A" />
+                  <Text style={upgradeStyles.autoPayBadgeText}>
+                    Monthly renewal • Cancel anytime
+                  </Text>
+                </View>
+              )}
+            </View>
+
             <View style={upgradeStyles.noteBox}>
               <MaterialCommunityIcons name="information-outline" size={18} color="#004AAD" style={{ marginTop: 2 }} />
               <Text style={upgradeStyles.noteText}>
@@ -601,13 +644,17 @@ function UpgradePaymentModal({
             </View>
 
             <View style={upgradeStyles.stepBox}>
-              <Text style={upgradeStyles.stepLabel}>AUTO ACTIVATION</Text>
-              <Text style={upgradeStyles.stepDescription}>
-                Pay securely online. Your Premium features will unlock instantly upon successful payment.
+              <Text style={upgradeStyles.stepLabel}>
+                {autoPayEnabled ? 'AUTO-RENEWAL' : 'ONE-TIME PAYMENT'}
               </Text>
-              <TouchableOpacity 
-                style={[upgradeStyles.payButton, isProcessing && { backgroundColor: '#64748B' }]} 
-                onPress={handlePayNow} 
+              <Text style={upgradeStyles.stepDescription}>
+                {autoPayEnabled
+                  ? 'Set up a monthly auto-debit mandate. Your Premium features unlock instantly and renew automatically each month.'
+                  : 'Pay securely online. Your Premium features will unlock instantly upon successful payment.'}
+              </Text>
+              <TouchableOpacity
+                style={[upgradeStyles.payButton, isProcessing && { backgroundColor: '#64748B' }]}
+                onPress={handlePayNow}
                 activeOpacity={0.85}
                 disabled={isProcessing}
               >
@@ -616,7 +663,9 @@ function UpgradePaymentModal({
                 ) : (
                   <>
                     <MaterialCommunityIcons name="shield-lock" size={18} color="white" style={{ marginRight: 8 }} />
-                    <Text style={upgradeStyles.payButtonText}>Pay ₹{plan.amount} Securely</Text>
+                    <Text style={upgradeStyles.payButtonText}>
+                      {autoPayEnabled ? `Set Up Auto-Pay ₹${plan.amount}` : `Pay ₹${plan.amount} Securely`}
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -668,7 +717,7 @@ function SalesPitchUI() {
   const [activeTab, setActiveTab] = useState<'buyers' | 'sellers'>('buyers');
   const [selectedPlan, setSelectedPlan] = useState<keyof typeof PLANS | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [showTnCModal, setShowTnCModal] = useState(false); 
+  const [showTnCModal, setShowTnCModal] = useState(false);
 
   const buyerFeatures = [
     { title: 'Compare products with 5+ verified companies', isReady: true },
@@ -803,7 +852,7 @@ function SalesPitchUI() {
                 </View>
                 <View style={styles.priceRow}>
                   <Text style={styles.priceSymbol}>₹</Text>
-                  <Text style={styles.priceAmount}>50,000</Text>
+                  <Text style={styles.priceAmount}>4,999</Text>
                   <Text style={styles.priceDuration}>/ Year</Text>
                 </View>
                 <Text style={styles.planDescription}>
@@ -827,7 +876,7 @@ function SalesPitchUI() {
             >
               <View style={styles.bestValueBanner}>
                 <MaterialCommunityIcons name="star" size={14} color="#78350F" style={{ marginRight: 4 }} />
-                <Text style={styles.bestValueText}>BEST VALUE — SAVE ₹50,000</Text>
+                <Text style={styles.bestValueText}>BEST VALUE — SAVE 50,000+</Text>
               </View>
               <Card.Content style={styles.pricingCardContent}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -841,7 +890,7 @@ function SalesPitchUI() {
                 </View>
                 <View style={styles.priceRow}>
                   <Text style={styles.priceSymbol}>₹</Text>
-                  <Text style={styles.priceAmount}>1,00,000</Text>
+                  <Text style={styles.priceAmount}>49,999</Text>
                   <Text style={styles.priceDuration}>/ 3 Years</Text>
                 </View>
                 <Text style={styles.planDescription}>
@@ -927,7 +976,6 @@ function SalesPitchUI() {
           </Button>
         </Modal>
       </Portal>
-
     </SafeAreaView>
   );
 }
@@ -1010,4 +1058,9 @@ const upgradeStyles = StyleSheet.create({
   radioInner: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#004AAD' },
   paymentModal: { flex: 1, paddingTop: 35, backgroundColor: 'white' },
   paymentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
+  autoPayBox: { backgroundColor: '#F0FDF4', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#86EFAC' },
+  autoPayTitle: { fontSize: 15, fontWeight: '700', color: '#166534', marginBottom: 4 },
+  autoPayDesc: { fontSize: 12, color: '#4B5563', lineHeight: 16 },
+  autoPayBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 10, backgroundColor: 'white', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
+  autoPayBadgeText: { fontSize: 11, color: '#16A34A', fontWeight: '600', marginLeft: 4 },
 });

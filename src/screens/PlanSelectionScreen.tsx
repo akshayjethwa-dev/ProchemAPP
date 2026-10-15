@@ -10,7 +10,7 @@ import {
   Alert,
   StatusBar,
 } from 'react-native';
-import { Text, Surface, Button, useTheme, IconButton } from 'react-native-paper';
+import { Text, Surface, Button, useTheme, IconButton, Switch } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -34,6 +34,9 @@ export default function PlanSelectionScreen() {
   const [selectedPlanKey, setSelectedPlanKey] = useState<'basic' | 'premium_growth'>('basic');
   const [loading, setLoading] = useState(false);
 
+  // ✅ AUTO-PAY ON BY DEFAULT — carried forward to Payment screen
+  const [autoPayEnabled, setAutoPayEnabled] = useState(true);
+
   const selectedPlan: PlanDetails = SUBSCRIPTION_PLANS[selectedPlanKey];
 
   const handleProceed = async () => {
@@ -52,10 +55,21 @@ export default function PlanSelectionScreen() {
       phoneNumber: fullMobile,
       selectedPlan,
       subscriptionPlan: selectedPlan.id,
+      // ✅ Carry the auto-pay preference forward so the Payment screen
+      //    knows to create a mandate (subscription_autopay) instead of
+      //    a one-time payment (subscription).
+      autoPayEnabled,
+      mandateConfig: autoPayEnabled
+        ? {
+            maxAmount: selectedPlan.price,
+            frequency: 'MONTHLY' as const,
+            amountRule: 'FIXED' as const,
+            revokableByCustomer: true,
+          }
+        : null,
     };
 
     try {
-      // ✅ Updated: No longer requires passing a container ID string
       const result = await sendRealPhoneOTP(fullMobile);
 
       if (!result.success) {
@@ -81,6 +95,7 @@ export default function PlanSelectionScreen() {
         mode: 'registration',
         formData: enrichedFormData,
         selectedPlan,
+        autoPayEnabled, // ✅ Also pass as a top-level param for convenience
       });
     } catch (error: any) {
       setLoading(false);
@@ -92,8 +107,6 @@ export default function PlanSelectionScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
-      
-      {/* ✅ Removed the nativeID View that was causing React/Firebase DOM collisions */}
 
       <View style={styles.header}>
         <IconButton
@@ -245,6 +258,44 @@ export default function PlanSelectionScreen() {
           </View>
         </TouchableOpacity>
 
+        {/* ✅ AUTO-PAY TOGGLE — ON BY DEFAULT */}
+        <View style={styles.autoPayBox}>
+          <View style={styles.autoPayHeader}>
+            <View style={styles.autoPayIconWrap}>
+              <MaterialCommunityIcons name="autorenew" size={20} color="#16A34A" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.autoPayTitle}>Enable Auto-Renewal</Text>
+              <Text style={styles.autoPaySubtitle}>
+                Your plan renews automatically every month via UPI Autopay / Card Mandate. Cancel anytime from your bank app or the Prochem app.
+              </Text>
+            </View>
+            <Switch
+              value={autoPayEnabled}
+              onValueChange={setAutoPayEnabled}
+              color="#004AAD"
+            />
+          </View>
+
+          {autoPayEnabled && (
+            <View style={styles.autoPayBadge}>
+              <MaterialCommunityIcons name="check-circle" size={14} color="#16A34A" />
+              <Text style={styles.autoPayBadgeText}>
+                Monthly renewal • Pause or cancel anytime
+              </Text>
+            </View>
+          )}
+
+          {!autoPayEnabled && (
+            <View style={[styles.autoPayBadge, { backgroundColor: '#FEF3C7' }]}>
+              <MaterialCommunityIcons name="information" size={14} color="#B45309" />
+              <Text style={[styles.autoPayBadgeText, { color: '#B45309' }]}>
+                One-time payment • You'll be reminded before renewal
+              </Text>
+            </View>
+          )}
+        </View>
+
         <View style={styles.assuranceBox}>
           <MaterialCommunityIcons name="shield-check" size={24} color="#004AAD" />
           <View style={{ flex: 1, marginLeft: 12 }}>
@@ -262,6 +313,7 @@ export default function PlanSelectionScreen() {
         <View style={styles.bottomInfo}>
           <Text style={styles.bottomPlanName}>
             {selectedPlan.title}
+            {autoPayEnabled ? ' • Auto-Renew' : ''}
           </Text>
           <Text style={styles.bottomPrice}>
             ₹{selectedPlan.price.toLocaleString('en-IN')}{' '}
@@ -512,6 +564,58 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 18,
   },
+
+  // ✅ Auto-pay toggle styles
+  autoPayBox: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 4,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  autoPayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  autoPayIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  autoPayTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#166534',
+    marginBottom: 3,
+  },
+  autoPaySubtitle: {
+    fontSize: 12,
+    color: '#4B5563',
+    lineHeight: 16,
+  },
+  autoPayBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    backgroundColor: 'white',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  autoPayBadgeText: {
+    fontSize: 11,
+    color: '#16A34A',
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+
   assuranceBox: {
     flexDirection: 'row',
     alignItems: 'center',
