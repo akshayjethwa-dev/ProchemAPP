@@ -1250,10 +1250,9 @@ exports.createJuspaySession = functions
       action: useEnach ? "enach" : "paymentPage",
       return_url: returnUrl,
       description: "ProchemAPP Order",
-      options: {
-        "payment_method_type": "UPI",
-        "payment_method": "QR"
-    }
+      // Leave payment-method configuration to the Juspay client / merchant default page.
+      // This ensures the payment page reflects the options configured in the backend client ID,
+      // instead of forcing a custom QR-only flow.
     };
 
     // ✅ eNACH: override service
@@ -3286,3 +3285,7 @@ exports.runMandateAutoDebits = onSchedule(
     );
   }
 );
+
+// Alias for client compatibility — CheckoutScreen calls `createDBSSession`
+exports.createDBSSession = exports.createJuspaySession;
+exports.getDBSOrderStatus  = exports.getJuspayOrderStatus;

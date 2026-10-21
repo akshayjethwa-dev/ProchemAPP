@@ -332,32 +332,6 @@ export default function PaymentScreen() {
     }
   };
 
-  const methods: Array<{
-    key: 'UPI' | 'CARD' | 'NB';
-    icon: string;
-    title: string;
-    description: string;
-  }> = [
-    {
-      key: 'UPI',
-      icon: 'cellphone-check',
-      title: 'UPI',
-      description: 'Google Pay, PhonePe, Paytm, BHIM',
-    },
-    {
-      key: 'CARD',
-      icon: 'credit-card-outline',
-      title: 'Credit / Debit Cards',
-      description: 'Visa, Mastercard, RuPay',
-    },
-    {
-      key: 'NB',
-      icon: 'bank-outline',
-      title: 'Net Banking',
-      description: 'Corporate and personal bank accounts',
-    },
-  ];
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
@@ -461,25 +435,22 @@ export default function PaymentScreen() {
         </Surface>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          Payment methods
+          Secure payment page
         </Text>
         <Text style={styles.paymentMethodsIntro}>
-          Available methods are shown securely in Juspay checkout.
+          The available payment methods and design are driven by the configured Juspay client ID in the backend.
         </Text>
 
-        {methods.map((method) => (
-          <View key={method.key} style={styles.methodCard}>
-            <MaterialCommunityIcons
-              name={method.icon as any}
-              size={24}
-              color={theme.colors.primary}
-            />
-            <View style={styles.methodCopy}>
-              <Text style={styles.methodTitle}>{method.title}</Text>
-              <Text style={styles.methodDescription}>{method.description}</Text>
-            </View>
-          </View>
-        ))}
+        <View style={styles.defaultPaymentInfo}>
+          <MaterialCommunityIcons
+            name="credit-card-check-outline"
+            size={24}
+            color={theme.colors.primary}
+          />
+          <Text style={styles.defaultPaymentInfoText}>
+            Your secure Juspay checkout will show the default payment options configured for this merchant/client.
+          </Text>
+        </View>
 
         <View style={styles.securityNote}>
           <MaterialCommunityIcons
@@ -638,7 +609,7 @@ const styles = StyleSheet.create({
   // Methods
   sectionTitle: { marginTop: 24, marginBottom: 10, fontWeight: '700', color: '#0F172A' },
   paymentMethodsIntro: { marginBottom: 10, color: '#64748B', fontSize: 12 },
-  methodCard: {
+  defaultPaymentInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'white',
@@ -646,11 +617,15 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     borderRadius: 8,
     padding: 14,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  methodCopy: { flex: 1, marginLeft: 12 },
-  methodTitle: { fontWeight: '700', color: '#0F172A' },
-  methodDescription: { marginTop: 3, fontSize: 12, color: '#64748B' },
+  defaultPaymentInfoText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 18,
+  },
 
   // Security + Terms
   securityNote: {
