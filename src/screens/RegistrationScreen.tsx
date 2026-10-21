@@ -21,16 +21,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { checkEmailExists } from '../services/authService';
-import { setPhoneAuthSession } from '../services/phoneAuthSession';
-import { sendRealPhoneOTP, formatPhoneNumber } from '../services/phoneAuthService';
 
 type RootStackParamList = {
   Login: undefined;
   Registration: { role?: string } | undefined;
-  PlanSelection: { formData: any; role?: string };
-  OTPVerification: { mobile: string; mode: string; formData: any; webConfirmation?: any; nativeConfirmation?: any; selectedPlan?: any };
-  LegalPages: undefined; 
-  AboutProchem: undefined; 
+  PlanSelection: { formData: any; role?: string; mode?: 'login' | 'registration' };
+  OTPVerification: {
+    mobile: string;
+    mode: string;
+    formData: any;
+    webConfirmation?: any;
+    nativeConfirmation?: any;
+    selectedPlan?: any;
+  };
+  LegalPages: undefined;
+  AboutProchem: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -78,7 +83,7 @@ export default function RegistrationScreen() {
       window.alert(`${title}\n\n${message}`);
       if (onOk) onOk();
     } else {
-      Alert.alert(title, message, onOk ? [{ text: "OK", onPress: onOk }] : undefined);
+      Alert.alert(title, message, onOk ? [{ text: 'OK', onPress: onOk }] : undefined);
     }
   };
 
@@ -92,19 +97,19 @@ export default function RegistrationScreen() {
     if (!fullName.trim()) { newErrors.fullName = 'Authorized Person Name is required'; isValid = false; }
     if (!companyName.trim()) { newErrors.companyName = 'Registered Entity Name is required'; isValid = false; }
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) { newErrors.email = 'Valid corporate email required'; isValid = false; }
-    if (!countryCode.trim()) { newErrors.phoneNumber = 'Country Code is required'; isValid = false; } 
+    if (!countryCode.trim()) { newErrors.phoneNumber = 'Country Code is required'; isValid = false; }
     else if (!phoneNumber.trim() || phoneNumber.length !== 10) { newErrors.phoneNumber = 'Valid 10-digit mobile number required'; isValid = false; }
-    
+
     const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$/;
-    if (!gstin) { newErrors.gstin = 'GSTIN is required for tax invoicing'; isValid = false; } 
+    if (!gstin) { newErrors.gstin = 'GSTIN is required for tax invoicing'; isValid = false; }
     else if (!gstRegex.test(gstin.toUpperCase())) { newErrors.gstin = 'Invalid GST format (e.g. 24AAAAA0000A1Z5)'; isValid = false; }
 
-    if (!password) { newErrors.password = 'Password is required'; isValid = false; } 
+    if (!password) { newErrors.password = 'Password is required'; isValid = false; }
     else if (!isPasswordValid) { newErrors.password = 'Please meet all security requirements.'; isValid = false; }
 
-    if (!confirmPassword) { newErrors.confirmPassword = 'Confirm Password is required'; isValid = false; } 
+    if (!confirmPassword) { newErrors.confirmPassword = 'Confirm Password is required'; isValid = false; }
     else if (password !== confirmPassword) { newErrors.confirmPassword = 'Passwords do not match'; isValid = false; }
-    
+
     if (!acceptTerms) { newErrors.terms = 'You must accept the Terms & Conditions and Privacy Policy'; isValid = false; }
 
     setErrors(newErrors);
@@ -113,7 +118,7 @@ export default function RegistrationScreen() {
 
   const handleRegisterOTP = async () => {
     if (!validate()) {
-      if (!acceptTerms) showAlert("Terms Required", "Please accept the Terms & Conditions to proceed.");
+      if (!acceptTerms) showAlert('Terms Required', 'Please accept the Terms & Conditions to proceed.');
       return;
     }
 
@@ -121,19 +126,23 @@ export default function RegistrationScreen() {
     try {
       const emailExists = await checkEmailExists(email.trim());
       if (emailExists) {
-        setErrors(prev => ({ ...prev, email: 'This email is already registered.' }));
+        setErrors((prev) => ({ ...prev, email: 'This email is already registered.' }));
         setLoading(false);
         return;
       }
 
-      const fullMobile = formatPhoneNumber(`${countryCode.trim()}${phoneNumber.trim()}`);
+      // ✅ Build the registration payload.
+      //    NOTE: `phoneNumber` is stored as the RAW 10-digit string.
+      //    PlanSelectionScreen will call formatPhoneNumber() exactly once
+      //    when it dispatches the OTP — this prevents double-formatting
+      //    ("+91+919876543210") which would break SMS delivery.
       const formData = {
         fullName: fullName.trim(),
         email: email.trim(),
         password,
         companyName: companyName.trim(),
         countryCode: countryCode.trim(),
-        phoneNumber: fullMobile,
+        phoneNumber: phoneNumber.trim(), // raw 10 digits
         userType: role || 'buyer',
         gstin: gstin.toUpperCase(),
         whatsappOptIn,
@@ -142,29 +151,12 @@ export default function RegistrationScreen() {
         subscriptionTier: 'FREE',
       };
 
-      const result = await sendRealPhoneOTP(fullMobile);
-      if (!result.success) {
-        setLoading(false);
-        const err = result.errorMessage || 'Failed to dispatch SMS verification code.';
-        showAlert('SMS Delivery Notice', err);
-        return;
-      }
-
-      setPhoneAuthSession({
-        webConfirmation: Platform.OS === 'web' ? result.confirmationResult : undefined,
-        nativeConfirmation: Platform.OS !== 'web' ? result.confirmationResult : undefined,
-        mobile: result.formattedMobile,
+      // ✅ NEW FLOW: Registration → PlanSelection → OTPVerification → Payment
+      //    OTP is dispatched on PlanSelectionScreen, after the user chooses a plan.
+      navigation.navigate('PlanSelection', {
         formData,
-        selectedPlan: null,
+        role,
         mode: 'registration',
-      });
-
-      setLoading(false);
-      navigation.navigate('OTPVerification', {
-        mobile: result.formattedMobile,
-        mode: 'registration',
-        formData,
-        selectedPlan: null,
       });
     } catch (error: any) {
       console.error('Registration validation error:', error);
@@ -183,7 +175,7 @@ export default function RegistrationScreen() {
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
-      
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -198,16 +190,16 @@ export default function RegistrationScreen() {
           <View style={styles.headerBackground}>
             <SafeAreaView edges={['top']}>
               <View style={styles.headerTopBar}>
-                <IconButton 
-                  icon="arrow-left" 
-                  size={24} 
-                  iconColor="#FFFFFF" 
-                  onPress={() => navigation.goBack()} 
+                <IconButton
+                  icon="arrow-left"
+                  size={24}
+                  iconColor="#FFFFFF"
+                  onPress={() => navigation.goBack()}
                   style={{ margin: 0 }}
                 />
                 <View style={styles.roleHeaderBadge}>
                   <Text style={styles.roleHeaderBadgeText}>
-                    {isSellerRole ? 'USER ONBOARDING' : 'USER ONBOARDING'}
+                    STEP 1 OF 3 • {isSellerRole ? 'SUPPLIER ONBOARDING' : 'BUYER ONBOARDING'}
                   </Text>
                 </View>
               </View>
@@ -215,7 +207,7 @@ export default function RegistrationScreen() {
               <View style={styles.headerContent}>
                 <Text style={styles.headerTitle}>Create Enterprise Account</Text>
                 <Text style={styles.headerSubtitle}>
-                  {isSellerRole 
+                  {isSellerRole
                     ? 'Connect with verified chemical purchasers and receive live bulk inquiries.'
                     : 'Source certified chemicals directly from verified manufacturers across India.'}
                 </Text>
@@ -225,7 +217,7 @@ export default function RegistrationScreen() {
 
           {/* Form Card */}
           <View style={styles.formCard}>
-            
+
             {/* Section 1: Business Identity */}
             <View style={styles.sectionBlock}>
               <View style={styles.sectionHeaderRow}>
@@ -506,7 +498,7 @@ export default function RegistrationScreen() {
               activeOpacity={0.88}
             >
               <Text style={styles.submitButtonText}>
-                {loading ? 'Transmitting OTP...' : 'Verify Phone via OTP & Register →'}
+                {loading ? 'Validating Account...' : 'Continue to Plan Selection →'}
               </Text>
             </TouchableOpacity>
 

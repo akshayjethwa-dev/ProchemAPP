@@ -1,16 +1,15 @@
 // File: src/screens/MobileLoginScreen.tsx
 import React, { useState } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
-  Platform, 
-  Image, 
-  Alert, 
-  ScrollView, 
-  TouchableOpacity 
+import {
+  View,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ScrollView,
+  TouchableOpacity,
 } from 'react-native';
-import { Text, TextInput, Button, HelperText, IconButton } from 'react-native-paper';
+import { Text, TextInput, HelperText, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -25,8 +24,11 @@ export default function MobileLoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [phone, setPhone] = useState('');
+  const [selectedPlanKey, setSelectedPlanKey] = useState<'basic' | 'premium_growth'>('basic');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const selectedPlan: PlanDetails = SUBSCRIPTION_PLANS[selectedPlanKey];
 
   const handleSendOTP = async () => {
     setError('');
@@ -50,20 +52,23 @@ export default function MobileLoginScreen() {
         return;
       }
 
+      // ✅ mode: 'login' → OTPVerification uses processMobileLogin (handles
+      //    BOTH new signup and existing login via the isNewUser flag).
+      //    selectedPlan is captured here so a new user can go straight to Payment.
       setPhoneAuthSession({
         webConfirmation: Platform.OS === 'web' ? result.confirmationResult : undefined,
         nativeConfirmation: Platform.OS !== 'web' ? result.confirmationResult : undefined,
         mobile: result.formattedMobile,
-        selectedPlan: null,
+        selectedPlan,
         mode: 'login',
       });
 
       setLoading(false);
 
-      navigation.navigate('OTPVerification', { 
-        mobile: result.formattedMobile, 
+      navigation.navigate('OTPVerification', {
+        mobile: result.formattedMobile,
         mode: 'login',
-        selectedPlan: null,
+        selectedPlan,
       });
     } catch (err: any) {
       setLoading(false);
@@ -75,240 +80,381 @@ export default function MobileLoginScreen() {
   };
 
   return (
-    <View style={styles.mainContainer}>
-      <SafeAreaView edges={['top']} style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-      </SafeAreaView>
+    <SafeAreaView style={styles.mainContainer} edges={['top', 'bottom']}>
+      {/* Executive Header */}
+      <View style={styles.header}>
+        <IconButton
+          icon="arrow-left"
+          size={24}
+          iconColor="#FFFFFF"
+          onPress={() => navigation.goBack()}
+          style={{ margin: 0 }}
+        />
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.headerTitle}>Mobile Access & Membership</Text>
+          <Text style={styles.headerSubtitle}>ONE-TAP SMS LOGIN</Text>
+        </View>
+        <View style={styles.headerStep}>
+          <Text style={styles.headerStepText}>Fast Access</Text>
+        </View>
+      </View>
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent} 
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Image 
-            source={require('../../assets/logo.png')} 
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text variant="headlineMedium" style={styles.title}>Continue with Mobile</Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
-            Enter your 10-digit mobile number to receive an SMS verification code and access your free account.
-          </Text>
+          {/* Card: Mobile Input */}
+          <View style={styles.inputCard}>
+            <Text style={styles.cardHeaderTitle}>Enter Registered Mobile Number</Text>
+            <Text style={styles.cardHeaderSubtitle}>
+              We'll send a 6-digit verification code to confirm your corporate account.
+            </Text>
 
-          {/* Phone Input */}
-          <Text style={styles.fieldLabel}>Mobile Number</Text>
-          <TextInput
-            placeholder="Enter 10-digit number"
-            value={phone}
-            onChangeText={(text) => {
-              setPhone(text.replace(/[^0-9]/g, ''));
-              setError('');
-            }}
-            mode="outlined"
-            keyboardType="phone-pad"
-            maxLength={10}
-            style={styles.input}
-            outlineStyle={styles.inputOutline}
-            left={<TextInput.Affix text="+91 " />}
-            error={!!error}
-          />
-
-          {error ? (
-            <HelperText type="error" visible={!!error} style={styles.errorText}>
-              {error}
-            </HelperText>
-          ) : null}
-
-          {/* Free Plan Benefit Banner */}
-          <View style={styles.freePlanBanner}>
-            <MaterialCommunityIcons name="check-decagram" size={22} color="#16A34A" />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.freePlanTitle}>Free Account Access</Text>
-              <Text style={styles.freePlanDesc}>
-                Browse verified suppliers, send inquiries, and start negotiating with zero subscription charges.
-              </Text>
+            <View style={styles.phoneInputRow}>
+              <View style={styles.flagBox}>
+                <Text style={styles.flagText}>🇮🇳 +91</Text>
+              </View>
+              <TextInput
+                placeholder="98765 43210"
+                value={phone}
+                onChangeText={(text) => {
+                  setPhone(text.replace(/[^0-9]/g, ''));
+                  setError('');
+                }}
+                mode="outlined"
+                keyboardType="phone-pad"
+                maxLength={10}
+                style={[styles.input, { flex: 1 }]}
+                outlineStyle={styles.inputOutline}
+                error={!!error}
+              />
             </View>
+
+            {error ? (
+              <HelperText type="error" visible={!!error} style={styles.errorText}>
+                {error}
+              </HelperText>
+            ) : null}
           </View>
 
-          {/* Action Button */}
-          <Button
-            mode="contained"
-            onPress={handleSendOTP}
-            loading={loading}
-            disabled={loading}
-            icon="message-processing-outline"
-            style={styles.btn}
-            contentStyle={styles.btnContent}
-            labelStyle={styles.btnLabel}
+          {/* Section: Plan Selection */}
+          <View style={styles.planSectionHeader}>
+            <Text style={styles.planSectionTitle}>Choose Your Membership Plan</Text>
+            <Text style={styles.planSectionSub}>
+              New users must select and activate a plan to access Prochem. Existing members continue directly.
+            </Text>
+          </View>
+
+          {/* 1. Premium Growth Plan */}
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => setSelectedPlanKey('premium_growth')}
+            style={[
+              styles.planCard,
+              styles.growthCard,
+              selectedPlanKey === 'premium_growth' && styles.growthCardSelected,
+            ]}
           >
-            {loading ? 'Sending Code...' : 'Send OTP & Continue'}
-          </Button>
+            <View style={styles.crownBanner}>
+              <MaterialCommunityIcons name="crown" size={14} color="#D97706" />
+              <Text style={styles.crownBannerText}>RECOMMENDED • HIGH GROWTH</Text>
+            </View>
+
+            <View style={styles.planTopRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.planTitle}>Premium Growth Plan</Text>
+                <Text style={styles.planDesc}>
+                  Priority bulk chemical leads, 5+ supplier comparisons & dedicated trade desk
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.radioOuter,
+                  selectedPlanKey === 'premium_growth' && styles.radioOuterSelected,
+                ]}
+              >
+                {selectedPlanKey === 'premium_growth' && <View style={styles.radioInner} />}
+              </View>
+            </View>
+
+            <View style={styles.priceRow}>
+              <Text style={styles.currencySymbol}>₹</Text>
+              <Text style={styles.priceNumber}>4,999</Text>
+              <Text style={styles.priceDuration}>/ month</Text>
+            </View>
+
+            <View style={styles.featuresPreview}>
+              <Text style={styles.featureItemText}>✓ Dedicated relationship manager</Text>
+              <Text style={styles.featureItemText}>✓ Direct WhatsApp & email tender relay</Text>
+              <Text style={styles.featureItemText}>✓ 100% upfront escrow payment assurance</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* 2. Basic Plan */}
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => setSelectedPlanKey('basic')}
+            style={[styles.planCard, selectedPlanKey === 'basic' && styles.planCardSelected]}
+          >
+            <View style={styles.planTopRow}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.standardBadge}>
+                  <Text style={styles.standardBadgeText}>MARKETPLACE ESSENTIALS</Text>
+                </View>
+                <Text style={styles.planTitle}>Basic Plan</Text>
+                <Text style={styles.planDesc}>
+                  Standard access to 1,000+ chemicals with live price negotiation desk
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.radioOuter,
+                  selectedPlanKey === 'basic' && styles.radioOuterSelected,
+                ]}
+              >
+                {selectedPlanKey === 'basic' && <View style={styles.radioInner} />}
+              </View>
+            </View>
+
+            <View style={styles.priceRow}>
+              <Text style={styles.currencySymbol}>₹</Text>
+              <Text style={styles.priceNumber}>1,999</Text>
+              <Text style={styles.priceDuration}>/ month</Text>
+            </View>
+
+            <View style={styles.featuresPreview}>
+              <Text style={styles.featureItemText}>✓ Verified chemical catalog search</Text>
+              <Text style={styles.featureItemText}>✓ Send unlimited RFQs & counter-offers</Text>
+              <Text style={styles.featureItemText}>✓ Integrated order tracking & digital GST invoices</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Action Button */}
+          <TouchableOpacity
+            style={[styles.primarySubmitBtn, loading && { opacity: 0.7 }]}
+            onPress={handleSendOTP}
+            disabled={loading}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.primarySubmitBtnText}>
+              {loading
+                ? 'Dispatching SMS Code...'
+                : `Send OTP & Subscribe (${selectedPlan.title}) →`}
+            </Text>
+          </TouchableOpacity>
 
           {/* Trust Footnote */}
           <View style={styles.trustContainer}>
-            <MaterialCommunityIcons name="shield-check-outline" size={16} color="#64748B" />
-            <Text style={styles.trustText}>256-Bit SSL Encrypted • Instant Trading Access</Text>
+            <MaterialCommunityIcons name="shield-check-outline" size={16} color="#059669" />
+            <Text style={styles.trustText}>
+              256-Bit SSL Encrypted • Direct SMS Gateway Delivery
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  mainContainer: { 
-    flex: 1, 
-    backgroundColor: '#FFFFFF',
+  mainContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
   },
   header: {
-    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#0F172A',
   },
+  headerTitleWrap: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#059669',
+    letterSpacing: 0.6,
+  },
+  headerStep: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  headerStepText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    padding: 16,
     paddingBottom: 40,
   },
-  logo: {
-    width: 120,
-    height: 40,
-    marginBottom: 20,
-  },
-  title: {
-    fontWeight: 'bold',
-    color: '#0F172A',
-    marginBottom: 6,
-  },
-  subtitle: {
-    color: '#64748B',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-    marginBottom: 6,
-  },
-  input: { 
-    backgroundColor: '#F8FAFC', 
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  inputOutline: {
+
+  /* Input Card */
+  inputCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    marginBottom: 16,
+  },
+  cardHeaderTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  cardHeaderSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  phoneInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  flagBox: {
+    height: 44,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  flagText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  input: {
+    backgroundColor: '#F8FAFC',
+    fontSize: 14,
+    height: 44,
+  },
+  inputOutline: {
+    borderRadius: 8,
     borderColor: '#CBD5E1',
   },
   errorText: {
     paddingHorizontal: 0,
+    marginTop: 4,
+    marginBottom: 0,
+    fontSize: 11,
+  },
+
+  /* Plan Selection Section */
+  planSectionHeader: {
     marginBottom: 12,
   },
-  freePlanBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  freePlanTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#15803D',
-    marginBottom: 2,
-  },
-  freePlanDesc: {
-    fontSize: 12,
-    color: '#166534',
-    lineHeight: 18,
-  },
-  sectionHeader: {
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  sectionTitle: {
+  planSectionTitle: {
     fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#0F172A',
   },
-  sectionSubtitle: {
+  planSectionSub: {
     fontSize: 12,
     color: '#64748B',
     marginTop: 2,
   },
+
+  /* Plan Cards */
   planCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
-    backgroundColor: '#FFFFFF',
+    padding: 14,
+    marginBottom: 12,
   },
   planCardSelected: {
-    borderColor: '#2563EB',
-    backgroundColor: '#F0F7FF',
+    borderColor: '#0F172A',
+    backgroundColor: '#F8FAFC',
   },
-  growthPlanCard: {
-    borderColor: '#FEF3C7',
+  growthCard: {
+    borderColor: '#FDE68A',
     backgroundColor: '#FFFDF5',
   },
-  growthPlanCardSelected: {
+  growthCardSelected: {
     borderColor: '#D97706',
     backgroundColor: '#FFFBEB',
   },
-  planHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  planTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  planTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#0F172A',
-  },
-  standardBadge: {
-    backgroundColor: '#E0F2FE',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  standardBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#0369A1',
-  },
-  popularBadge: {
+
+  crownBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
+    marginBottom: 8,
   },
-  popularBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+  crownBannerText: {
+    fontSize: 8,
+    fontWeight: '800',
     color: '#B45309',
+    letterSpacing: 0.5,
   },
-  radioCircle: {
+
+  planTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  standardBadge: {
+    backgroundColor: '#EFF6FF',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginBottom: 4,
+  },
+  standardBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#1D4ED8',
+    letterSpacing: 0.5,
+  },
+
+  planTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  planDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 15,
+  },
+
+  radioOuter: {
     width: 20,
     height: 20,
     borderRadius: 10,
@@ -316,73 +462,80 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
+    marginTop: 2,
   },
-  radioCircleSelected: {
-    borderColor: '#2563EB',
+  radioOuterSelected: {
+    borderColor: '#0F172A',
   },
-  radioDot: {
+  radioInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#0F172A',
   },
+
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 12,
+    marginTop: 4,
+    marginBottom: 8,
   },
   currencySymbol: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '800',
     color: '#0F172A',
   },
-  priceAmount: {
+  priceNumber: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#0F172A',
     marginLeft: 2,
+    letterSpacing: -0.5,
   },
   priceDuration: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
     marginLeft: 4,
   },
-  featureList: {
-    gap: 6,
+
+  featuresPreview: {
+    gap: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 8,
   },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  featureItemText: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '500',
   },
-  featureIcon: {
-    marginRight: 8,
-  },
-  featureText: {
-    fontSize: 12,
-    color: '#334155',
-    flex: 1,
-  },
-  btn: { 
-    borderRadius: 8, 
+
+  /* Submit Button */
+  primarySubmitBtn: {
     backgroundColor: '#0F172A',
-    marginTop: 18,
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
   },
-  btnContent: { 
-    paddingVertical: 10,
+  primarySubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
-  btnLabel: {
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
+
   trustContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 16,
+    marginTop: 14,
   },
   trustText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
   },
 });

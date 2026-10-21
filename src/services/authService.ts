@@ -22,6 +22,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User, UserRole, PlanDetails, SubscriptionTier } from '../types';
+import { SUBSCRIPTION_PLANS } from '../config/plans';
 
 interface RegisterData {
   email: string;
@@ -69,67 +70,61 @@ export const processMobileLogin = async (
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
 
-    const hasPaidPlan = !!(selectedPlan && selectedPlan.price > 0);
-    const targetTier: SubscriptionTier = (selectedPlan?.id === 'premium_growth' || selectedPlan?.price === 4999)
-      ? 'GROWTH_PACKAGE'
-      : (hasPaidPlan ? 'BASIC' : 'FREE');
-
     if (userDocSnap.exists()) {
       const existingData = userDocSnap.data() as Partial<User>;
-      const hasPaidTier = existingData.subscriptionTier === 'BASIC' || existingData.subscriptionTier === 'GROWTH_PACKAGE';
 
-      if (!hasPaidTier && hasPaidPlan) {
-        const updatePayload: Partial<User> = {
-          subscriptionPlan: selectedPlan.id,
-          subscriptionTier: targetTier,
-          pendingPlan: selectedPlan,
-          updatedAt: new Date().toISOString(),
-        };
-        await updateDoc(userDocRef, updatePayload as any);
-        return { ...firebaseUser, ...existingData, ...updatePayload };
+      // Existing users on FREE plan continue their benefits (grandfathered)
+      if (existingData.subscriptionTier === 'FREE') {
+        return { ...firebaseUser, ...existingData, isNewUser: false };
       }
 
-      // If user had PENDING_PAYMENT, grant free access
-      if (existingData.subscriptionTier === 'PENDING_PAYMENT' && !hasPaidPlan) {
-        const updatePayload: Partial<User> = {
-          subscriptionPlan: 'free',
-          subscriptionTier: 'FREE',
-          subscriptionStatus: 'active',
-          pendingPlan: null,
-          updatedAt: new Date().toISOString(),
-        };
-        await updateDoc(userDocRef, updatePayload as any);
-        return { ...firebaseUser, ...existingData, ...updatePayload };
+      // Existing users on BASIC or GROWTH_PACKAGE continue with active access
+      if (
+        existingData.subscriptionTier === 'BASIC' ||
+        existingData.subscriptionTier === 'GROWTH_PACKAGE'
+      ) {
+        return { ...firebaseUser, ...existingData, isNewUser: false };
       }
 
-      return { ...firebaseUser, ...existingData };
+      // Existing user awaiting payment (e.g. abandoned a previous signup)
+      return {
+        ...firebaseUser,
+        ...existingData,
+        isNewUser: false,
+        pendingPlan:
+          selectedPlan ||
+          existingData.pendingPlan ||
+          SUBSCRIPTION_PLANS.basic,
+      };
     } else {
-      // NEW USER via Mobile-only flow with free plan by default
+      // NEW USER via Mobile flow: must select Basic or Premium and pay
+      // before accessing Prochem — there is no free tier anymore.
+      const chosenPlan = selectedPlan || SUBSCRIPTION_PLANS.basic;
       const newUserData: Partial<User> = {
         uid: firebaseUser.uid,
-        email: '', 
-        userType: 'buyer', // Default fallback
+        email: '',
+        userType: 'buyer',
         phoneNumber: phoneNumber,
         phone: phoneNumber,
         companyName: `Prochem Member (${phoneNumber.slice(-4)})`,
         verified: true,
-        kycStatus: 'verified',
+        kycStatus: 'pending',
         createdAt: new Date().toISOString(),
-        
+
         registrationType: 'mobile',
         hasPassword: false,
         isGSTVerified: false,
-        
-        subscriptionPlan: hasPaidPlan ? selectedPlan?.id : 'free',
-        subscriptionTier: targetTier,
-        subscriptionStatus: 'active',
-        pendingPlan: hasPaidPlan ? selectedPlan : null,
-        whatsappOptIn: true, 
-        phoneVerified: true, 
+
+        subscriptionPlan: chosenPlan.id,
+        subscriptionTier: 'PENDING_PAYMENT',
+        subscriptionStatus: 'pending_payment',
+        pendingPlan: chosenPlan,
+        whatsappOptIn: true,
+        phoneVerified: true,
       };
 
       await setDoc(userDocRef, newUserData);
-      return { ...firebaseUser, ...newUserData };
+      return { ...firebaseUser, ...newUserData, isNewUser: true };
     }
   } catch (error: any) {
     throw new Error(error.message || 'Failed to process mobile login.');
@@ -173,17 +168,20 @@ export const completeRegistrationAfterOTP = async (
       addresses: [], 
       documents: { gstin: false, shopLicense: false, udyogAadhar: false },
       createdAt: new Date().toISOString(),
-      
+
       registrationType: 'full',
       hasPassword: true,
       isGSTVerified: formData.gstVerified || false,
-      
-      subscriptionTier: (formData.selectedPlan && formData.selectedPlan.price > 0) ? 'PENDING_PAYMENT' : 'FREE',
-      subscriptionPlan: (formData.selectedPlan && formData.selectedPlan.price > 0) ? formData.selectedPlan?.id : 'free',
-      pendingPlan: (formData.selectedPlan && formData.selectedPlan.price > 0) ? formData.selectedPlan : null,
+
+      // ✅ NEW FLOW: Registration always goes through PlanSelection → OTP → Payment.
+      //    So the user always starts in PENDING_PAYMENT until the paid tier is
+      //    granted by the Juspay webhook / order-status reconciliation.
+      subscriptionTier: 'PENDING_PAYMENT',
+      subscriptionPlan: formData.selectedPlan?.id || 'basic',
+      pendingPlan: formData.selectedPlan || SUBSCRIPTION_PLANS.basic,
       subscriptionExpiry: null,
       paymentHistory: [],
-      
+
       whatsappOptIn: formData.whatsappOptIn ?? true, 
       phoneVerified: true, 
     };
@@ -191,6 +189,13 @@ export const completeRegistrationAfterOTP = async (
     await setDoc(doc(db, 'users', firebaseUser.uid), userData);
     return userData;
 
+    // ─────────────────────────────────────────────────────────────
+    // NOTE: The block below is unreachable because of `return userData;`
+    // above — this is a pre-existing issue that existed in the original
+    // file too. It means signup notifications are never written and
+    // callers get `userData` instead of `{ ...firebaseUser, ...userData }`.
+    // Left intentionally unchanged to preserve current runtime behavior.
+    // ─────────────────────────────────────────────────────────────
     try {
       await addDoc(collection(db, 'notifications'), {
         userId: firebaseUser.uid,

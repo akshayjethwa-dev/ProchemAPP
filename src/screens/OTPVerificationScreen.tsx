@@ -11,7 +11,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { completeRegistrationAfterOTP, processMobileLogin } from '../services/authService';
 import { getPhoneAuthSession, setPhoneAuthSession, clearPhoneAuthSession } from '../services/phoneAuthSession';
 import { sendRealPhoneOTP, parsePhoneAuthError } from '../services/phoneAuthService';
-import { useAppStore } from '../store/appStore'; 
+import { useAppStore } from '../store/appStore';
+import { SUBSCRIPTION_PLANS } from '../config/plans';
 
 let nativeAuth: any = null;
 try {
@@ -24,14 +25,14 @@ export default function OTPVerificationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<any>();
   const session = getPhoneAuthSession();
-  
+
   const mobile = route.params?.mobile || session?.mobile || '';
   const mode = route.params?.mode || session?.mode || 'login';
   const formData = route.params?.formData || session?.formData;
-  
+
   const webConfirmation = session?.webConfirmation || route.params?.webConfirmation;
   const nativeConfirmation = session?.nativeConfirmation || route.params?.nativeConfirmation;
-  
+
   const theme = useTheme();
 
   const [otp, setOtp] = useState('');
@@ -55,7 +56,7 @@ export default function OTPVerificationScreen() {
     }
 
     setLoading(true);
-    
+
     try {
       let userCredential: any = null;
 
@@ -66,7 +67,7 @@ export default function OTPVerificationScreen() {
         userCredential = await webConfirmation.confirm(otp);
       } else {
         if (!nativeAuth) throw new Error('Native Auth module missing.');
-        
+
         if (nativeConfirmation && typeof nativeConfirmation.confirm === 'function') {
           userCredential = await nativeConfirmation.confirm(otp);
         } else if (nativeConfirmation?.verificationId) {
@@ -84,77 +85,81 @@ export default function OTPVerificationScreen() {
 
       if (mode === 'registration' && formData) {
         const createdUser = await completeRegistrationAfterOTP(userCredential.user, formData);
-        const planToPay = formData.selectedPlan || route.params?.selectedPlan || session?.selectedPlan;
+        // ✅ PlanSelectionScreen enriched formData with the chosen plan, so
+        //    formData.selectedPlan is authoritative. Fallback chain protects
+        //    against a missing session / route param.
+        const planToPay =
+          formData.selectedPlan ||
+          route.params?.selectedPlan ||
+          session?.selectedPlan ||
+          SUBSCRIPTION_PLANS.basic;
+
         clearPhoneAuthSession();
 
-        if (planToPay && planToPay.price > 0) {
-          useAppStore.getState().setUser({
+        useAppStore.getState().setUser({
+          ...createdUser,
+          uid: userCredential.user.uid,
+          subscriptionTier: 'PENDING_PAYMENT',
+        });
+
+        // ✅ New registration MUST pay before accessing Prochem.
+        navigation.navigate('Payment', {
+          plan: planToPay,
+          user: {
             ...createdUser,
             uid: userCredential.user.uid,
+            email: formData.email,
+            companyName: formData.companyName,
+            phoneNumber: formData.phoneNumber,
+          },
+          userId: userCredential.user.uid,
+        });
+        return;
+      } else {
+        const planToPay =
+          route.params?.selectedPlan ||
+          session?.selectedPlan ||
+          SUBSCRIPTION_PLANS.basic;
+
+        const mobileUser = await processMobileLogin(userCredential.user, mobile, planToPay);
+        clearPhoneAuthSession();
+
+        // ✅ New mobile signup OR abandoned payment → route to Payment.
+        //    Existing FREE / BASIC / GROWTH_PACKAGE users bypass payment.
+        if (mobileUser.isNewUser || mobileUser.subscriptionTier === 'PENDING_PAYMENT') {
+          useAppStore.getState().setUser({
+            ...mobileUser,
+            uid: userCredential.user.uid,
+            subscriptionTier: 'PENDING_PAYMENT',
           });
 
           navigation.navigate('Payment', {
             plan: planToPay,
             user: {
-              ...createdUser,
+              ...mobileUser,
               uid: userCredential.user.uid,
-              email: formData.email,
-              companyName: formData.companyName,
-              phoneNumber: formData.phoneNumber,
+              phoneNumber: mobile,
+              companyName: mobileUser.companyName || 'Prochem Member',
             },
             userId: userCredential.user.uid,
           });
           return;
         }
 
-        useAppStore.getState().setUser({
-          ...createdUser,
-          uid: userCredential.user.uid,
-          subscriptionTier: 'FREE',
-          subscriptionPlan: 'free',
-        });
-      } else {
-        const planToPay = route.params?.selectedPlan || session?.selectedPlan;
-        const mobileUser = await processMobileLogin(userCredential.user, mobile, planToPay);
-        clearPhoneAuthSession();
-
-        if (planToPay && planToPay.price > 0) {
-          const hasActiveSubscription = mobileUser.subscriptionStatus === 'active' && 
-            (mobileUser.subscriptionTier === 'BASIC' || mobileUser.subscriptionTier === 'GROWTH_PACKAGE');
-
-          useAppStore.getState().setUser({
-            ...mobileUser,
-            uid: userCredential.user.uid,
-          });
-
-          if (!hasActiveSubscription) {
-            navigation.navigate('Payment', {
-              plan: planToPay,
-              user: {
-                ...mobileUser,
-                uid: userCredential.user.uid,
-                phoneNumber: mobile,
-                companyName: mobileUser.companyName || 'Prochem Member',
-              },
-              userId: userCredential.user.uid,
-            });
-            return;
-          }
-        }
-
+        // ✅ Existing users on FREE, BASIC, or GROWTH_PACKAGE continue directly into the app.
         useAppStore.getState().setUser({
           ...mobileUser,
           uid: userCredential.user.uid,
           subscriptionTier: mobileUser.subscriptionTier || 'FREE',
         });
       }
-      
+
       useAppStore.getState().resetOnboarding();
 
     } catch (error: any) {
       console.error('OTP Verification Error:', error);
       setLoading(false);
-      
+
       const errorCode = error.code || '';
       if (errorCode.includes('invalid-verification-code') || errorCode.includes('invalid-credential')) {
         setErrorMsg('Invalid verification code. Please check the SMS and try again.');
@@ -163,7 +168,7 @@ export default function OTPVerificationScreen() {
       } else {
         Alert.alert('Verification Failed', error.message || 'Failed to verify OTP. Please try again.');
       }
-    } 
+    }
   };
 
   const handleResend = async () => {
@@ -242,9 +247,9 @@ export default function OTPVerificationScreen() {
           ) : null}
         </View>
 
-        <Button 
-          mode="contained" 
-          onPress={handleVerify} 
+        <Button
+          mode="contained"
+          onPress={handleVerify}
           loading={loading}
           disabled={loading || otp.length !== 6}
           style={styles.verifyBtn}
@@ -253,16 +258,16 @@ export default function OTPVerificationScreen() {
           Verify OTP & Continue
         </Button>
 
-        <TouchableOpacity 
-          onPress={handleResend} 
+        <TouchableOpacity
+          onPress={handleResend}
           disabled={resendTimer > 0 || loading || resending}
           style={styles.resendContainer}
         >
           <Text style={{ color: resendTimer > 0 ? '#9CA3AF' : theme.colors.primary, fontWeight: 'bold' }}>
-            {resendTimer > 0 
-              ? `Resend OTP in ${resendTimer}s` 
-              : resending 
-                ? 'Sending new SMS code...' 
+            {resendTimer > 0
+              ? `Resend OTP in ${resendTimer}s`
+              : resending
+                ? 'Sending new SMS code...'
                 : "Didn't receive SMS? Request again"}
           </Text>
         </TouchableOpacity>
@@ -304,6 +309,6 @@ const styles = StyleSheet.create({
   inputContainer: { marginBottom: 24 },
   input: { backgroundColor: '#F9FAFB', fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
   inputText: { textAlign: 'center', letterSpacing: 4, fontSize: 24 },
-  verifyBtn: { borderRadius: 12, marginBottom: 20, backgroundColor: '#004AAD' },
+  verifyBtn: { borderRadius: 8, marginBottom: 20, backgroundColor: '#0F172A' },
   resendContainer: { alignItems: 'center', padding: 10 },
 });

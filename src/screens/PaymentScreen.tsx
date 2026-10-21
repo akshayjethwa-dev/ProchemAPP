@@ -448,7 +448,7 @@ export default function PaymentScreen() {
             color={theme.colors.primary}
           />
           <Text style={styles.defaultPaymentInfoText}>
-            Your secure Juspay checkout will show the default payment options configured for this merchant/client.
+            Your secure DBS Bank checkout will show the default payment options configured for this merchant/client.
           </Text>
         </View>
 
