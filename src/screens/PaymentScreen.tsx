@@ -77,8 +77,7 @@ export default function PaymentScreen() {
   );
 
   const basePrice = plan.price;
-  const gstAmount = Math.round(basePrice * 0.18);
-  const totalAmount = basePrice + gstAmount;
+  const totalAmount = basePrice;
 
   // ─────────────────────────────────────────────────────────────
   // Finish flow — called after verified CHARGED status
@@ -380,10 +379,7 @@ export default function PaymentScreen() {
             <Text>Membership fee</Text>
             <Text>₹{basePrice.toLocaleString('en-IN')}</Text>
           </View>
-          <View style={styles.amountRow}>
-            <Text>GST (18%)</Text>
-            <Text>₹{gstAmount.toLocaleString('en-IN')}</Text>
-          </View>
+          
           <View style={[styles.amountRow, styles.totalRow]}>
             <Text style={styles.totalLabel}>Total payable</Text>
             <Text style={styles.totalAmount}>

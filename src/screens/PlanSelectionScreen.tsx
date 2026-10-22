@@ -358,7 +358,7 @@ export default function PlanSelectionScreen() {
           <Text style={styles.bottomPrice}>
             ₹{selectedPlan.price.toLocaleString('en-IN')}{' '}
             <Text style={{ fontSize: 11, color: '#64748B', fontWeight: 'normal' }}>
-              / mo + GST
+              / mo
             </Text>
           </Text>
         </View>

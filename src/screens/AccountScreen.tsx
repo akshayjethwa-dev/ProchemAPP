@@ -342,7 +342,7 @@ export default function AccountScreen() {
         {/* TRADE CREDIT / PAYLATER */}
         <SettingsGroup title="FINANCIAL SERVICES">
           <List.Item 
-            title="Trade Credit (PayLater)" 
+            title="PayLater Credit" 
             description={
               payLaterApp?.status === 'under_review' 
                 ? "Application Under Review • Credit assessment underway"
