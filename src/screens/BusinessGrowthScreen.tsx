@@ -31,10 +31,10 @@ const WHATSAPP_NUMBER = '917984856652';
 const PLANS = {
   standard: {
     key: 'standard',
-    title: 'Standard Plan',
-    amount: '100',
+    title: 'premium growth Plan',
+    amount: '4999',
     amountRaw: 1,
-    duration: '1 Year',
+    duration: '1 Month',
     description: 'Perfect for businesses looking to scale their sourcing and sales.',
     highlights: [
       'Access to verified buyers & sellers',
@@ -45,10 +45,10 @@ const PLANS = {
   },
   growth: {
     key: 'growth',
-    title: '3-Year Growth Plan',
+    title: '1-Year Growth Plan',
     amount: '49,999',
     amountRaw: 49999,
-    duration: '3 Years',
+    duration: '1 Years',
     description: 'Lock in the best rates and secure your platform growth long-term.',
     highlights: [
       'Everything in Standard',
@@ -840,7 +840,7 @@ function SalesPitchUI() {
             >
               <Card.Content style={styles.pricingCardContent}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.planTitle}>Standard Plan</Text>
+                  <Text style={styles.planTitle}>Premium Growth Plan</Text>
                   <View style={[
                     upgradeStyles.radioCircle,
                     selectedPlan === 'standard' && upgradeStyles.radioCircleSelected,
@@ -853,7 +853,7 @@ function SalesPitchUI() {
                 <View style={styles.priceRow}>
                   <Text style={styles.priceSymbol}>₹</Text>
                   <Text style={styles.priceAmount}>4,999</Text>
-                  <Text style={styles.priceDuration}>/ Year</Text>
+                  <Text style={styles.priceDuration}>/ month</Text>
                 </View>
                 <Text style={styles.planDescription}>
                   Perfect for businesses looking to scale their sourcing and sales.
@@ -876,11 +876,11 @@ function SalesPitchUI() {
             >
               <View style={styles.bestValueBanner}>
                 <MaterialCommunityIcons name="star" size={14} color="#78350F" style={{ marginRight: 4 }} />
-                <Text style={styles.bestValueText}>BEST VALUE — SAVE 50,000+</Text>
+                <Text style={styles.bestValueText}>BEST VALUE — SAVE 10,000+</Text>
               </View>
               <Card.Content style={styles.pricingCardContent}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={[styles.planTitle, { color: '#B45309' }]}>3-Year Growth Plan</Text>
+                  <Text style={[styles.planTitle, { color: '#B45309' }]}>Recommended Plan</Text>
                   <View style={[
                     upgradeStyles.radioCircle,
                     selectedPlan === 'growth' && upgradeStyles.radioCircleSelected,
@@ -891,7 +891,7 @@ function SalesPitchUI() {
                 <View style={styles.priceRow}>
                   <Text style={styles.priceSymbol}>₹</Text>
                   <Text style={styles.priceAmount}>49,999</Text>
-                  <Text style={styles.priceDuration}>/ 3 Years</Text>
+                  <Text style={styles.priceDuration}>/ 1 Years</Text>
                 </View>
                 <Text style={styles.planDescription}>
                   Lock in the best rates and secure your platform growth long-term.

@@ -85,8 +85,8 @@ const getJuspayOffersEndpoint = (params = {}) => {
 const JUSPAY_SUBSCRIPTION_PLANS = {
   basic: { amount: 1999, tier: "BASIC", durationDays: 30 },
   premium_growth: { amount: 4999, tier: "GROWTH_PACKAGE", durationDays: 30 },
-  standard: { amount: 100, tier: "GROWTH_PACKAGE", durationDays: 365 },
-  growth: { amount: 49999, tier: "GROWTH_PACKAGE", durationDays: 1095 },
+  standard: { amount: 4999, tier: "GROWTH_PACKAGE", durationDays: 30 },
+  growth: { amount: 49999, tier: "GROWTH_PACKAGE", durationDays: 365 },
 };
 
 // ===========================================================================
