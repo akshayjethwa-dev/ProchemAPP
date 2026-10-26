@@ -215,10 +215,13 @@ export default function PlanSelectionScreen() {
 
           <View style={styles.priceRow}>
             <Text style={[styles.currencySymbol, { color: '#0F172A' }]}>₹</Text>
-            <Text style={[styles.priceNumber, { color: '#0F172A' }]}>4,999</Text>
+            <Text style={[styles.priceNumber, { color: '#0F172A' }]}>
+              {SUBSCRIPTION_PLANS.premium_growth.price.toLocaleString('en-IN')}
+            </Text>
             <Text style={styles.priceDuration}>/ month</Text>
           </View>
-          <Text style={styles.taxNotice}>+ 18% GST • Maximum ROI & priority dispatch</Text>
+          {/* ✅ GST removed — plan price is GST-inclusive per requirement */}
+          <Text style={styles.priceTagline}>Maximum ROI & priority dispatch</Text>
 
           <View style={styles.divider} />
 
@@ -274,10 +277,13 @@ export default function PlanSelectionScreen() {
 
           <View style={styles.priceRow}>
             <Text style={styles.currencySymbol}>₹</Text>
-            <Text style={styles.priceNumber}>1,999</Text>
+            <Text style={styles.priceNumber}>
+              {SUBSCRIPTION_PLANS.basic.price.toLocaleString('en-IN')}
+            </Text>
             <Text style={styles.priceDuration}>/ month</Text>
           </View>
-          <Text style={styles.taxNotice}>+ 18% GST • Standard chemical marketplace</Text>
+          {/* ✅ GST removed — plan price is GST-inclusive per requirement */}
+          <Text style={styles.priceTagline}>Standard chemical marketplace</Text>
 
           <View style={styles.divider} />
 
@@ -594,7 +600,8 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginLeft: 4,
   },
-  taxNotice: {
+  /* ✅ Renamed from taxNotice → priceTagline (no GST applies) */
+  priceTagline: {
     fontSize: 10,
     color: '#94A3B8',
     marginTop: 2,

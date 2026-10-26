@@ -86,25 +86,39 @@ export default function SellerLiveLeadsScreen() {
 
     setChatLoadingId(lead.id || 'loading');
     try {
-      let reqId = lead.originalOrderId || lead.id || '';
+      const isRfqSource = lead.sourceType === 'RFQ' || Boolean(lead.rfqId);
+      const originalId = lead.originalOrderId || lead.rfqId || '';
+      const reqId = !isRfqSource ? (originalId || lead.id || '') : '';
+      const rfqId = isRfqSource ? (originalId || lead.rfqId || lead.id || '') : '';
+
       let buyerId = lead.buyerId || (lead as any).userId || '';
 
-      if (!buyerId && reqId) {
+      if (!buyerId && originalId) {
         try {
-          const reqSnap = await getDoc(doc(db, 'customRequirements', reqId));
+          const reqSnap = await getDoc(doc(db, 'customRequirements', originalId));
           if (reqSnap.exists()) {
             const rData = reqSnap.data();
-            if (rData.buyerId) buyerId = rData.buyerId;
+            if (rData.buyerId || rData.userId) buyerId = rData.buyerId || rData.userId;
           }
         } catch (e) {}
       }
 
-      if (!buyerId && lead.originalOrderId) {
+      if (!buyerId && originalId) {
         try {
-          const rfqSnap = await getDoc(doc(db, 'rfqs', lead.originalOrderId));
+          const rfqSnap = await getDoc(doc(db, 'rfqs', originalId));
           if (rfqSnap.exists()) {
             const rfqData = rfqSnap.data();
             if (rfqData.buyerId) buyerId = rfqData.buyerId;
+          }
+        } catch (e) {}
+      }
+
+      if (!buyerId && lead.id) {
+        try {
+          const bSnap = await getDoc(doc(db, 'broadcastLeads', lead.id));
+          if (bSnap.exists()) {
+            const bData = bSnap.data();
+            if (bData.buyerId) buyerId = bData.buyerId;
           }
         } catch (e) {}
       }
@@ -123,8 +137,10 @@ export default function SellerLiveLeadsScreen() {
         const match = existingSnap.docs.find(d => {
           const cData = d.data();
           return (
-            (reqId && (cData.requirementId === reqId || cData.rfqId === reqId)) ||
-            (lead.id && cData.leadId === lead.id)
+            (lead.id && cData.leadId === lead.id) ||
+            (reqId && cData.requirementId === reqId) ||
+            (rfqId && cData.rfqId === rfqId) ||
+            (originalId && (cData.requirementId === originalId || cData.rfqId === originalId))
           );
         });
         if (match) {
@@ -135,14 +151,15 @@ export default function SellerLiveLeadsScreen() {
       }
 
       if (!convId) {
-        const initialMsg = `Discussion started for Custom Requirement: ${lead.productName}
+        const initialMsg = `Discussion started for Live Requirement: ${lead.productName}
 Quantity: ${lead.quantityRequired} ${lead.unit}
 Target Price: ₹${lead.targetPrice || 'Open'} / ${lead.unit}
-Region: ${lead.deliveryRegion || 'All India'}
-Supplier connected to discuss product specifications and custom offer.`;
+Delivery Region: ${lead.deliveryRegion || 'All India'}
+Supplier connected to discuss chemical specifications and quote.`;
 
         convId = await createConversation({
-          requirementId: reqId,
+          requirementId: reqId || undefined,
+          rfqId: rfqId || undefined,
           leadId: lead.id,
           buyerUserId: buyerId,
           sellerUserId: user.uid,
@@ -165,16 +182,21 @@ Supplier connected to discuss product specifications and custom offer.`;
 
       setChatLoadingId(null);
       navigation.navigate('NegotiationRoom', {
-        requirementId: reqId,
+        requirementId: reqId || undefined,
+        rfqId: rfqId || undefined,
+        leadId: lead.id,
         conversationId: convId,
         leadInfo: {
+          leadId: lead.id,
           productName: lead.productName,
           quantity: lead.quantityRequired,
           targetPrice: lead.targetPrice,
           unit: lead.unit,
           buyerId: buyerId,
           sellerId: user.uid,
-          sellerName: user.companyName || user.name || 'Verified Supplier'
+          sellerName: user.companyName || user.name || 'Verified Supplier',
+          sourceType: lead.sourceType || (isRfqSource ? 'RFQ' : 'CUSTOM'),
+          deliveryRegion: lead.deliveryRegion || 'All India'
         }
       });
 

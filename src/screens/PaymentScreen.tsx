@@ -76,6 +76,9 @@ export default function PaymentScreen() {
     []
   );
 
+  // ✅ Prices in SUBSCRIPTION_PLANS are GST-inclusive.
+  //    Basic = ₹1,999/month, Premium Growth = ₹4,999/month.
+  //    NO GST is added on top.
   const basePrice = plan.price;
   const totalAmount = basePrice;
 
@@ -174,11 +177,12 @@ export default function PaymentScreen() {
           planKey: plan.id, // 'basic' | 'premium_growth'
           customerDetails,
           mandate: {
-            maxAmount: totalAmount, // ₹2,358.82 for Basic (₹1,999 + GST)
+            // Plan price only — no GST added.
+            maxAmount: totalAmount,
             frequency: 'MONTHLY',
             // ⚡ REQUIRED for MONTHLY → day of month (1-31). 1 = 1st of every month.
             ruleValue: 1,
-            amountRule: 'VARIABLE', // permits GST-inclusive amounts
+            amountRule: 'VARIABLE',
             revokableByCustomer: true,
             blockFunds: false, // default FALSE for recurring
             // startDate / endDate are auto-computed on the server
@@ -379,7 +383,8 @@ export default function PaymentScreen() {
             <Text>Membership fee</Text>
             <Text>₹{basePrice.toLocaleString('en-IN')}</Text>
           </View>
-          
+
+          {/* ✅ No GST row — plan price is already GST-inclusive */}
           <View style={[styles.amountRow, styles.totalRow]}>
             <Text style={styles.totalLabel}>Total payable</Text>
             <Text style={styles.totalAmount}>

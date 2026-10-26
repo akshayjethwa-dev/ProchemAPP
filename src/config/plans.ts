@@ -15,13 +15,14 @@ export const SUBSCRIPTION_PLANS: Record<'basic' | 'premium_growth', PlanDetails>
       'Real-time price negotiation with suppliers',
       'Integrated transport & logistics booking',
       'Order tracking & digital GST invoices',
-      'Standard customer care support'
-    ]
+      'Standard customer care support',
+    ],
   },
   premium_growth: {
     id: 'premium_growth',
     title: 'Premium Growth Plan',
-    price: 1,
+    price: 4999,          // monthly
+    yearlyPrice: 49999,   // yearly
     tier: 'GROWTH_PACKAGE',
     duration: '1 Month',
     description: 'All marketplace features plus high-volume leads, priority tools & dedicated promotion.',
@@ -33,7 +34,7 @@ export const SUBSCRIPTION_PLANS: Record<'basic' | 'premium_growth', PlanDetails>
       'Dedicated Prochem relationship & account manager',
       'Direct WhatsApp & Email marketing broadcasts',
       '100% secure upfront payment assurance',
-      'Priority freight coordination & fast-track dispatch'
-    ]
-  }
+      'Priority freight coordination & fast-track dispatch',
+    ],
+  },
 };

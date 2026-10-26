@@ -33,7 +33,7 @@ const PLANS = {
     key: 'standard',
     title: 'premium growth Plan',
     amount: '4999',
-    amountRaw: 1,
+    amountRaw: 4999, // ✅ was 1 — now matches the ₹4,999 plan price (no GST)
     duration: '1 Month',
     description: 'Perfect for businesses looking to scale their sourcing and sales.',
     highlights: [
@@ -47,7 +47,7 @@ const PLANS = {
     key: 'growth',
     title: '1-Year Growth Plan',
     amount: '49,999',
-    amountRaw: 49999,
+    amountRaw: 49999, // ✅ already correct
     duration: '1 Years',
     description: 'Lock in the best rates and secure your platform growth long-term.',
     highlights: [
@@ -405,9 +405,8 @@ function UpgradePaymentModal({
         phone: safePhone,
       };
 
-      // Total including 18% GST
-      const baseAmount = Number(plan.amountRaw);
-      const totalWithGst = Math.round(baseAmount * 1.18);
+      // ✅ GST is NOT added — plan amounts are GST-inclusive.
+      const totalAmount = Number(plan.amountRaw); // 4999 or 49999
 
       let paymentUrlFromServer: string | null = null;
       let orderIdFromServer: string | null = null;
@@ -418,10 +417,10 @@ function UpgradePaymentModal({
           planKey: plan.key,
           customerDetails,
           mandate: {
-            maxAmount: totalWithGst,
+            maxAmount: totalAmount,
             frequency: 'MONTHLY',
             ruleValue: 1,
-            amountRule: 'VARIABLE',
+            amountRule: 'FIXED',
             revokableByCustomer: true,
           },
         });
@@ -432,7 +431,7 @@ function UpgradePaymentModal({
         const functions = getFunctions(getApp(), 'asia-south1');
         const createJuspaySession = httpsCallable(functions, 'createJuspaySession');
         const response: any = await createJuspaySession({
-          amount: totalWithGst,
+          amount: totalAmount,
           type: 'subscription',
           referenceId: plan.key,
           customerDetails,
@@ -981,7 +980,7 @@ function SalesPitchUI() {
 }
 
 // ==========================================
-// STYLES
+// STYLES (unchanged)
 // ==========================================
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },

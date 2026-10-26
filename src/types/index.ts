@@ -28,6 +28,7 @@ export interface PlanDetails {
   duration: string;
   description: string;
   highlights: string[];
+  yearlyPrice?: number;  
 }
 
 // Add these new fields into your existing User interface
