@@ -569,10 +569,21 @@ export default function NegotiationRoomScreen() {
   const acceptOffer = (price: number, qty: number) => {
     const totalEst = price * qty * 1.18;
     const message = `Confirm custom order contract for ${qty} ${activeItem.unit} at ₹${price} / ${activeItem.unit}?\n\nEstimated invoice with 18% GST: ₹${Math.round(totalEst).toLocaleString('en-IN')}`;
-    
+
+    // FIX: React Native's Alert.alert is a no-op on web, so the popup never appeared.
+    // On web, use the browser's native window.confirm dialog to show the popup and
+    // capture the user's choice before proceeding to checkout.
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(message);
+      if (confirmed) {
+        proceedToCheckout(price, qty);
+      }
+      return;
+    }
+
     Alert.alert('Accept Custom Order', message, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Accept & Pay via Escrow', onPress: () => proceedToCheckout(price, qty) }
+      { text: 'Accept & Pay', onPress: () => proceedToCheckout(price, qty) }
     ]);
   };
 
@@ -801,7 +812,7 @@ export default function NegotiationRoomScreen() {
 
         <View style={styles.trustBanner}>
           <Text style={styles.trustBannerText}>
-            🔒 Anonymized Escrow Trade. Direct contact unlocks upon order confirmation.
+            🔒 Anonymized Order. Contact Prochem team for order details.
           </Text>
         </View>
       </View>

@@ -8,9 +8,11 @@ import {
   Platform, 
   Alert,
   ScrollView,
-  StatusBar
+  StatusBar,
+  TouchableWithoutFeedback,
+  Keyboard
 } from 'react-native';
-import { Text, TextInput, Button, HelperText, IconButton } from 'react-native-paper';
+import { Text, TextInput, HelperText, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -121,7 +123,7 @@ export default function LoginScreen() {
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
@@ -129,142 +131,146 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Executive Header Banner */}
-          <View style={styles.headerBackground}>
-            <SafeAreaView edges={['top']}>
-              <View style={styles.headerContent}>
-                <View style={styles.brandRow}>
-                  <Text style={styles.brandTitle}>PROCHEM</Text>
-                  <View style={styles.exchangeBadge}>
-                    <Text style={styles.exchangeBadgeText}>EXCHANGE</Text>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={{ flex: 1 }}>
+              {/* Executive Header Banner */}
+              <View style={styles.headerBackground}>
+                <SafeAreaView edges={['top']}>
+                  <View style={styles.headerContent}>
+                    <View style={styles.brandRow}>
+                      <Text style={styles.brandTitle}>PROCHEM</Text>
+                      <View style={styles.exchangeBadge}>
+                        <Text style={styles.exchangeBadgeText}>Marketplace</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.taglineText}>India's Industrial Chemical Trading Network</Text>
+                    
+                    <View style={styles.welcomeContainer}>
+                      <Text style={styles.welcomeSmallText}>SECURE BUSINESS PORTAL</Text>
+                      <Text style={styles.welcomeBigText}>Sign In to Account</Text>
+                    </View>
                   </View>
-                </View>
-                <Text style={styles.taglineText}>India's Industrial Chemical Trading Network</Text>
-                
-                <View style={styles.welcomeContainer}>
-                  <Text style={styles.welcomeSmallText}>SECURE BUSINESS PORTAL</Text>
-                  <Text style={styles.welcomeBigText}>Sign In to Account</Text>
-                </View>
+                </SafeAreaView>
               </View>
-            </SafeAreaView>
-          </View>
 
-          {/* Clean Form Card */}
-          <View style={styles.formCard}>
-            <Text style={styles.cardSubtitle}>
-              Enter your registered corporate credentials to access live markets and negotiations.
-            </Text>
+              {/* Clean Form Card */}
+              <View style={styles.formCard}>
+                <Text style={styles.cardSubtitle}>
+                  Enter your registered corporate credentials to access live markets and negotiations.
+                </Text>
 
-            {/* Email Field */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>CORPORATE EMAIL</Text>
-              <TextInput
-                placeholder="name@company.com"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  setLoginError('');
-                }}
-                mode="outlined"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                style={styles.input}
-                outlineStyle={styles.inputOutline}
-                textColor="#0F172A"
-                left={<TextInput.Icon icon="email-outline" color="#64748B" />}
-                error={loginError.includes('email') || loginError.includes('Account')}
-              />
-            </View>
+                {/* Email Field */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>CORPORATE EMAIL</Text>
+                  <TextInput
+                    placeholder="name@company.com"
+                    value={email}
+                    onChangeText={(text) => {
+                      setEmail(text);
+                      setLoginError('');
+                    }}
+                    mode="outlined"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    style={styles.input}
+                    outlineStyle={styles.inputOutline}
+                    textColor="#0F172A"
+                    left={<TextInput.Icon icon="email-outline" color="#64748B" />}
+                    error={loginError.includes('email') || loginError.includes('Account')}
+                  />
+                </View>
 
-            {/* Password Field */}
-            <View style={styles.fieldGroup}>
-              <View style={styles.passwordLabelRow}>
-                <Text style={styles.fieldLabel}>PASSWORD</Text>
-                <TouchableOpacity onPress={handleForgotPassword} disabled={resetLoading}>
-                  <Text style={styles.forgotPassText}>
-                    {resetLoading ? 'Sending link...' : 'Forgot password?'}
+                {/* Password Field */}
+                <View style={styles.fieldGroup}>
+                  <View style={styles.passwordLabelRow}>
+                    <Text style={styles.fieldLabel}>PASSWORD</Text>
+                    <TouchableOpacity onPress={handleForgotPassword} disabled={resetLoading}>
+                      <Text style={styles.forgotPassText}>
+                        {resetLoading ? 'Sending link...' : 'Forgot password?'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TextInput
+                    placeholder="••••••••••••"
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      setLoginError('');
+                    }}
+                    mode="outlined"
+                    secureTextEntry={secureTextEntry}
+                    style={styles.input}
+                    outlineStyle={styles.inputOutline}
+                    textColor="#0F172A"
+                    left={<TextInput.Icon icon="lock-outline" color="#64748B" />}
+                    error={loginError.includes('password') || loginError.includes('Incorrect') || loginError.includes('Invalid')}
+                    right={
+                      <TextInput.Icon
+                        icon={secureTextEntry ? 'eye-off-outline' : 'eye-outline'}
+                        onPress={() => setSecureTextEntry(!secureTextEntry)}
+                        forceTextInputFocus={false}
+                        color="#64748B"
+                      />
+                    }
+                  />
+                </View>
+
+                {loginError ? (
+                  <HelperText type="error" visible={!!loginError} style={styles.errorText}>
+                    {loginError}
+                  </HelperText>
+                ) : null}
+
+                {/* Primary Sign In Button */}
+                <TouchableOpacity
+                  style={[styles.loginBtn, loading && { opacity: 0.7 }]}
+                  onPress={handleEmailLogin}
+                  disabled={loading}
+                  activeOpacity={0.88}
+                >
+                  <Text style={styles.loginBtnText}>
+                    {loading ? 'Authenticating...' : 'Sign In to Account'}
                   </Text>
                 </TouchableOpacity>
-              </View>
-              <TextInput
-                placeholder="••••••••••••"
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  setLoginError('');
-                }}
-                mode="outlined"
-                secureTextEntry={secureTextEntry}
-                style={styles.input}
-                outlineStyle={styles.inputOutline}
-                textColor="#0F172A"
-                left={<TextInput.Icon icon="lock-outline" color="#64748B" />}
-                error={loginError.includes('password') || loginError.includes('Incorrect') || loginError.includes('Invalid')}
-                right={
-                  <TextInput.Icon
-                    icon={secureTextEntry ? 'eye-off-outline' : 'eye-outline'}
-                    onPress={() => setSecureTextEntry(!secureTextEntry)}
-                    forceTextInputFocus={false}
-                    color="#64748B"
-                  />
-                }
-              />
-            </View>
 
-            {loginError ? (
-              <HelperText type="error" visible={!!loginError} style={styles.errorText}>
-                {loginError}
-              </HelperText>
-            ) : null}
+                {/* Divider */}
+                <View style={styles.dividerContainer}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR SIGN IN VIA</Text>
+                  <View style={styles.dividerLine} />
+                </View>
 
-            {/* Primary Sign In Button */}
-            <TouchableOpacity
-              style={[styles.loginBtn, loading && { opacity: 0.7 }]}
-              onPress={handleEmailLogin}
-              disabled={loading}
-              activeOpacity={0.88}
-            >
-              <Text style={styles.loginBtnText}>
-                {loading ? 'Authenticating...' : 'Sign In to Account'}
-              </Text>
-            </TouchableOpacity>
+                {/* Mobile OTP Login Shortcut */}
+                <TouchableOpacity
+                  style={styles.mobileLoginBtn}
+                  onPress={() => navigation.navigate('MobileLogin')}
+                  activeOpacity={0.85}
+                >
+                  <IconButton icon="cellphone" size={18} iconColor="#0F172A" style={{ margin: 0 }} />
+                  <Text style={styles.mobileLoginBtnText}>Instant Mobile Number & OTP</Text>
+                </TouchableOpacity>
 
-            {/* Divider */}
-            <View style={styles.dividerContainer}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR SIGN IN VIA</Text>
-              <View style={styles.dividerLine} />
-            </View>
+                {/* Register Shortcut */}
+                <View style={styles.registerPrompt}>
+                  <Text style={styles.registerPromptText}>Don't have an enterprise account? </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Registration')}>
+                    <Text style={styles.registerPromptLink}>Register here</Text>
+                  </TouchableOpacity>
+                </View>
 
-            {/* Mobile OTP Login Shortcut */}
-            <TouchableOpacity
-              style={styles.mobileLoginBtn}
-              onPress={() => navigation.navigate('MobileLogin')}
-              activeOpacity={0.85}
-            >
-              <IconButton icon="cellphone" size={18} iconColor="#0F172A" style={{ margin: 0 }} />
-              <Text style={styles.mobileLoginBtnText}>Instant Mobile Number & OTP</Text>
-            </TouchableOpacity>
-
-            {/* Register Shortcut */}
-            <View style={styles.registerPrompt}>
-              <Text style={styles.registerPromptText}>Don't have an enterprise account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Registration')}>
-                <Text style={styles.registerPromptLink}>Register here</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Security Guarantee Banner */}
-            <View style={styles.safetyBanner}>
-              <IconButton icon="shield-check" size={20} iconColor="#059669" style={{ margin: 0 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.safetyTitle}>Bank-Grade 256-Bit SSL Encryption</Text>
-                <Text style={styles.safetySubtext}>
-                  All trade negotiations, price quotes, and enterprise data are confidential.
-                </Text>
+                {/* Security Guarantee Banner */}
+                <View style={styles.safetyBanner}>
+                  <IconButton icon="shield-check" size={20} iconColor="#059669" style={{ margin: 0 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.safetyTitle}>Bank-Grade 256-Bit SSL Encryption</Text>
+                    <Text style={styles.safetySubtext}>
+                      All trade negotiations, price quotes, and enterprise data are confidential.
+                    </Text>
+                  </View>
+                </View>
               </View>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

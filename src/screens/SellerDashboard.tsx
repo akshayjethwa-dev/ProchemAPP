@@ -71,7 +71,7 @@ export default function SellerDashboard() {
   const handleInviteSupplier = async () => {
     try {
       const result = await Share.share({ 
-        message: `Join Prochem Supplier Exchange! Access live bulk chemical inquiries across India: https://prochem.app/supplier-invite/${user?.uid}` 
+        message: `Join Prochem Marketplace! Access live bulk chemical inquiries across India: https://prochem.app/supplier-invite/${user?.uid}` 
       });
       if (result.action === Share.sharedAction && user?.uid) {
         Alert.alert("Thank You! 🙏", "Thanks for expanding the Prochem chemical supply network!");
@@ -135,7 +135,7 @@ export default function SellerDashboard() {
             onPress={() => navigation.navigate('Orders')}
             activeOpacity={0.85}
           >
-            <Text style={styles.kpiLabel}>PENDING ORDERS</Text>
+            <Text style={styles.kpiLabel}>Pending Orders</Text>
             <Text style={[styles.kpiValue, { color: pendingOrdersCount > 0 ? '#D97706' : '#0F172A' }]}>
               {pendingOrdersCount}
             </Text>
@@ -147,7 +147,7 @@ export default function SellerDashboard() {
             onPress={() => navigation.navigate('SellerLiveLeads')}
             activeOpacity={0.85}
           >
-            <Text style={styles.kpiLabel}>LIVE BUYER RFQS</Text>
+            <Text style={styles.kpiLabel}>Live Buyer Requirement</Text>
             <Text style={[styles.kpiValue, { color: '#059669' }]}>
               {recentLeads.length}
             </Text>
@@ -159,15 +159,15 @@ export default function SellerDashboard() {
             onPress={() => navigation.navigate('ManageChemicals')}
             activeOpacity={0.85}
           >
-            <Text style={styles.kpiLabel}>ACTIVE LISTINGS</Text>
+            <Text style={styles.kpiLabel}>Active Listings</Text>
             <Text style={[styles.kpiValue, { color: '#0F172A' }]}>
               {stats.totalProducts}
             </Text>
-            <Text style={styles.kpiSub}>Products on exchange</Text>
+            <Text style={styles.kpiSub}>Products on Marketplace</Text>
           </TouchableOpacity>
 
           <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>TOTAL DISBURSED</Text>
+            <Text style={styles.kpiLabel}>Total Revenue</Text>
             <Text style={[styles.kpiValue, { color: '#0F172A' }]}>
               ₹{Number(stats.totalRevenue).toLocaleString('en-IN')}
             </Text>

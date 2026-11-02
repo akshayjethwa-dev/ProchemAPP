@@ -74,7 +74,7 @@ export default function SellerManageChemicals() {
 
   const handleDelete = (id: string) => {
     if (!id) return;
-    Alert.alert('Archive Product', 'Remove this chemical from the active exchange catalog?', [
+    Alert.alert('Archive Product', 'Remove this chemical from the active Marketplace catalog?', [
       { text: 'Cancel', style: 'cancel' },
       { 
         text: 'Delete', 
@@ -112,7 +112,7 @@ export default function SellerManageChemicals() {
             <View style={styles.badgeRow}>
               <View style={[styles.statusBadge, isActive ? styles.statusActive : styles.statusInactive]}>
                 <Text style={[styles.statusBadgeText, isActive ? styles.statusActiveText : styles.statusInactiveText]}>
-                  {isActive ? '● LIVE ON EXCHANGE' : '○ PAUSED'}
+                  {isActive ? '● LIVE ON Marketplace' : '○ PAUSED'}
                 </Text>
               </View>
               <Text style={styles.categoryText}>{item.category || 'Commodity'}</Text>

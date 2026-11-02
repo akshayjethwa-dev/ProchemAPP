@@ -14,6 +14,9 @@ import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from './src/config/firebase';
 
+// 🚀 React Navigation Ref (Required for handling Notification Taps)
+import { createNavigationContainerRef } from '@react-navigation/native';
+
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useAppStore } from './src/store/appStore';
 
@@ -27,13 +30,16 @@ import {
   unregisterHyperCallbackHandler,
 } from './src/services/hyperSdk';
 
+// 🚀 Export navigationRef so you can pass it to NavigationContainer in RootNavigator.tsx
+export const navigationRef = createNavigationContainerRef<any>();
+
+// 🛠 Configure foreground notification appearance
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true, // Shows in-app banner
+    shouldShowList: true,   // Shows in notification center
     shouldPlaySound: true,
     shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
   }),
 });
 
@@ -102,23 +108,14 @@ export default function App() {
     if (sdkBootstrappedRef.current) return;
     sdkBootstrappedRef.current = true;
 
-    // 1. Fire-and-forget: warm up the SDK before user reaches checkout.
     initiateHyperSdk();
 
-    // 2. Register the global callback handler for all SDK events,
-    //    including the mandatory `process_result` event.
-    //    NOTE: The heavy lifting (S2S verification, polling for PENDING_VBV,
-    //    fulfilment window handling) is now done inside hyperSdk.ts.
-    //    This callback is only for UI-level side effects.
     registerHyperCallbackHandler((event, data) => {
       if (event === 'process_result') {
         console.log('[App] process_result received:', data);
-        // Optional: navigate to a processing/success/failure screen here.
-        // The actual order fulfilment logic is handled in hyperSdk.ts.
       }
     });
 
-    // Cleanup on unmount
     return () => {
       unregisterHyperCallbackHandler();
     };
@@ -136,40 +133,64 @@ export default function App() {
     }
   }, []);
 
+  // ────────────────────────────────────────────────────────────────────────
+  // 🔔 PUSH NOTIFICATIONS SETUP & LISTENERS
+  // ────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     checkForForceUpdate();
-    setupPushNotifications();
-  }, []);
 
-  // 🚀 Register for Push Notifications AND Sync to Firebase User
-  const setupPushNotifications = async () => {
-    try {
+    // 1. Register for push notifications & sync token to Firebase
+    let authUnsubscribe: (() => void) | undefined;
+
+    const initPush = async () => {
       const token = await registerForPushNotificationsAsync();
 
       if (token) {
         const auth = getAuth();
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        // Listen for auth changes so we save the token when user logs in
+        authUnsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
             try {
               await updateDoc(doc(db, 'users', user.uid), {
                 expoPushToken: token,
+                pushTokenUpdatedAt: new Date().toISOString(),
               });
               console.log('Push token saved to user profile!');
             } catch (error: any) {
-              console.warn(
-                'Failed to save push token to user (Check Firestore Rules):',
-                error.message
-              );
+              console.warn('Failed to save push token (Check Firestore Rules):', error.message);
             }
           }
         });
-
-        return () => unsubscribe();
       }
-    } catch (err) {
-      console.warn('Push notification setup failed:', err);
-    }
-  };
+    };
+
+    initPush();
+
+    // 2. Listener: When user taps an Android popup notification
+    const responseListener = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response.notification.request.content.data;
+
+        // Only navigate if the app is ready
+        if (navigationRef.isReady() && data) {
+          if (data.type === 'NEW_ORDER' && data.orderId) {
+            navigationRef.navigate('OrderTracking', { orderId: data.orderId });
+          } else if (data.type === 'NEW_REQUIREMENT' && data.requirementId) {
+            // navigationRef.navigate('RequirementDetails', { requirementId: data.requirementId });
+          } else if (data.type === 'CHAT' && data.conversationId) {
+            // navigationRef.navigate('NegotiationRoom', { conversationId: data.conversationId });
+          }
+        }
+      }
+    );
+
+    // Cleanup on unmount
+    return () => {
+      if (authUnsubscribe) authUnsubscribe();
+      // ✅ FIX: Use the built-in .remove() method on the listener object
+      responseListener.remove();
+    };
+  }, []);
 
   async function registerForPushNotificationsAsync() {
     let token;

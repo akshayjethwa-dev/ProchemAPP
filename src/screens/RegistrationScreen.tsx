@@ -9,6 +9,8 @@ import {
   Platform,
   TouchableOpacity,
   StatusBar,
+  TouchableWithoutFeedback,
+  Keyboard
 } from 'react-native';
 import {
   Text,
@@ -131,11 +133,6 @@ export default function RegistrationScreen() {
         return;
       }
 
-      // ✅ Build the registration payload.
-      //    NOTE: `phoneNumber` is stored as the RAW 10-digit string.
-      //    PlanSelectionScreen will call formatPhoneNumber() exactly once
-      //    when it dispatches the OTP — this prevents double-formatting
-      //    ("+91+919876543210") which would break SMS delivery.
       const formData = {
         fullName: fullName.trim(),
         email: email.trim(),
@@ -151,8 +148,6 @@ export default function RegistrationScreen() {
         subscriptionTier: 'FREE',
       };
 
-      // ✅ NEW FLOW: Registration → PlanSelection → OTPVerification → Payment
-      //    OTP is dispatched on PlanSelectionScreen, after the user chooses a plan.
       navigation.navigate('PlanSelection', {
         formData,
         role,
@@ -178,7 +173,7 @@ export default function RegistrationScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -186,330 +181,334 @@ export default function RegistrationScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Header */}
-          <View style={styles.headerBackground}>
-            <SafeAreaView edges={['top']}>
-              <View style={styles.headerTopBar}>
-                <IconButton
-                  icon="arrow-left"
-                  size={24}
-                  iconColor="#FFFFFF"
-                  onPress={() => navigation.goBack()}
-                  style={{ margin: 0 }}
-                />
-                <View style={styles.roleHeaderBadge}>
-                  <Text style={styles.roleHeaderBadgeText}>
-                    STEP 1 OF 3 • {isSellerRole ? 'SUPPLIER ONBOARDING' : 'BUYER ONBOARDING'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.headerContent}>
-                <Text style={styles.headerTitle}>Create Enterprise Account</Text>
-                <Text style={styles.headerSubtitle}>
-                  {isSellerRole
-                    ? 'Connect with verified chemical purchasers and receive live bulk inquiries.'
-                    : 'Source certified chemicals directly from verified manufacturers across India.'}
-                </Text>
-              </View>
-            </SafeAreaView>
-          </View>
-
-          {/* Form Card */}
-          <View style={styles.formCard}>
-
-            {/* Section 1: Business Identity */}
-            <View style={styles.sectionBlock}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionNumber}>01</Text>
-                <Text style={styles.sectionTitle}>CORPORATE IDENTITY</Text>
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>REGISTERED COMPANY NAME *</Text>
-                <TextInput
-                  placeholder="e.g. Gujarat Alkalies & Chemicals Ltd"
-                  value={companyName}
-                  onChangeText={(text) => {
-                    setCompanyName(text);
-                    if (errors.companyName) setErrors({ ...errors, companyName: '' });
-                  }}
-                  mode="outlined"
-                  textColor="#0F172A"
-                  left={<TextInput.Icon icon="office-building" color="#64748B" />}
-                  error={!!errors.companyName}
-                  style={styles.input}
-                  outlineStyle={styles.inputOutline}
-                />
-                {errors.companyName ? (
-                  <HelperText type="error" visible={true} style={styles.errorText}>
-                    {errors.companyName}
-                  </HelperText>
-                ) : null}
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>GSTIN (TAX IDENTIFIER) *</Text>
-                <TextInput
-                  placeholder="e.g. 24AAAAA0000A1Z5"
-                  value={gstin}
-                  onChangeText={(text) => {
-                    setGstin(text.toUpperCase());
-                    if (errors.gstin) setErrors({ ...errors, gstin: '' });
-                  }}
-                  autoCapitalize="characters"
-                  maxLength={15}
-                  mode="outlined"
-                  textColor="#0F172A"
-                  left={<TextInput.Icon icon="card-account-details-outline" color="#64748B" />}
-                  error={!!errors.gstin}
-                  style={styles.input}
-                  outlineStyle={styles.inputOutline}
-                />
-                {errors.gstin ? (
-                  <HelperText type="error" visible={true} style={styles.errorText}>
-                    {errors.gstin}
-                  </HelperText>
-                ) : null}
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>AUTHORIZED REPRESENTATIVE NAME *</Text>
-                <TextInput
-                  placeholder="e.g. Rajesh Sharma"
-                  value={fullName}
-                  onChangeText={(text) => {
-                    setFullName(text);
-                    if (errors.fullName) setErrors({ ...errors, fullName: '' });
-                  }}
-                  mode="outlined"
-                  textColor="#0F172A"
-                  left={<TextInput.Icon icon="account-outline" color="#64748B" />}
-                  error={!!errors.fullName}
-                  style={styles.input}
-                  outlineStyle={styles.inputOutline}
-                />
-                {errors.fullName ? (
-                  <HelperText type="error" visible={true} style={styles.errorText}>
-                    {errors.fullName}
-                  </HelperText>
-                ) : null}
-              </View>
-            </View>
-
-            {/* Section 2: Contact & Authentication */}
-            <View style={styles.sectionBlock}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionNumber}>02</Text>
-                <Text style={styles.sectionTitle}>CONTACT & SECURITY</Text>
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>OFFICIAL CORPORATE EMAIL *</Text>
-                <TextInput
-                  placeholder="procurement@company.com"
-                  value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    if (errors.email) setErrors({ ...errors, email: '' });
-                  }}
-                  mode="outlined"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  textColor="#0F172A"
-                  left={<TextInput.Icon icon="email-outline" color="#64748B" />}
-                  error={!!errors.email}
-                  style={styles.input}
-                  outlineStyle={styles.inputOutline}
-                />
-                {errors.email ? (
-                  <HelperText type="error" visible={true} style={styles.errorText}>
-                    {errors.email}
-                  </HelperText>
-                ) : null}
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>MOBILE NUMBER (FOR OTP VERIFICATION) *</Text>
-                <View style={styles.mobileRow}>
-                  <View style={styles.countryCodeBox}>
-                    <Text style={styles.countryCodeText}>🇮🇳 +91</Text>
-                  </View>
-                  <TextInput
-                    placeholder="98765 43210"
-                    value={phoneNumber}
-                    onChangeText={(text) => {
-                      const cleaned = text.replace(/[^0-9]/g, '');
-                      setPhoneNumber(cleaned);
-                      if (errors.phoneNumber) setErrors({ ...errors, phoneNumber: '' });
-                    }}
-                    mode="outlined"
-                    keyboardType="phone-pad"
-                    maxLength={10}
-                    textColor="#0F172A"
-                    error={!!errors.phoneNumber}
-                    style={[styles.input, { flex: 1 }]}
-                    outlineStyle={styles.inputOutline}
-                  />
-                </View>
-                {errors.phoneNumber ? (
-                  <HelperText type="error" visible={true} style={styles.errorText}>
-                    {errors.phoneNumber}
-                  </HelperText>
-                ) : null}
-              </View>
-
-              {/* Password */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>SECURITY PASSWORD *</Text>
-                <TextInput
-                  placeholder="••••••••••••"
-                  value={password}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    if (errors.password) setErrors({ ...errors, password: '' });
-                  }}
-                  mode="outlined"
-                  secureTextEntry={secureTextEntry}
-                  textColor="#0F172A"
-                  left={<TextInput.Icon icon="lock-outline" color="#64748B" />}
-                  right={
-                    <TextInput.Icon
-                      icon={secureTextEntry ? 'eye-off-outline' : 'eye-outline'}
-                      onPress={() => setSecureTextEntry(!secureTextEntry)}
-                      color="#64748B"
-                      forceTextInputFocus={false}
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={{ flex: 1 }}>
+              {/* Header */}
+              <View style={styles.headerBackground}>
+                <SafeAreaView edges={['top']}>
+                  <View style={styles.headerTopBar}>
+                    <IconButton
+                      icon="arrow-left"
+                      size={24}
+                      iconColor="#FFFFFF"
+                      onPress={() => navigation.goBack()}
+                      style={{ margin: 0 }}
                     />
-                  }
-                  error={!!errors.password}
-                  style={styles.input}
-                  outlineStyle={styles.inputOutline}
-                />
-
-                {/* Password Rule Badges */}
-                {password.length > 0 && (
-                  <View style={styles.passwordRulesBox}>
-                    <View style={styles.ruleItem}>
-                      <Text style={[styles.ruleText, hasMinLength && styles.ruleMet]}>
-                        {hasMinLength ? '✓' : '•'} 8+ chars
-                      </Text>
-                    </View>
-                    <View style={styles.ruleItem}>
-                      <Text style={[styles.ruleText, hasUpper && hasLower && styles.ruleMet]}>
-                        {hasUpper && hasLower ? '✓' : '•'} Aa letters
-                      </Text>
-                    </View>
-                    <View style={styles.ruleItem}>
-                      <Text style={[styles.ruleText, hasNumber && styles.ruleMet]}>
-                        {hasNumber ? '✓' : '•'} Number
-                      </Text>
-                    </View>
-                    <View style={styles.ruleItem}>
-                      <Text style={[styles.ruleText, hasSpecial && styles.ruleMet]}>
-                        {hasSpecial ? '✓' : '•'} Special
+                    <View style={styles.roleHeaderBadge}>
+                      <Text style={styles.roleHeaderBadgeText}>
+                        STEP 1 OF 3 • {isSellerRole ? 'SUPPLIER ONBOARDING' : 'BUYER ONBOARDING'}
                       </Text>
                     </View>
                   </View>
-                )}
-                {errors.password ? (
-                  <HelperText type="error" visible={true} style={styles.errorText}>
-                    {errors.password}
-                  </HelperText>
-                ) : null}
+
+                  <View style={styles.headerContent}>
+                    <Text style={styles.headerTitle}>Create Enterprise Account</Text>
+                    <Text style={styles.headerSubtitle}>
+                      {isSellerRole
+                        ? 'Connect with verified chemical purchasers and receive live bulk inquiries.'
+                        : 'Source certified chemicals directly from verified manufacturers across India.'}
+                    </Text>
+                  </View>
+                </SafeAreaView>
               </View>
 
-              {/* Confirm Password */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>CONFIRM PASSWORD *</Text>
-                <TextInput
-                  placeholder="••••••••••••"
-                  value={confirmPassword}
-                  onChangeText={(text) => {
-                    setConfirmPassword(text);
-                    if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
-                  }}
-                  mode="outlined"
-                  secureTextEntry={secureConfirmTextEntry}
-                  textColor="#0F172A"
-                  left={<TextInput.Icon icon="lock-check-outline" color="#64748B" />}
-                  right={
-                    <TextInput.Icon
-                      icon={secureConfirmTextEntry ? 'eye-off-outline' : 'eye-outline'}
-                      onPress={() => setSecureConfirmTextEntry(!secureConfirmTextEntry)}
-                      color="#64748B"
-                      forceTextInputFocus={false}
+              {/* Form Card */}
+              <View style={styles.formCard}>
+
+                {/* Section 1: Business Identity */}
+                <View style={styles.sectionBlock}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionNumber}>01</Text>
+                    <Text style={styles.sectionTitle}>CORPORATE IDENTITY</Text>
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>REGISTERED COMPANY NAME *</Text>
+                    <TextInput
+                      placeholder="e.g. Gujarat Alkalies & Chemicals Ltd"
+                      value={companyName}
+                      onChangeText={(text) => {
+                        setCompanyName(text);
+                        if (errors.companyName) setErrors({ ...errors, companyName: '' });
+                      }}
+                      mode="outlined"
+                      textColor="#0F172A"
+                      left={<TextInput.Icon icon="office-building" color="#64748B" />}
+                      error={!!errors.companyName}
+                      style={styles.input}
+                      outlineStyle={styles.inputOutline}
                     />
-                  }
-                  error={!!errors.confirmPassword}
-                  style={styles.input}
-                  outlineStyle={styles.inputOutline}
-                />
-                {errors.confirmPassword ? (
-                  <HelperText type="error" visible={true} style={styles.errorText}>
-                    {errors.confirmPassword}
-                  </HelperText>
-                ) : null}
-              </View>
-            </View>
+                    {errors.companyName ? (
+                      <HelperText type="error" visible={true} style={styles.errorText}>
+                        {errors.companyName}
+                      </HelperText>
+                    ) : null}
+                  </View>
 
-            {/* Section 3: Opt-ins & Agreements */}
-            <View style={styles.sectionBlock}>
-              <View style={styles.optInRow}>
-                <Checkbox.Android
-                  status={whatsappOptIn ? 'checked' : 'unchecked'}
-                  onPress={() => setWhatsappOptIn(!whatsappOptIn)}
-                  color="#059669"
-                />
-                <Text style={styles.optInLabel}>
-                  Receive real-time trade alerts & quotation updates on WhatsApp
-                </Text>
-              </View>
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>GSTIN (TAX IDENTIFIER) *</Text>
+                    <TextInput
+                      placeholder="e.g. 24AAAAA0000A1Z5"
+                      value={gstin}
+                      onChangeText={(text) => {
+                        setGstin(text.toUpperCase());
+                        if (errors.gstin) setErrors({ ...errors, gstin: '' });
+                      }}
+                      autoCapitalize="characters"
+                      maxLength={15}
+                      mode="outlined"
+                      textColor="#0F172A"
+                      left={<TextInput.Icon icon="card-account-details-outline" color="#64748B" />}
+                      error={!!errors.gstin}
+                      style={styles.input}
+                      outlineStyle={styles.inputOutline}
+                    />
+                    {errors.gstin ? (
+                      <HelperText type="error" visible={true} style={styles.errorText}>
+                        {errors.gstin}
+                      </HelperText>
+                    ) : null}
+                  </View>
 
-              <View style={styles.termsRow}>
-                <Checkbox.Android
-                  status={acceptTerms ? 'checked' : 'unchecked'}
-                  onPress={() => {
-                    setAcceptTerms(!acceptTerms);
-                    setErrors({ ...errors, terms: '' });
-                  }}
-                  color="#0F172A"
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.termsLabel}>
-                    I confirm the accuracy of our corporate credentials and agree to the{' '}
-                    <Text style={styles.termsLink} onPress={openTerms}>Terms of Trade</Text>
-                    {' '}and{' '}
-                    <Text style={styles.termsLink} onPress={openTerms}>Privacy Policy</Text>.
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>AUTHORIZED REPRESENTATIVE NAME *</Text>
+                    <TextInput
+                      placeholder="e.g. Rajesh Sharma"
+                      value={fullName}
+                      onChangeText={(text) => {
+                        setFullName(text);
+                        if (errors.fullName) setErrors({ ...errors, fullName: '' });
+                      }}
+                      mode="outlined"
+                      textColor="#0F172A"
+                      left={<TextInput.Icon icon="account-outline" color="#64748B" />}
+                      error={!!errors.fullName}
+                      style={styles.input}
+                      outlineStyle={styles.inputOutline}
+                    />
+                    {errors.fullName ? (
+                      <HelperText type="error" visible={true} style={styles.errorText}>
+                        {errors.fullName}
+                      </HelperText>
+                    ) : null}
+                  </View>
+                </View>
+
+                {/* Section 2: Contact & Authentication */}
+                <View style={styles.sectionBlock}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionNumber}>02</Text>
+                    <Text style={styles.sectionTitle}>CONTACT & SECURITY</Text>
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>OFFICIAL CORPORATE EMAIL *</Text>
+                    <TextInput
+                      placeholder="procurement@company.com"
+                      value={email}
+                      onChangeText={(text) => {
+                        setEmail(text);
+                        if (errors.email) setErrors({ ...errors, email: '' });
+                      }}
+                      mode="outlined"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      textColor="#0F172A"
+                      left={<TextInput.Icon icon="email-outline" color="#64748B" />}
+                      error={!!errors.email}
+                      style={styles.input}
+                      outlineStyle={styles.inputOutline}
+                    />
+                    {errors.email ? (
+                      <HelperText type="error" visible={true} style={styles.errorText}>
+                        {errors.email}
+                      </HelperText>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>MOBILE NUMBER (FOR OTP VERIFICATION) *</Text>
+                    <View style={styles.mobileRow}>
+                      <View style={styles.countryCodeBox}>
+                        <Text style={styles.countryCodeText}>🇮🇳 +91</Text>
+                      </View>
+                      <TextInput
+                        placeholder="98765 43210"
+                        value={phoneNumber}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          setPhoneNumber(cleaned);
+                          if (errors.phoneNumber) setErrors({ ...errors, phoneNumber: '' });
+                        }}
+                        mode="outlined"
+                        keyboardType="phone-pad"
+                        maxLength={10}
+                        textColor="#0F172A"
+                        error={!!errors.phoneNumber}
+                        style={[styles.input, { flex: 1 }]}
+                        outlineStyle={styles.inputOutline}
+                      />
+                    </View>
+                    {errors.phoneNumber ? (
+                      <HelperText type="error" visible={true} style={styles.errorText}>
+                        {errors.phoneNumber}
+                      </HelperText>
+                    ) : null}
+                  </View>
+
+                  {/* Password */}
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>SECURITY PASSWORD *</Text>
+                    <TextInput
+                      placeholder="••••••••••••"
+                      value={password}
+                      onChangeText={(text) => {
+                        setPassword(text);
+                        if (errors.password) setErrors({ ...errors, password: '' });
+                      }}
+                      mode="outlined"
+                      secureTextEntry={secureTextEntry}
+                      textColor="#0F172A"
+                      left={<TextInput.Icon icon="lock-outline" color="#64748B" />}
+                      right={
+                        <TextInput.Icon
+                          icon={secureTextEntry ? 'eye-off-outline' : 'eye-outline'}
+                          onPress={() => setSecureTextEntry(!secureTextEntry)}
+                          color="#64748B"
+                          forceTextInputFocus={false}
+                        />
+                      }
+                      error={!!errors.password}
+                      style={styles.input}
+                      outlineStyle={styles.inputOutline}
+                    />
+
+                    {/* Password Rule Badges */}
+                    {password.length > 0 && (
+                      <View style={styles.passwordRulesBox}>
+                        <View style={styles.ruleItem}>
+                          <Text style={[styles.ruleText, hasMinLength && styles.ruleMet]}>
+                            {hasMinLength ? '✓' : '•'} 8+ chars
+                          </Text>
+                        </View>
+                        <View style={styles.ruleItem}>
+                          <Text style={[styles.ruleText, hasUpper && hasLower && styles.ruleMet]}>
+                            {hasUpper && hasLower ? '✓' : '•'} Aa letters
+                          </Text>
+                        </View>
+                        <View style={styles.ruleItem}>
+                          <Text style={[styles.ruleText, hasNumber && styles.ruleMet]}>
+                            {hasNumber ? '✓' : '•'} Number
+                          </Text>
+                        </View>
+                        <View style={styles.ruleItem}>
+                          <Text style={[styles.ruleText, hasSpecial && styles.ruleMet]}>
+                            {hasSpecial ? '✓' : '•'} Special
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                    {errors.password ? (
+                      <HelperText type="error" visible={true} style={styles.errorText}>
+                        {errors.password}
+                      </HelperText>
+                    ) : null}
+                  </View>
+
+                  {/* Confirm Password */}
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>CONFIRM PASSWORD *</Text>
+                    <TextInput
+                      placeholder="••••••••••••"
+                      value={confirmPassword}
+                      onChangeText={(text) => {
+                        setConfirmPassword(text);
+                        if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
+                      }}
+                      mode="outlined"
+                      secureTextEntry={secureConfirmTextEntry}
+                      textColor="#0F172A"
+                      left={<TextInput.Icon icon="lock-check-outline" color="#64748B" />}
+                      right={
+                        <TextInput.Icon
+                          icon={secureConfirmTextEntry ? 'eye-off-outline' : 'eye-outline'}
+                          onPress={() => setSecureConfirmTextEntry(!secureConfirmTextEntry)}
+                          color="#64748B"
+                          forceTextInputFocus={false}
+                        />
+                      }
+                      error={!!errors.confirmPassword}
+                      style={styles.input}
+                      outlineStyle={styles.inputOutline}
+                    />
+                    {errors.confirmPassword ? (
+                      <HelperText type="error" visible={true} style={styles.errorText}>
+                        {errors.confirmPassword}
+                      </HelperText>
+                    ) : null}
+                  </View>
+                </View>
+
+                {/* Section 3: Opt-ins & Agreements */}
+                <View style={styles.sectionBlock}>
+                  <View style={styles.optInRow}>
+                    <Checkbox.Android
+                      status={whatsappOptIn ? 'checked' : 'unchecked'}
+                      onPress={() => setWhatsappOptIn(!whatsappOptIn)}
+                      color="#059669"
+                    />
+                    <Text style={styles.optInLabel}>
+                      Receive real-time trade alerts & quotation updates on WhatsApp
+                    </Text>
+                  </View>
+
+                  <View style={styles.termsRow}>
+                    <Checkbox.Android
+                      status={acceptTerms ? 'checked' : 'unchecked'}
+                      onPress={() => {
+                        setAcceptTerms(!acceptTerms);
+                        setErrors({ ...errors, terms: '' });
+                      }}
+                      color="#0F172A"
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.termsLabel}>
+                        I confirm the accuracy of our corporate credentials and agree to the{' '}
+                        <Text style={styles.termsLink} onPress={openTerms}>Terms of Trade</Text>
+                        {' '}and{' '}
+                        <Text style={styles.termsLink} onPress={openTerms}>Privacy Policy</Text>.
+                      </Text>
+                    </View>
+                  </View>
+                  {errors.terms ? (
+                    <HelperText type="error" visible={true} style={styles.errorText}>
+                      {errors.terms}
+                    </HelperText>
+                  ) : null}
+                </View>
+
+                {/* Submit Button */}
+                <TouchableOpacity
+                  style={[styles.submitButton, loading && { opacity: 0.7 }]}
+                  onPress={handleRegisterOTP}
+                  disabled={loading}
+                  activeOpacity={0.88}
+                >
+                  <Text style={styles.submitButtonText}>
+                    {loading ? 'Validating Account...' : 'Continue to Plan Selection →'}
                   </Text>
+                </TouchableOpacity>
+
+                {/* Login Prompt */}
+                <View style={styles.loginRow}>
+                  <Text style={styles.loginPromptText}>Already have an account? </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                    <Text style={styles.loginLink}>Sign in here</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-              {errors.terms ? (
-                <HelperText type="error" visible={true} style={styles.errorText}>
-                  {errors.terms}
-                </HelperText>
-              ) : null}
             </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.submitButton, loading && { opacity: 0.7 }]}
-              onPress={handleRegisterOTP}
-              disabled={loading}
-              activeOpacity={0.88}
-            >
-              <Text style={styles.submitButtonText}>
-                {loading ? 'Validating Account...' : 'Continue to Plan Selection →'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Login Prompt */}
-            <View style={styles.loginRow}>
-              <Text style={styles.loginPromptText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                <Text style={styles.loginLink}>Sign in here</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </TouchableWithoutFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

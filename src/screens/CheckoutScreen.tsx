@@ -5,7 +5,7 @@ import { View, ScrollView, StyleSheet, Alert, BackHandler, ActivityIndicator, Mo
 import { Text, Card, Button, Divider, IconButton, useTheme } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -38,6 +38,8 @@ export default function CheckoutScreen() {
 
   // Guard so we don't call cancel() twice for the same order
   const cancelCalledRef = useRef(false);
+  // Guard so success handling (navigation.replace) fires exactly once
+  const paymentHandledRef = useRef(false);
 
   const [errors, setErrors] = useState({ address: false });
 
@@ -101,6 +103,29 @@ export default function CheckoutScreen() {
     }
   };
 
+  // --- FIRE-THE-WEBHOOK PRIMARY SUCCESS SIGNAL ---
+  useEffect(() => {
+    if (!firestoreOrderId) return;
+
+    const unsub = onSnapshot(
+      doc(db, 'orders', firestoreOrderId),
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() || {};
+        const ps = String(data.paymentStatus || '').toLowerCase();
+        if (ps === 'completed' || ps === 'paid') {
+          void handlePaymentSuccess(firestoreOrderId);
+        }
+      },
+      (err) => {
+        console.warn('[Checkout] Order listener error:', err?.message || err);
+      }
+    );
+
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestoreOrderId]);
+
   // --- FINANCIAL CALCULATIONS ---
   const BUYER_PLATFORM_FEE_PERCENT = 0.015;
   const SELLER_PLATFORM_FEE_PERCENT = 0.01;
@@ -135,8 +160,11 @@ export default function CheckoutScreen() {
   const payoutAmount = productTotalWithTax - platformFeeSeller - safetyFee - freightFee;
 
 
-  // --- SUCCESS HANDLER ---
+  // --- SUCCESS HANDLER (guarded so navigation.replace only fires once) ---
   const handlePaymentSuccess = async (originalFirestoreOrderId: string) => {
+    if (paymentHandledRef.current) return;
+    paymentHandledRef.current = true;
+
     try {
       await updateOrderStatus(originalFirestoreOrderId, 'PENDING_SELLER');
       await updateDoc(doc(db, 'orders', originalFirestoreOrderId), { paymentStatus: 'completed' });
@@ -162,15 +190,12 @@ export default function CheckoutScreen() {
   };
 
   // --- CANCEL / ABORT HANDLER ---
-  // Called on back-press, header-left, or WebView close while payment is in-flight.
   const handleAbortCheckout = async () => {
-    // If no payment session was created yet, just go back
     if (!paymentOrderId) {
       navigation.goBack();
       return;
     }
 
-    // If cancel was already attempted for this order, just navigate away
     if (cancelCalledRef.current) {
       navigation.goBack();
       return;
@@ -233,6 +258,10 @@ export default function CheckoutScreen() {
       return;
     }
 
+    // Reset one-shot guards for a fresh payment attempt
+    paymentHandledRef.current = false;
+    cancelCalledRef.current = false;
+
     setLoading(true);
     const paymentWindow = Platform.OS === 'web'
       ? window.open('', '_blank', 'width=480,height=800')
@@ -282,7 +311,6 @@ export default function CheckoutScreen() {
       if (safePhone.length < 10) safePhone = "9876543210";
 
       const response: any = await createSessionFn({
-        // ✅ Session API parameters (matches functions/dbs.js)
         orderId: orderId,
         amount: Number(finalPayableAmount.toFixed(2)),
         customerId: user!.uid,
@@ -291,12 +319,8 @@ export default function CheckoutScreen() {
         description: negotiatedItem ? "Custom Order" : `Prochem order ${orderId}`,
         firstName: user?.companyName || user?.businessName || "Prochem",
         lastName: "Buyer",
-        // Optional:
-        // options: { get_upi_deep_links: true },
-        // metadata: { "JUSPAY:gateway_reference_id": orderId },
       });
 
-      // ✅ DBS returns { sdk_payload, payment_links: { web: "..." }, order_id, ... }
       const links = response.data?.payment_links;
       const juspayOrderId = response.data?.order_id;
       const webUrl = links?.web || response.data?.payment_url;
@@ -311,46 +335,63 @@ export default function CheckoutScreen() {
       if (Platform.OS === 'web') {
         paymentWindow!.location.href = webUrl;
 
+        let pollCount = 0;
+        const MAX_POLLS = 20; // 20 * 3000ms = 60 seconds timeout
+
         const checkPayment = async () => {
+          if (paymentHandledRef.current) {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            return;
+          }
+
+          pollCount++;
+          if (pollCount > MAX_POLLS) {
+            if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+            setPaymentOrderId(null);
+            setLoading(false);
+            if (!paymentHandledRef.current) {
+              window.alert("Payment verification timed out. If you completed the payment, your order will appear in My Orders shortly.");
+            }
+            return;
+          }
+
           try {
             const statusResponse: any = await httpsCallable(
               getFunctions(getApp(), 'asia-south1'),
               'getDBSOrderStatus'
             )({
               orderId: juspayOrderId,
-              expectedAmount: finalPayableAmount,   // ✅ fraud-prevention amount check
+              expectedAmount: finalPayableAmount,
               customerId: user!.uid,
               includeFullGatewayResponse: false,
             });
 
-            const action = statusResponse.data?.action;
             const status = String(statusResponse.data?.status || '').toUpperCase();
 
-            if (action === 'fulfil' || status === 'CHARGED') {
+            if (status === 'CHARGED') {
               if (paymentPollRef.current) clearInterval(paymentPollRef.current);
               setPaymentOrderId(null);
-              if (firestoreOrderId) {
-                await handlePaymentSuccess(firestoreOrderId);
-              }
-            } else if (action === 'decline' || ['FAILED', 'DECLINED', 'CANCELLED', 'AUTHORIZATION_FAILED'].includes(status)) {
-              if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-              setPaymentOrderId(null);
-              setLoading(false);
-              window.alert(`Payment not completed: ${status}`);
+              // Use local orderId to guarantee redirect
+              await handlePaymentSuccess(orderId); 
+              return;
             }
 
-            if (paymentWindow!.closed && action !== 'fulfil' && action !== 'decline') {
+            if (['FAILED', 'DECLINED', 'CANCELLED', 'AUTHORIZATION_FAILED'].includes(status)) {
               if (paymentPollRef.current) clearInterval(paymentPollRef.current);
               setPaymentOrderId(null);
               setLoading(false);
+              window.alert(`Payment not completed: ${status}. Please try again.`);
+              return;
             }
-          } catch (error) {
-            console.error('Juspay status polling failed:', error);
+          } catch (error: any) {
+            // Ignore transient 500s and network errors. Keep polling.
+            console.warn('Juspay status polling failed (will retry):', error?.message || error);
           }
         };
 
         void checkPayment();
-        paymentPollRef.current = setInterval(checkPayment, 2500);
+        // Keep polling every 3 seconds
+        paymentPollRef.current = setInterval(checkPayment, 3000);
         return;
       }
 
@@ -359,70 +400,56 @@ export default function CheckoutScreen() {
       setLoading(false);
 
     } catch (error: any) {
-  if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-  console.error("Order Generation Failure:", error);
-  setLoading(false);
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+      console.error("Order Generation Failure:", error);
+      setLoading(false);
 
-  // ─── Structured error handling ───
-  const isJuspayError = error instanceof JuspayApiError;
-  const userAction: string = isJuspayError ? error.userAction : 'unknown';
-  const friendlyMessage: string = isJuspayError
-    ? error.message
-    : error?.message || 'Failed to initialize payment gateway.';
+      const isJuspayError = error instanceof JuspayApiError;
+      const userAction: string = isJuspayError ? error.userAction : 'unknown';
+      const friendlyMessage: string = isJuspayError
+        ? error.message
+        : error?.message || 'Failed to initialize payment gateway.';
 
-  // DUPLICATE_ORDER_ID — the safest recovery is to generate a new order ID.
-  // We surface this clearly so the user knows to retry the checkout from scratch.
-  if (userAction === 'new_order_id') {
-    const msg =
-      'This order was already submitted. Please start the checkout again with a fresh order.';
-    if (Platform.OS === 'web') window.alert(msg);
-    else Alert.alert('Order Already Exists', msg, [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
-    return;
-  }
-
-  // Retryable — offer a Retry button that re-runs handlePlaceOrder
-  if (userAction === 'retry') {
-    if (Platform.OS === 'web') {
-      const retry = window.confirm(`${friendlyMessage}\n\nRetry now?`);
-      if (retry) {
-        // Re-invoke after a short delay so UI can settle
-        setTimeout(() => void handlePlaceOrder(), 400);
+      if (userAction === 'new_order_id') {
+        const msg =
+          'This order was already submitted. Please start the checkout again with a fresh order.';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Order Already Exists', msg, [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        return;
       }
-    } else {
-      Alert.alert(
-        'Payment Gateway Busy',
-        friendlyMessage,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Retry',
-            onPress: () => setTimeout(() => void handlePlaceOrder(), 400),
-          },
-        ]
-      );
+
+      if (userAction === 'retry') {
+        if (Platform.OS === 'web') {
+          const retry = window.confirm(`${friendlyMessage}\n\nRetry now?`);
+          if (retry) {
+            setTimeout(() => void handlePlaceOrder(), 400);
+          }
+        } else {
+          Alert.alert('Payment Gateway Busy', friendlyMessage, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Retry', onPress: () => setTimeout(() => void handlePlaceOrder(), 400) },
+          ]);
+        }
+        return;
+      }
+
+      if (userAction === 'contact_support') {
+        if (Platform.OS === 'web') window.alert(friendlyMessage);
+        else Alert.alert('Payment Unavailable', friendlyMessage);
+        return;
+      }
+
+      if (Platform.OS === 'web') {
+        window.alert(friendlyMessage);
+      } else {
+        Alert.alert('Error', friendlyMessage);
+      }
     }
-    return;
-  }
-
-  // Config / auth / origin issues — user must contact support
-  if (userAction === 'contact_support') {
-    if (Platform.OS === 'web') window.alert(friendlyMessage);
-    else Alert.alert('Payment Unavailable', friendlyMessage);
-    return;
-  }
-
-  // Default fallback for fix_request / unknown
-  if (Platform.OS === 'web') {
-    window.alert(friendlyMessage);
-  } else {
-    Alert.alert('Error', friendlyMessage);
-  }
-}
   };
 
-  // --- RECONCILE ON WEBVIEW CLOSE ---
+  // --- RECONCILE ON WEBVIEW CLOSE (native) ---
   const reconcileJuspayPayment = async () => {
     if (!paymentOrderId) {
       setPaymentUrl(null);
@@ -433,37 +460,45 @@ export default function CheckoutScreen() {
       const getStatus = httpsCallable(functions, 'getDBSOrderStatus');
       const response: any = await getStatus({
         orderId: paymentOrderId,
-        expectedAmount: finalPayableAmount,   // ✅ fraud-prevention
+        expectedAmount: finalPayableAmount,
         customerId: user!.uid,
         includeFullGatewayResponse: false,
       });
 
-      const action = response.data?.action;
+      const status = String(response.data?.status || '').toUpperCase();
       setPaymentUrl(null);
       setPaymentOrderId(null);
 
-      if (action === 'fulfil' && firestoreOrderId) {
+      if (status === 'CHARGED' && firestoreOrderId) {
         await handlePaymentSuccess(firestoreOrderId);
-      } else {
-        // If user closes without paying, cancel the order
-        if (action === 'unknown' || action === 'pending') {
-          try {
-            await cancelJuspayOrder(paymentOrderId, 'User Closed Checkout');
-          } catch (cancelErr) {
-            console.warn('[Checkout] Cancel on close failed:', cancelErr);
-          }
+        return;
+      }
+
+      if (['FAILED', 'DECLINED', 'CANCELLED', 'AUTHORIZATION_FAILED'].includes(status)) {
+        try {
+          await cancelJuspayOrder(paymentOrderId, 'User Closed Checkout');
+        } catch (cancelErr) {
+          console.warn('[Checkout] Cancel on close failed:', cancelErr);
         }
         setLoading(false);
-        Alert.alert(
-          'Payment not completed',
-          `Juspay status: ${response.data?.status || 'PENDING'}`
-        );
+        Alert.alert('Payment Not Completed', `Status: ${status}`);
+        return;
       }
-    } catch (error: any) {
+
+      // Pending / unknown — the webhook will reconcile. Don't block the buyer.
       setLoading(false);
       Alert.alert(
-        'Payment verification failed',
-        error.message || 'Please check your order status shortly.'
+        'Payment Pending',
+        'If payment succeeded, your order will appear in My Orders shortly.'
+      );
+    } catch (error: any) {
+      setLoading(false);
+      // Do NOT surfacing "payment verification failed" — the webhook is the
+      // source of truth and will navigate the user once it lands.
+      console.warn('[Checkout] Reconcile failed:', error?.message);
+      Alert.alert(
+        'Verification Pending',
+        'We could not confirm payment status right now. If payment succeeded, your order will appear in My Orders shortly.'
       );
     }
   };
@@ -545,7 +580,7 @@ export default function CheckoutScreen() {
           contentStyle={{ height: 50 }}
           icon="shield-check"
         >
-          {loading ? 'Processing...' : 'Pay Securely'}
+          {loading ? 'Verifying Payment...' : 'Pay Securely'}
         </Button>
       </ScrollView>
 
@@ -564,7 +599,6 @@ export default function CheckoutScreen() {
             <WebView
               source={{ uri: paymentUrl }}
               onNavigationStateChange={(state) => {
-                // Detect return URL redirect and reconcile
                 if (
                   state.url.startsWith(
                     'https://asia-south1-prochemapp-dev.cloudfunctions.net/juspayReturn'

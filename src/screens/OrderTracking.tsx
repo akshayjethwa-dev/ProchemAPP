@@ -333,21 +333,6 @@ export default function OrderTracking() {
         </Card>
 
         <View style={{ gap: 12, marginBottom: 40 }}>
-          {/* 💳 Refund button — only visible after payment is complete */}
-          {canShowRefundButton && (
-            <Button
-              mode="outlined"
-              textColor="#B45309"
-              icon="cash-refund"
-              onPress={handleOpenRefunds}
-              loading={refundLoading}
-              disabled={refundLoading}
-              style={{ borderRadius: 12, borderColor: '#F59E0B' }}
-              contentStyle={{ paddingVertical: 6 }}
-            >
-              {refundLoading ? 'Loading refund details...' : 'Request Refund'}
-            </Button>
-          )}
 
           <Button
             mode="contained"

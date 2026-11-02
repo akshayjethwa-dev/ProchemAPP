@@ -82,7 +82,7 @@ export default function BuyerHome() {
   const handleInviteBuyer = async () => {
     try {
       const result = await Share.share({
-        message: `Join Prochem - The premier B2B chemical exchange! Source verified raw materials at competitive factory prices: https://prochem.app/invite/${user?.uid}`,
+        message: `Join Prochem - The premier B2B chemical Marketplace! Source verified raw materials at competitive factory prices: https://prochem.app/invite/${user?.uid}`,
       });
       
       if (result.action === Share.sharedAction) {
@@ -159,7 +159,7 @@ export default function BuyerHome() {
             <View style={styles.brandRow}>
               <Text style={styles.brandText}>PROCHEM</Text>
               <View style={styles.exchangeBadge}>
-                <Text style={styles.exchangeBadgeText}>EXCHANGE</Text>
+                <Text style={styles.exchangeBadgeText}>Marketplace</Text>
               </View>
             </View>
             <Text style={styles.greetingText} numberOfLines={1}>
@@ -249,17 +249,14 @@ export default function BuyerHome() {
         <View style={styles.trustBar}>
           <View style={styles.trustColumn}>
             <Text style={styles.trustHeadline}>🔒 ESCROW SETTLED</Text>
-            <Text style={styles.trustCaption}>Funds held in safe custody</Text>
           </View>
           <View style={styles.trustDivider} />
           <View style={styles.trustColumn}>
             <Text style={styles.trustHeadline}>✓ COA VERIFIED</Text>
-            <Text style={styles.trustCaption}>Purity test reports required</Text>
           </View>
           <View style={styles.trustDivider} />
           <View style={styles.trustColumn}>
-            <Text style={styles.trustHeadline}>🚚 DIRECT LOGISTICS</Text>
-            <Text style={styles.trustCaption}>ISO tankers & sealed drums</Text>
+            <Text style={styles.trustHeadline}>✓ GST Verified</Text>
           </View>
         </View>
 
@@ -274,8 +271,7 @@ export default function BuyerHome() {
               <IconButton icon="molecule" size={20} iconColor="#1D4ED8" style={{ margin: 0 }} />
             </View>
             <Text style={styles.procureTitle}>Chemical Catalog</Text>
-            <Text style={styles.procureSub}>Browse by chemical family</Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.procureCard} 
@@ -286,7 +282,6 @@ export default function BuyerHome() {
               <IconButton icon="file-document-edit-outline" size={20} iconColor="#059669" style={{ margin: 0 }} />
             </View>
             <Text style={styles.procureTitle}>Post Custom RFQ</Text>
-            <Text style={styles.procureSub}>Get bids from 500+ plants</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -298,7 +293,6 @@ export default function BuyerHome() {
               <IconButton icon="handshake-outline" size={20} iconColor="#B45309" style={{ margin: 0 }} />
             </View>
             <Text style={styles.procureTitle}>Trading Desk</Text>
-            <Text style={styles.procureSub}>Active chats & orders</Text>
           </TouchableOpacity>
         </View>
 

@@ -10,6 +10,7 @@ import { auth, db } from '../config/firebase';
 import { useAppStore } from '../store/appStore';
 import { RootStackParamList } from './types';
 import { theme } from '../theme';
+import { navigationRef } from '../../App'; 
 
 import BuyerNavigator from './BuyerNavigator';
 import SellerNavigator from './SellerNavigator';
@@ -140,8 +141,9 @@ export const RootNavigator = () => {
           </View>
         </View>
       )}
-
-      <NavigationContainer key={adminImpersonating ? 'impersonating-mode' : 'admin-mode'}>
+  
+      {/* ✅ ADDED: ref={navigationRef} to enable notification taps */}
+      <NavigationContainer ref={navigationRef} key={adminImpersonating ? 'impersonating-mode' : 'admin-mode'}>
         <Stack.Navigator
           screenOptions={{
             headerShown: false,

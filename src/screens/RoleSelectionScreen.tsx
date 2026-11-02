@@ -37,7 +37,7 @@ export default function RoleSelectionScreen() {
           </View>
           <Text style={styles.title}>Choose your business profile</Text>
           <Text style={styles.subtitle}>
-            Select your primary objective on the Prochem Industrial Exchange. You can switch roles at any time.
+            Select your primary objective on the Prochem Marketplace. You can switch roles at any time.
           </Text>
         </View>
 

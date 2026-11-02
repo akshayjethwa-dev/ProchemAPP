@@ -169,7 +169,7 @@ export default function AccountScreen() {
                 <IconButton icon="swap-horizontal" size={28} iconColor="#0F172A" style={{ margin: 0 }} />
               </View>
               <Text style={styles.modalHeaderTitle}>
-                Switch to {viewMode === 'buyer' ? 'Seller Workspace' : 'Buyer Marketplace'}?
+                Switch to {viewMode === 'buyer' ? 'Seller Mode' : 'Buyer Mode'}?
               </Text>
               <Text style={styles.modalBodyText}>
                 {viewMode === 'buyer' 
@@ -181,7 +181,7 @@ export default function AccountScreen() {
                   Cancel
                 </Button>
                 <Button mode="contained" buttonColor="#0F172A" onPress={confirmSwitch} style={{ flex: 1 }}>
-                  Switch Workspace
+                  Switch Mode
                 </Button>
               </View>
             </View>
@@ -469,7 +469,7 @@ export default function AccountScreen() {
           />
           <Divider style={styles.divider} />
           <List.Item 
-            title="About Prochem Exchange" 
+            title="About Prochem Marketplace" 
             description="Platform overview and network members"
             titleStyle={styles.menuItemTitle}
             descriptionStyle={styles.menuItemSub}
@@ -496,7 +496,7 @@ export default function AccountScreen() {
           />
         </SettingsGroup>
 
-        <Text style={styles.versionText}>Prochem Chemical Exchange • v2.2.0</Text>
+        <Text style={styles.versionText}>Prochem Chemical Marketplace • v2.2.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
